@@ -1,0 +1,23 @@
+Instruction
+============
+1.) Create a Virtual Environment
+	python -m venv <Virtual Directory Nmae>
+2.) Activate the Environment
+	venv\Scripts\activate
+3.) Install Essential AI/ML Libraries
+	#Core Data Libraries
+		pip install numpy pandas matplotlib seaborn
+	#Machine Learning / Deep Learning
+		#scikit-learn (classical ML algorithms)
+			pip install scikit-learn
+		#TensorFlow (deep learning) or PyTorch (alternative deep learning library)
+			# For TensorFlow (CPU version)
+				pip install tensorflow
+			# or for PyTorch (CPU version; check https://pytorch.org/ for exact command)
+				pip install torch torchvision torchaudio
+	#JupyterLab or Jupyter Notebook (if you want a notebook environment):
+		pip install jupyterlab
+4.) Install VS Code
+5.) Install Python extension
+	Select Python Interpreter (Ctrl+Shift+P  Settings > Project > Python Interpreter)
+6.) Install Jupyter Extension	

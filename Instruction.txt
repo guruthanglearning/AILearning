@@ -3,7 +3,7 @@ Instruction
 1.) Create a Virtual Environment
 	python -m venv <Virtual Directory Nmae>
 2.) Activate the Environment
-	venv\Scripts\activate
+	<Virtual Directory Nmae>\Scripts\activate
 3.) Install Essential AI/ML Libraries
 	#Core Data Libraries
 		pip install numpy pandas matplotlib seaborn
@@ -21,3 +21,27 @@ Instruction
 5.) Install Python extension
 	Select Python Interpreter (Ctrl+Shift+P  Settings > Project > Python Interpreter)
 6.) Install Jupyter Extension	
+
+
+Jupyter 
+========
+1.) Install Jupyter Notebook
+	pip install notebook
+2.) To Run jupyter notebook 
+	jupyter notebook
+3.) Install langchain in the Jupyter kernel
+	pip install langchain
+4.) If it still doesn’t work, ensure the kernel is using the correct Python environment:
+	pip install ipykernel
+	python -m ipykernel install --user --name=<env_name> --display-name "Python (<env_name>)"
+	Note : env_name is Virtual Directory name that you are working under
+
+
+GIT
+===
+git status
+git add .
+git commit -m "Initial commit: Added README and setup project"
+git push origin main
+git reset --hard
+git reset --hard origin/master

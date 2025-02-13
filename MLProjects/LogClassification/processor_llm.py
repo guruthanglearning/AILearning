@@ -41,7 +41,11 @@ def classify_with_LLM(logmessage):
 # Example usage
 if __name__ == "__main__":
     
-    log_messages = [ "User User123 logged in.",
+    log_messages = [
+        "Case escalation for ticket ID 7324 failed because the assigned support agent is no longer active",
+         "The 'ReportGenerator' module will be retired in version 4.0. Please migrate to the 'AdvancedAnalyticsSuite' by Dec 2025",
+         "System reboot initiated by user 12345",
+        "User User123 logged in.",
         "Backup started at 2023-10-01 12:00:00.",
         "test"]
     

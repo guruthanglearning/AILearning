@@ -31,7 +31,6 @@ if __name__ == "__main__":
     ]
 
     for log in log_messages:
-        result = classify_with_BERT(log);        
-        label = result[0]
-        message = result
-        print(f"Model: LLM Log: ", log, " => Category: ", label, " Message: ", message)
+        result = classify_with_BERT(log);                
+        category = result
+        print(f"Model: LLM Log: ", log, " => Category: ", category)

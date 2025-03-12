@@ -1,6 +1,9 @@
+import uvicorn
+import datetime
+import os
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-import uvicorn
 from Src.Data_loader import fetch_fundamentals
 from Src.MarketSentimentAnalysis import fetch_news_sentiment
 from Src.Technical_Indicators import load_stock_data_computer_technical_indicator
@@ -14,6 +17,31 @@ app = FastAPI()
 class StockRequest(BaseModel):
     symbol: str
 
+def IsCleanRequired():
+    try:
+        rootPath = os.path.abspath(os.path.join(os.getcwd()))
+        directoryPath = os.path.join(rootPath, "Data")        
+         # File to store the last run date        
+        date_file =  os.path.join(directoryPath,"last_run_date.txt")
+        current_date = datetime.datetime.now().date()
+
+        # Check if file exists and compare dates
+        if os.path.exists(date_file):
+            with open(date_file, 'r') as f:
+                stored_date = datetime.datetime.strptime(f.read().strip(), '%Y-%m-%d').date()
+                if stored_date != current_date:
+                    # Clear existing data if date doesn't match
+                    with open(date_file, 'w') as f:
+                        f.write(str(current_date))
+                    return True
+        else:
+            # Create file if it doesn't exist
+            with open(date_file, 'w') as f:
+                f.write(str(current_date))
+        return False
+    except Exception as e:
+        raise Exception(f"Error in API : {str(e)}")      
+
 @app.get("/")
 def home():
     return {"message": "Stock Prediction API is running!"}
@@ -23,10 +51,12 @@ def get_stock_analysis(request: StockRequest):
     try:
         symbol = request.symbol.upper()
         
-        clean_symbol_information(symbol)
+        clean_required = IsCleanRequired()
+        if clean_required:
+            clean_symbol_information(symbol)
         
         # Step 1: Get Fundamentals
-        #fundamentals = fetch_fundamentals(symbol)
+        fundamentals = fetch_fundamentals(symbol)
 
         # Step 2: Compute Technical Indicators
         technicalIdicators = load_stock_data_computer_technical_indicator(symbol)        
@@ -42,8 +72,6 @@ def get_stock_analysis(request: StockRequest):
 
         # Step 5: Train Trend Classification Model
         trend_result = train_trend_classification_model(symbol)
-  
-
        
         # Step 6: Predict Real-time Stock Prices
         predictions = predict_prices(symbol)        
@@ -55,11 +83,11 @@ def get_stock_analysis(request: StockRequest):
         # Combine Results
         result = {
             "symbol": symbol,
-            #"fundamentals": fundamentals,
+            "fundamentals": fundamentals,
             "technicalIdicators":technicalIdicators,
             "predcitions": predictions,            
-            "trend_classification": trend_result,
-            #"recommendation": recommendation
+            "trend": trend_result,
+            "recommendation": recommendation
         }
         return result
 

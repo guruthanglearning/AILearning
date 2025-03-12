@@ -7,34 +7,60 @@ This project aims to develop a comprehensive stock prediction system that levera
 ## Project Structure
 
 ```
-stock_prediction_project/
-├── data/
-│   ├── fundamentals/                  # Fundamental data for stocks
-│   ├── technical_indicators/          # Technical indicators per stock
-├── models/
-│   ├── price_forecast/                # Models for price forecasting
-│   ├── trend_classification/          # Models for trend classification
-├── src/
-│   ├── data_loader.py                 # Fetches historical and real-time stock data
-│   ├── feature_engineering.py         # Computes technical indicators & custom ZigZag
-│   ├── model_price_forecast.py        # Trains stock price forecasting model
-│   ├── model_trend_classification.py  # Trains trend classification model
-│   ├── real_time_predict.py           # Fetches live stock data for predictions
-│   ├── api.py                         # FastAPI server for real-time predictions
-├── notebooks/                         # Jupyter notebooks for analysis and testing
-├── requirements.txt                   # Dependency list
-├── Dockerfile                         # For containerization and deployment
-└── README.md                          # Project documentation
+StockPrediction
+├── Data/
+│   ├── <Symbol ex : AAPL, GOOG>/      
+│   ├────stock_data_<Symbol>.csv                  # Stocks Fundamentals 
+│   ├────technical_indicators_<Symbol>.csv        # Technical data for stocks
+│   ├── Sentiment_Analysis/
+│   ├────sentiment_history_<Symbol>.csv           # Sentiment Analysis information
+│   ├── last_run_date.txt                         # Cleans Fundamentals, Technical, Sentiment analysis & price_forecast & trend_classification models everyday based on the date captured
+├── Models/
+│   ├── price_forecast/                          # Models for price forecasting
+│   ├── trend_classification/                    # Models for trend classification
+├── Src/
+│   ├── Api.py                                   # FastAPI server stock predictions API
+│   ├── Clean_Symbol_Information.py              # Cleans Fundamentals, Technical, Sentiment analysis & price_forecast & trend_classification models
+│   ├── Data_loader.py                           # Fetches historical and real-time stock data
+│   ├── MarketSentimentAnalysis.py:              # Trains  sentiment analysis from news
+│   ├── Price_forecast.py                        # Trains stock price forecasting model
+│   ├── Real_Time_Predict.py                     # Fetches live stock data for predictions
+│   ├── Technical_Indicators.py                  # Computes technical indicators & custom ZigZag
+│   ├── Trend_Classification.py                  # Trains trend classification model
+│   ├── UI.py                                    # Streamlit User Interface interacts with API to fetch stock information & predicts the trend movement
+├── notebooks/                                   # Jupyter notebooks for analysis and testing
+├── requirements.txt                             # Dependency list
+└── README.md                                    # Project documentation
 ```
 
 ## Features
 
-- **Data Collection**: Retrieve historical and real-time stock data using `yfinance` and other financial APIs.
-- **Feature Engineering**: Calculate technical indicators such as SMA, EMA, RSI, MACD, ATR, and implement a custom ZigZag indicator.
-- **Model Training**: Develop and train machine learning models (e.g., XGBoost) for:
-  - Stock price forecasting (predicting closing, high, and low prices).
-  - Stock trend classification (predicting upward, downward, or stable trends).
-- **Real-Time Predictions**: Serve predictions through a RESTful API built with FastAPI.
+- **Fundamental Analysis**
+  - Market Cap, P/E Ratio, EPS, Dividend Yield, Sector, Industry
+- **Technical Indicators**
+  - Simple Moving Averages (SMA) - 20-day, 200-day
+  - Exponential Moving Averages (EMA) - 20-day, 200-day
+  - Displaced Moving Averages (DMA): 20-day, 50-day, and 200-day
+  - Relative Strength Index (RSI): 7-day, 14-day, and 200-day
+  - Moving Average Convergence Divergence (MACD)
+  - Average True Range (ATR)
+  - On-Balance Volume (OBV)
+  - ZigZag Trend Analysis
+
+- **Sentiment Analysis**
+  - Fetches and evaluates latest market news sentiment for given stock symbols.
+
+- **Stock Price Forecasting**
+  - Predicts future Closing, High, and Low prices using advanced ML models.
+
+- **Trend Classification**
+  - Predicts if the stock is in an Uptrend 📈, Downtrend 📉, or Stable ⚖️, and provides a trend strength score.
+
+- **Real-Time Stock Prediction**
+  - Provides immediate prediction for the latest stock prices based on live indicators.
+
+- **Recommendation System**
+  - Suggests actionable recommendations (Buy, Hold, or Sell) based on the combined analysis of trends and market sentiment.
 
 ## Installation
 
@@ -62,65 +88,62 @@ stock_prediction_project/
 
 1. **Data Collection**:
 
-   - Run `data_loader.py` to fetch and store historical stock data.
-     ```bash
-     python MLProjects\StockPrediction\Code\Data_loader.py
+   - Run `Data_loader.py` to fetch and store historical stock data.
+     ```powershell
+     python ./Src/Data_loader.py
      ```
 
-2. **Feature Engineering**:
+2. **Technical Indicators**:
 
-   - Execute `feature_engineering.py` to compute and save technical indicators.
-     ```bash
-     python src/feature_engineering.py
+   - Execute `Technical_Indicators.py` to compute and save technical indicators.
+     ```powershell
+     python  ./Src/Technical_Indicators.py
      ```
 
 3. **Model Training**:
 
    - Train the price forecasting model:
-     ```bash
-     python src/model_price_forecast.py
+     ```powershell
+     python ./Src/Price_Forecast.py
      ```
    - Train the trend classification model:
-     ```bash
-     python src/model_trend_classification.py
+     ```powershell
+     python ./Src/Trend_Classification.py
      ```
 
 4. **Real-Time Predictions**:
 
-   - Use `real_time_predict.py` to fetch live data and make predictions.
-     ```bash
-     python src/real_time_predict.py
+   - Use `Real_Time_Predict.py` to fetch live data and make predictions.
+     ```powershell
+     python ./Src/Real_Time_Predict.py
      ```
 
 5. **API Deployment**:
 
    - Start the FastAPI server to serve real-time predictions.
      ```bash
-     uvicorn src.api:app --reload
+     uvicorn Src.Api:app --reload
      ```
    - Access the API documentation at `http://127.0.0.1:8000/docs`.
 
-## Docker Deployment
+6. **UI Deployment**:
+ - Start the Streamlit UI to show the API response
+     ```powershell
+     streamlit run ./Src/UI.py
+     ```
+   - Access the API documentation at `http://127.0.0.1:8000/docs`.
+   
+8. **Clean Up**
+   - Use Clean_Symbol_Information.py to remove data files from Data & pre-trained model files from Model folder
+      ```powershell
+     python ./Src/Clean_Symbol_Information.py
+     ```
 
-1. **Build the Docker Image**:
-
-   ```bash
-   docker build -t stock_prediction_api .
-   ```
-
-2. **Run the Docker Container**:
-
-   ```bash
-   docker run -d -p 8000:8000 stock_prediction_api
-   ```
 
 ## Contributing
 
 Contributions are welcome! Please fork the repository and submit a pull request for any enhancements or bug fixes.
 
-## License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
 ## Disclaimer
 

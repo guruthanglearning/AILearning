@@ -29,6 +29,8 @@ creditcardfrauddetection/
 │   ├── core/                         # Core configurations
 │   │   ├── __init__.py
 │   │   ├── config.py                 # Configuration settings
+│   │   ├── logging.py                # Logging configuration
+│   │   ├── security.py               # Security utilities for authentication
 │   ├── services/                     # Business logic services
 │   │   ├── __init__.py
 │   │   ├── fraud_detection_service.py # Main fraud detection logic
@@ -37,9 +39,11 @@ creditcardfrauddetection/
 │   ├── models/                       # ML models
 │   │   ├── __init__.py
 │   │   ├── ml_model.py               # Machine learning model
+│   │   ├── embeddings.py             # Embedding model for vector representations
 │   └── utils/                        # Utility functions
 │       ├── __init__.py
 │       ├── feature_engineering.py    # Feature extraction
+│       ├── data_processing.py        # Data processing utilities
 ├── data/                             # Data storage
 │   ├── __init__.py
 │   ├── sample/                       # Sample data files
@@ -48,6 +52,7 @@ creditcardfrauddetection/
 ├── scripts/                          # Utility scripts
 │   │   ├── __init__.py
 │   └── init_vector_db.py             # Initialize vector database
+│   └── generate_sample_data.py       # Generate sample transaction data
 
 ```
 

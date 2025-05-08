@@ -28,6 +28,7 @@ except ImportError:
     USING_PINECONE = False
 
 from app.core.config import settings
+from app.models.embeddings import EmbeddingModel
 
 logger = logging.getLogger(__name__)
 
@@ -52,11 +53,12 @@ class VectorDBService:
             
             # Initialize embedding model if not provided
             if self.embedding_model is None:
+                logger.info(f"Initializing embedding model: {settings.EMBEDDING_MODEL}")
                 self.embedding_model = HuggingFaceEmbeddings(
                     model_name=settings.EMBEDDING_MODEL,
                     model_kwargs={'device': 'cuda' if torch.cuda.is_available() else 'cpu'}
                 )
-                logger.info(f"Initialized embedding model: {settings.EMBEDDING_MODEL}")
+                logger.info(f"Embedding model initialized on {'GPU' if torch.cuda.is_available() else 'CPU'}")
             
             # Initialize vector store based on what's available
             if USING_PINECONE and settings.PINECONE_API_KEY:
@@ -124,12 +126,15 @@ class VectorDBService:
         )
         logger.info("In-memory vector store initialized successfully")
     
-    def add_fraud_patterns(self, fraud_data: List[Dict[str, Any]]):
+    def add_fraud_patterns(self, fraud_data: List[Dict[str, Any]]) -> int:
         """
         Add fraud patterns to the vector store.
         
         Args:
             fraud_data: List of fraud pattern data
+            
+        Returns:
+            Number of patterns added
         """
         start_time = time.time()
         logger.info(f"Adding {len(fraud_data)} fraud patterns to vector store")
@@ -200,7 +205,7 @@ class VectorDBService:
         
         return fraud_text
     
-    def add_feedback_as_pattern(self, transaction_id: str, feedback: str, is_fraud: bool):
+    def add_feedback_as_pattern(self, transaction_id: str, feedback: str, is_fraud: bool) -> int:
         """
         Add analyst feedback as a new fraud pattern.
         
@@ -208,6 +213,9 @@ class VectorDBService:
             transaction_id: ID of the transaction
             feedback: Analyst feedback text
             is_fraud: Whether the transaction was actually fraudulent
+            
+        Returns:
+            Number of patterns added
         """
         logger.info(f"Adding feedback for transaction {transaction_id} as new pattern")
         

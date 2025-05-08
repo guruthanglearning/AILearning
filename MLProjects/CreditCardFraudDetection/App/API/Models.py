@@ -97,4 +97,20 @@ class HealthCheckResponse(BaseModel):
     """
     status: str
     version: str = "1.0.0"
-    components: Dict[str, str] = {}
+    components: Dict[str, Any] = {}
+
+class TokenResponse(BaseModel):
+    """
+    Model for token response.
+    """
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int = 1800  # 30 minutes in seconds
+
+class ErrorResponse(BaseModel):
+    """
+    Model for error response.
+    """
+    detail: str
+    code: Optional[str] = None
+    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())

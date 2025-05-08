@@ -1,21 +1,17 @@
 """
 Machine learning model for initial fraud screening.
-Provides fast first-pass screening of credit card transactions
-before more intensive LLM-based analysis.
 """
 
 import logging
 import pickle
 import os
 import numpy as np
-import pandas as pd
 from typing import Dict, Any, Tuple, List, Optional
 import xgboost as xgb
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.preprocessing import StandardScaler
 import joblib
-from datetime import datetime
 
-from App.Core.Config import settings
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 

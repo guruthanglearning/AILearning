@@ -138,8 +138,23 @@ StockPrediction
       ```powershell
      python ./Src/Clean_Symbol_Information.py
      ```
-
-
+9. **Workflow Diagram**
+```mermaid
+graph TD
+    A[User Inputs Stock Symbol] --> B[Clean Old Symbol Data]
+    B --> C[Fetch Fundamental Data]
+    B --> D[Fetch Historical Price Data]
+    D --> E[Compute Technical Indicators]
+    D --> F[Perform Sentiment Analysis from News]
+    E --> G[Forecast Stock Prices - Close, High, Low]
+    E --> H[Classify Trend: Up/Down/Stable]
+    G --> I[Generate Price Forecast]
+    H --> I
+    F --> J[Compute Sentiment Score]
+    J --> I
+    I --> K[Generate Buy/Sell/Hold Recommendation]
+    K --> L[Display Results in Streamlit UI]
+```
 ## Contributing
 
 Contributions are welcome! Please fork the repository and submit a pull request for any enhancements or bug fixes.

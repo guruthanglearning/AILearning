@@ -1,0 +1,163 @@
+[
+    {
+      "case_id": "fraud_001",
+      "detection_date": "2025-04-15",
+      "fraud_type": "Card Not Present",
+      "method": "Online purchase with stolen card",
+      "amount": 899.99,
+      "currency": "USD",
+      "merchant_category": "Electronics",
+      "pattern_description": "Series of increasingly large online purchases within 24 hours, starting with small test transactions. Purchases made from IP addresses in different countries.",
+      "indicators": [
+        "Multiple transactions increasing in value",
+        "Purchases from unusual locations",
+        "High-value electronics purchases",
+        "Multiple transactions at odd hours"
+      ]
+    },
+    {
+      "case_id": "fraud_002",
+      "detection_date": "2025-04-20",
+      "fraud_type": "Account Takeover",
+      "method": "Changed shipping address just before purchase",
+      "amount": 1299.95,
+      "currency": "USD",
+      "merchant_category": "Luxury Goods",
+      "pattern_description": "Account credentials changed within 48 hours of large purchase. Shipping address changed to a freight forwarding service. Contact email and phone also changed.",
+      "indicators": [
+        "Recent account credential changes",
+        "Shipping to forwarding service",
+        "Contact information changes",
+        "Unusually large purchase compared to history"
+      ]
+    },
+    {
+      "case_id": "fraud_003",
+      "detection_date": "2025-05-01",
+      "fraud_type": "Card Testing",
+      "method": "Rapid small transactions to test card validity",
+      "amount": 9.95,
+      "currency": "USD",
+      "merchant_category": "Digital Goods",
+      "pattern_description": "Multiple small transactions (under $10) in rapid succession to test if card is valid. Often followed by larger purchases if the small ones succeed.",
+      "indicators": [
+        "Multiple small transactions",
+        "Rapid succession (seconds apart)",
+        "Digital goods or services",
+        "Followed by larger purchases"
+      ]
+    },
+    {
+      "case_id": "fraud_004",
+      "detection_date": "2025-05-03",
+      "fraud_type": "Friendly Fraud",
+      "method": "Legitimate cardholder disputes transaction",
+      "amount": 450.75,
+      "currency": "USD",
+      "merchant_category": "Online Retail",
+      "pattern_description": "Customer makes purchase, receives goods, then disputes the charge claiming they didn't make the purchase or didn't receive the goods.",
+      "indicators": [
+        "Transaction followed by chargeback",
+        "History of chargebacks with same customer",
+        "No evidence of delivery issues",
+        "Customer contact inconsistencies"
+      ]
+    },
+    {
+      "case_id": "fraud_005",
+      "detection_date": "2025-05-06",
+      "fraud_type": "Merchant Fraud",
+      "method": "Fraudulent merchant processes unauthorized charges",
+      "amount": 150.00,
+      "currency": "USD",
+      "merchant_category": "Other Services",
+      "pattern_description": "Merchant processes unauthorized recurring charges or multiple charges for the same purchase. May be a fake storefront or a compromised merchant account.",
+      "indicators": [
+        "Multiple charges from same merchant",
+        "Recently established merchant",
+        "Vague merchant category",
+        "Unusual transaction descriptions",
+        "High dispute rate for merchant"
+      ]
+    },
+    {
+      "case_id": "fraud_006",
+      "detection_date": "2025-05-07",
+      "fraud_type": "BIN Attack",
+      "method": "Testing card number combinations with valid BIN ranges",
+      "amount": 1.00,
+      "currency": "USD",
+      "merchant_category": "Service Subscription",
+      "pattern_description": "Fraudster uses valid Bank Identification Numbers (BINs) and generates possible card numbers, then tests them with small transactions to find valid ones.",
+      "indicators": [
+        "Very small transaction amount ($1-5)",
+        "Test transactions to subscription services",
+        "Multiple attempts with similar card numbers",
+        "Transactions from unusual or changing locations"
+      ]
+    },
+    {
+      "case_id": "fraud_007",
+      "detection_date": "2025-05-10",
+      "fraud_type": "Card Not Present",
+      "method": "Social engineering to obtain card details",
+      "amount": 2499.99,
+      "currency": "USD",
+      "merchant_category": "Travel",
+      "pattern_description": "Fraudster contacts cardholder posing as bank or service representative, tricks them into revealing card details, then makes high-value purchases for services that don't require physical verification.",
+      "indicators": [
+        "High-value travel bookings",
+        "Transactions soon after customer service calls",
+        "Different transaction location than cardholder's history",
+        "Multiple attempted high-value transactions"
+      ]
+    },
+    {
+      "case_id": "fraud_008",
+      "detection_date": "2025-05-12",
+      "fraud_type": "Card Skimming",
+      "method": "Card details stolen via physical skimming device",
+      "amount": 732.50,
+      "currency": "USD",
+      "merchant_category": "Retail",
+      "pattern_description": "Card details stolen via skimming device at ATM, gas station, or restaurant. Duplicate card created and used for in-store purchases, often in high-end retail stores.",
+      "indicators": [
+        "Card present transaction without chip use",
+        "Transaction in different geographical area than cardholder",
+        "Multiple retail purchases in short timeframe",
+        "High-value retail purchases"
+      ]
+    },
+    {
+      "case_id": "fraud_009",
+      "detection_date": "2025-05-15",
+      "fraud_type": "Account Takeover",
+      "method": "Phishing email leads to credential theft",
+      "amount": 545.25,
+      "currency": "USD",
+      "merchant_category": "Digital Goods",
+      "pattern_description": "Cardholder receives phishing email impersonating their bank or a service, enters credentials on fake site, resulting in account takeover. Fraudster then makes online purchases in digital goods that can be quickly resold.",
+      "indicators": [
+        "Login from unusual IP address or device",
+        "Password reset prior to transactions",
+        "Multiple purchases of gift cards or digital currency",
+        "Unusual browsing patterns prior to purchase"
+      ]
+    },
+    {
+      "case_id": "fraud_010",
+      "detection_date": "2025-05-20",
+      "fraud_type": "Triangulation Fraud",
+      "method": "Fraudster lists non-existent items on marketplace",
+      "amount": 399.00,
+      "currency": "USD",
+      "merchant_category": "Marketplace",
+      "pattern_description": "Fraudster lists non-existent or heavily discounted items on a marketplace, accepts payment from buyer, then uses stolen cards to purchase and ship the actual items from legitimate retailers. Cardholder discovers unauthorized charge, resulting in chargeback.",
+      "indicators": [
+        "Multiple shipping addresses different from billing address",
+        "Marketplace seller with short history",
+        "Rush shipping on orders",
+        "Inconsistent buyer information across purchases"
+      ]
+    }
+  ]

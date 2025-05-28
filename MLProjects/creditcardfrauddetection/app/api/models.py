@@ -2,7 +2,7 @@
 Pydantic models for API request and response schemas.
 """
 
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 from pydantic import BaseModel, Field, validator
 from datetime import datetime
 
@@ -114,3 +114,54 @@ class ErrorResponse(BaseModel):
     detail: str
     code: Optional[str] = None
     timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
+
+class FraudPattern(BaseModel):
+    """
+    Model representing a fraud pattern for detection.
+    """
+    id: Optional[str] = None
+    name: str
+    description: str
+    pattern: Dict[str, Any]
+    similarity_threshold: float = Field(default=0.8, ge=0.0, le=1.0)
+    created_at: Optional[str] = None
+
+    @validator('created_at', pre=True, always=True)
+    def set_created_at(cls, v):
+        """Set created_at to current time if not provided."""
+        if v is None:
+            return datetime.now().isoformat()
+        return v
+    
+    @validator('id', pre=True, always=True)
+    def set_id(cls, v):
+        """Set ID if not provided."""
+        if v is None:
+            import uuid
+            return f"pattern_{str(uuid.uuid4())[:8]}"
+        return v
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "name": "High-value Electronics Purchase",
+                "description": "Unusually high-value purchase from electronics retailer, especially from new device or unusual location.",
+                "pattern": {
+                    "merchant_category": "Electronics",
+                    "transaction_type": "online",
+                    "indicators": ["high_amount", "new_device", "unusual_location"]
+                },
+                "similarity_threshold": 0.85
+            }
+        }
+
+class FraudPatternResponse(BaseModel):
+    """
+    Model for response when adding or retrieving a fraud pattern.
+    """
+    id: str
+    name: str
+    description: str
+    pattern: Dict[str, Any]
+    similarity_threshold: float
+    created_at: str

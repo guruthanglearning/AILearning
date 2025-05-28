@@ -106,4 +106,4 @@ def verify_api_key(api_key: str) -> bool:
     """
     # In a production system, this would check against a database
     # For demonstration purposes, we're just checking against the settings
-    return api_key == settings.SECRET_KEY
+    return api_key == settings.API_KEY

@@ -1,6 +1,37 @@
 # Real-Time Credit Card Fraud Detection System
 
-A production-ready system for detecting fraud in real-time credit card transactions by leveraging both traditional machine learning techniques and Large Language Models with Retrieval Augmented Generation (RAG).
+A production-ready system for detecting fraud in real-time credit card transactions by leve### Feedback Loop**: Analyst feedback is incorporated back into:
+   - Vector database for improving pattern detection
+   - Training data for ML model improvement
+
+### Key System Components
+
+#### 1. Machine Learning Model
+- **Purpose**: Provides fast, initial screening of transactions
+- **Type**: Gradient Boosted Decision Trees (optimized for speed and accuracy)
+- **Inputs**: Engineered features from transaction data
+- **Outputs**: Fraud probability score and confidence level
+- **Advantages**: Fast processing, handles high transaction volumes
+
+#### 2. Vector Database
+- **Purpose**: Stores historical fraud patterns for similarity search
+- **Technology**: Either Chroma or Pinecone vector DB (configurable)
+- **Content**: Embeddings of historical fraud patterns with metadata
+- **Role**: Powers the RAG (Retrieval Augmented Generation) for the LLM
+- **Advantages**: Efficient similarity search, continuous learning from feedback
+
+#### 3. Large Language Model (LLM)
+- **Purpose**: In-depth analysis of transactions flagged as uncertain
+- **Capability**: Analyzes transaction details against known fraud patterns
+- **Enhancement**: Uses RAG to provide relevant context from historical patterns
+- **Outputs**: Fraud probability, detailed reasoning, and recommendations
+- **Advantages**: Human-like reasoning, explainability, adaptability to new fraud types
+
+#### 4. Feature Engineering
+- **Purpose**: Transforms raw transaction data into model-ready features
+- **Process**: Extracts and normalizes attributes from transaction data
+- **Features Generated**: Transaction timing anomalies, customer behavior patterns, merchant risk scores
+- **Advantages**: Enhances detection accuracy through domain-specific transformationsing both traditional machine learning techniques and Large Language Models with Retrieval Augmented Generation (RAG).
 
 ## Overview
 
@@ -72,6 +103,76 @@ The UI provides a user-friendly interface for monitoring fraud detection results
 - **Transaction Analysis** for reviewing individual transactions
 - **Fraud Pattern Management** for maintaining the fraud pattern database
 - **System Health Monitoring** for tracking system performance
+
+## How the Fraud Detection Works
+
+The system employs a sophisticated two-stage approach to detect fraudulent credit card transactions with high accuracy while providing human-understandable explanations.
+
+### Detection Workflow
+
+```
+┌──────────────────┐     ┌───────────────────┐     ┌─────────────────────┐     ┌───────────────────┐
+│  Transaction     │     │  Feature          │     │  ML Model           │     │  Initial Fraud    │
+│  Received        │────>│  Engineering      │────>│  Analysis           │────>│  Probability      │
+└──────────────────┘     └───────────────────┘     └─────────────────────┘     └─────────┬─────────┘
+                                                                                         │
+                                                                                         ▼
+                                 ┌──────────────────────────────────────────────────────────┐
+                                 │  Confidence Check: Is ML result confident?               │
+                                 └────────────────┬─────────────────────────┬───────────────┘
+                                                  │                         │
+                                                 No                        Yes
+                                                  │                         │
+                                                  ▼                         ▼
+┌───────────────────┐     ┌───────────────────┐     ┌────────────────────────────────────────┐
+│  Final Decision & │     │  LLM Analysis     │     │  Return ML-based Decision               │
+│  Response         │<────│  with Reasoning   │     │  (Skip LLM for clear-cut cases)         │
+└───────────────────┘     └────────┬──────────┘     └────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌───────────────────┐     ┌───────────────────┐     ┌────────────────────────────────────────┐
+│  Similar Patterns │<────│  Vector DB        │     │  Transaction Text                       │
+│  Retrieved        │     │  Search           │<────│  Creation                               │
+└───────────────────┘     └───────────────────┘     └────────────────────────────────────────┘
+```
+
+### Detection Process Steps
+
+1. **Transaction Intake**: The system receives a transaction with details like amount, merchant, location, etc.
+
+2. **Feature Engineering**: Raw transaction data is transformed into ML-ready features including:
+   - Transaction attributes (amount, time, location)
+   - Historical patterns for the card/customer
+   - Merchant risk scoring
+   - Behavioral anomaly detection
+
+3. **ML Model Analysis**: A gradient-boosted decision tree model analyzes the features and returns:
+   - Initial fraud probability score
+   - Confidence level of the prediction
+
+4. **Confidence Assessment**: Based on the ML model's confidence:
+   - If highly confident (clear legitimate or fraudulent), use ML result directly
+   - If uncertain, proceed with LLM analysis for deeper inspection
+
+5. **Vector Database Search**: For uncertain cases:
+   - Transaction is converted to text representation
+   - Vector database is searched for similar historical fraud patterns
+   - Top-K most similar patterns are retrieved
+
+6. **LLM Analysis**: For uncertain cases:
+   - Similar patterns are provided as context to the LLM
+   - Transaction details are analyzed against known fraud patterns
+   - LLM provides fraud probability, reasoning, and recommendations
+
+7. **Final Decision & Response**:
+   - Combined score from ML model and LLM (weighted)
+   - Final fraud probability and confidence determined
+   - Decision reasoning included in response
+   - Transaction flagged for review if confidence below threshold
+
+8. **Feedback Loop**: Analyst feedback is incorporated back into:
+   - Vector database for improving pattern detection
+   - Training data for ML model improvement
 
 ## API and UI Integration
 

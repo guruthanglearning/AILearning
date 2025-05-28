@@ -1,4 +1,4 @@
-"""
+﻿"""
 Configuration settings for the fraud detection system.
 Loads environment variables and provides access to configuration settings.
 """
@@ -26,13 +26,16 @@ class Settings(BaseSettings):
     EMBEDDING_BATCH_SIZE: int = int(os.getenv("EMBEDDING_BATCH_SIZE", "32"))
     
     # Database Configuration
-    VECTOR_INDEX_NAME: str = os.getenv("VECTOR_INDEX_NAME", "credit-card-fraud-detection")
-    
+    VECTOR_INDEX_NAME: str = os.getenv("VECTOR_INDEX_NAME", "fraud-patterns")
+
     # Application Configuration
     APP_ENV: str = os.getenv("APP_ENV", "development")  # development, testing, production
+    VERSION: str = os.getenv("VERSION", "1.0.0")  # Application version
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
     DEBUG: bool = os.getenv("DEBUG", "True").lower() in ("true", "1", "t")
     SECRET_KEY: str = os.getenv("SECRET_KEY", "your_secret_key_for_jwt")
+    API_KEY: str = os.getenv("API_KEY", "development_api_key_for_testing")
+    AUTH_REQUIRED: bool = os.getenv("AUTH_REQUIRED", "False").lower() in ("true", "1", "t")
     
     # Server Configuration
     HOST: str = os.getenv("HOST", "0.0.0.0")
@@ -43,6 +46,14 @@ class Settings(BaseSettings):
     TRANSACTION_HISTORY_WINDOW: int = int(os.getenv("TRANSACTION_HISTORY_WINDOW", "30"))  # Days
     DEFAULT_SIMILARITY_THRESHOLD: float = float(os.getenv("DEFAULT_SIMILARITY_THRESHOLD", "0.85"))
     CONFIDENCE_THRESHOLD: float = float(os.getenv("CONFIDENCE_THRESHOLD", "0.7"))
+    
+    # Monitoring settings
+    ENABLE_PROMETHEUS: bool = os.getenv("ENABLE_PROMETHEUS", "True").lower() in ("true", "1", "t")
+    GRAFANA_ADMIN_USER: str = os.getenv("GRAFANA_ADMIN_USER", "admin")
+    GRAFANA_ADMIN_PASSWORD: str = os.getenv("GRAFANA_ADMIN_PASSWORD", "admin")
+    
+    # Vector DB settings
+    USE_PINECONE: bool = os.getenv("USE_PINECONE", "False").lower() in ("true", "1", "t")
     
     class Config:
         env_file = ".env"

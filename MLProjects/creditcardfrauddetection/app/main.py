@@ -15,6 +15,7 @@ from app.api.endpoints import router as api_router
 from app.api.dependencies import verify_api_key_header
 from app.core.config import settings
 from app.core.logging import logger
+from app.core.metrics import setup_metrics  # Add this import
 
 # Create FastAPI application
 app = FastAPI(
@@ -96,6 +97,11 @@ else:
     # In development, don't require API key
     app.include_router(api_router, prefix="/api/v1")
 
+# Set up Prometheus metrics
+if settings.ENABLE_PROMETHEUS:
+    setup_metrics(app)
+    logger.info("Prometheus metrics instrumentation enabled")
+
 # Add root endpoint
 @app.get("/")
 async def root():
@@ -108,10 +114,19 @@ async def root():
     }
 
 # Add health check endpoint
-@app.get("/health")
-async def health():
-    """Health check endpoint."""
-    return {"status": "healthy"}
+@app.get("/health", tags=["Health"], response_model=Dict[str, Any])
+async def health_check():
+    """
+    Health check endpoint to verify the API is running.
+    This endpoint doesn't require authentication.
+    """
+    return {
+        "status": "healthy",  # Changed from "ok" to match what dashboard expects
+        "status_code": "ok",  # Keep "ok" as a backup field
+        "version": settings.VERSION,
+        "environment": settings.APP_ENV,
+        "timestamp": time.time()
+    }
 
 # Add event handlers
 @app.on_event("startup")

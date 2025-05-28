@@ -49,9 +49,8 @@ async def verify_api_key_header(api_key: str = Depends(API_KEY_HEADER)) -> str:
         
     Raises:
         HTTPException: If the API key is invalid
-    """
-    # In development mode, allow requests without API key
-    if settings.APP_ENV == "development" and not settings.SECRET_KEY:
+    """    # In development mode, allow requests without API key
+    if settings.APP_ENV == "development" and not settings.AUTH_REQUIRED:
         return "development"
     
     # Check if API key is provided

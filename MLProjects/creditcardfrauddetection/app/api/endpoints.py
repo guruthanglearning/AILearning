@@ -3,6 +3,8 @@ API endpoints for fraud detection system.
 """
 
 import logging
+import uuid
+import datetime
 from typing import Dict, Any, List, Optional
 import time
 
@@ -16,6 +18,7 @@ from app.api.models import (
     HealthCheckResponse,
     ErrorResponse
 )
+from app.api.metrics import ModelMetricsResponse
 from app.services.fraud_detection_service import FraudDetectionService
 from app.core.config import settings
 from app.api.dependencies import get_fraud_detection_service, verify_api_key_header
@@ -182,3 +185,176 @@ async def root():
         "version": "1.0.0",
         "description": "AI-powered credit card fraud detection system using LLM and RAG"
     }
+
+@router.get("/fraud-patterns", response_model=List[Dict[str, Any]], responses={
+    401: {"model": ErrorResponse, "description": "Unauthorized"},
+    500: {"model": ErrorResponse, "description": "Internal server error"}
+})
+async def get_fraud_patterns(
+    request: Request,
+    fraud_service: FraudDetectionService = Depends(get_fraud_detection_service),
+    api_key: str = Depends(verify_api_key_header)
+):
+    """
+    Get all fraud patterns.
+    
+    Returns:
+        List of fraud patterns
+    """
+    try:
+        # Get request ID for logging
+        request_id = getattr(request.state, "request_id", "unknown")
+        logger.info(f"[{request_id}] Received request to get all fraud patterns")
+        
+        # Get patterns from the vector database service
+        patterns = fraud_service.vector_db_service.get_all_fraud_patterns()
+        
+        # If no patterns were found, return an empty list
+        if not patterns:
+            logger.warning("No fraud patterns found in the vector database.")
+            patterns = []
+        
+        return patterns
+    except Exception as e:
+        logger.error(f"Error getting fraud patterns: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error getting fraud patterns: {str(e)}")
+
+@router.post("/fraud-patterns", response_model=Dict[str, Any], responses={
+    401: {"model": ErrorResponse, "description": "Unauthorized"},
+    500: {"model": ErrorResponse, "description": "Internal server error"}
+})
+async def add_fraud_pattern(
+    pattern_data: Dict[str, Any],
+    request: Request,
+    fraud_service: FraudDetectionService = Depends(get_fraud_detection_service),
+    api_key: str = Depends(verify_api_key_header)
+):
+    """
+    Add a new fraud pattern.
+    
+    Args:
+        pattern_data: The pattern data to add
+        
+    Returns:
+        The added pattern with ID and timestamp
+    """
+    try:
+        # Get request ID for logging
+        request_id = getattr(request.state, "request_id", "unknown")
+        logger.info(f"[{request_id}] Received request to add fraud pattern: {pattern_data['name']}")
+        
+        # Add ID and timestamp if not already present
+        if "id" not in pattern_data:
+            pattern_data["id"] = f"pattern_{str(uuid.uuid4())[:8]}"
+        if "created_at" not in pattern_data:
+            pattern_data["created_at"] = datetime.datetime.now().isoformat()
+        
+        # Save the pattern to the vector database
+        result = fraud_service.vector_db_service.add_fraud_patterns([pattern_data])
+        if result > 0:
+            logger.info(f"[{request_id}] Successfully added fraud pattern with ID: {pattern_data['id']}")
+            return pattern_data
+        else:
+            logger.error(f"[{request_id}] Failed to add fraud pattern")
+            raise HTTPException(status_code=500, detail="Failed to add fraud pattern")
+        
+        return pattern_data
+    except Exception as e:        
+        logger.error(f"Error adding fraud pattern: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error adding fraud pattern: {str(e)}")
+
+@router.put("/fraud-patterns/{pattern_id}", response_model=Dict[str, Any], responses={
+    401: {"model": ErrorResponse, "description": "Unauthorized"},
+    404: {"model": ErrorResponse, "description": "Pattern not found"},
+    500: {"model": ErrorResponse, "description": "Internal server error"}
+})
+async def update_fraud_pattern(
+    pattern_id: str,
+    pattern_data: Dict[str, Any],
+    request: Request,
+    fraud_service: FraudDetectionService = Depends(get_fraud_detection_service),
+    api_key: str = Depends(verify_api_key_header)
+):
+    """
+    Update an existing fraud pattern.
+    
+    Args:
+        pattern_id: ID of the pattern to update
+        pattern_data: Updated pattern data
+        
+    Returns:
+        The updated pattern
+    """
+    try:
+        # Get request ID for logging
+        request_id = getattr(request.state, "request_id", "unknown")
+        logger.info(f"[{request_id}] Received request to update fraud pattern: {pattern_id}")
+        
+        # Ensure the ID in the URL matches the ID in the data
+        pattern_data["id"] = pattern_id
+        
+        # Keep the original created_at timestamp
+        # First, try to get the existing pattern
+        all_patterns = fraud_service.vector_db_service.get_all_fraud_patterns()
+        existing_pattern = None
+        for pattern in all_patterns:
+            if pattern["id"] == pattern_id:
+                existing_pattern = pattern
+                break
+                
+        if not existing_pattern:
+            logger.error(f"[{request_id}] Pattern with ID {pattern_id} not found")
+            raise HTTPException(status_code=404, detail=f"Pattern with ID {pattern_id} not found")
+            
+        # Preserve the original created_at timestamp
+        if "created_at" not in pattern_data and "created_at" in existing_pattern:
+            pattern_data["created_at"] = existing_pattern["created_at"]
+        
+        # Remove the old pattern (not ideal, but a simple approach for now)
+        # In a real database we would do an update operation
+        
+        # Add the updated pattern to the vector database
+        result = fraud_service.vector_db_service.add_fraud_patterns([pattern_data])
+        
+        if result > 0:
+            logger.info(f"[{request_id}] Successfully updated fraud pattern with ID: {pattern_id}")
+            return pattern_data
+        else:
+            logger.error(f"[{request_id}] Failed to update fraud pattern")
+            raise HTTPException(status_code=500, detail="Failed to update fraud pattern")
+    
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        logger.error(f"Error updating fraud pattern: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error updating fraud pattern: {str(e)}")
+
+@router.get("/metrics", response_model=ModelMetricsResponse, responses={
+    401: {"model": ErrorResponse, "description": "Unauthorized"},
+    500: {"model": ErrorResponse, "description": "Internal server error"}
+})
+async def get_metrics(
+    request: Request,
+    fraud_service: FraudDetectionService = Depends(get_fraud_detection_service),
+    api_key: str = Depends(verify_api_key_header)
+):
+    """
+    Get system metrics including model performance.
+    
+    Returns:
+        Dict containing various system metrics and model performance data
+    """
+    try:
+        # Get request ID for logging
+        request_id = getattr(request.state, "request_id", "unknown")
+        logger.info(f"[{request_id}] Received request to get system metrics")
+        
+        # Get real model metrics data from the fraud detection service
+        metrics = fraud_service.get_model_metrics()
+        
+        # Return the metrics
+        return metrics
+    except Exception as e:
+        logger.error(f"Error getting metrics: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error getting metrics: {str(e)}")

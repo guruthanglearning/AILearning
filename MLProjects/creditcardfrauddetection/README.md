@@ -9,6 +9,80 @@ This system combines traditional machine learning approaches with advanced LLM-b
 1. **First-pass ML screening** - Fast and efficient analysis using gradient boosting models
 2. **LLM-based RAG analysis** - In-depth analysis of suspicious transactions by comparing them to historical fraud patterns
 
+## Quick Start
+
+### Setting Up and Running the System
+
+1. **Prerequisites**
+   - Python 3.10+
+   - Git
+   - Shared Python environment located at `d:\Study\AILearning\shared_Environment`
+
+2. **Start the System**
+   ```powershell
+   # Start both API and UI with a single command
+   .\start_system.ps1
+   ```
+
+   This will:
+   - Start the API server on http://localhost:8000
+   - Start the UI application on http://localhost:8501
+   - Wait for the API to be fully initialized before starting the UI
+
+3. **Alternative: Start Components Separately**
+   ```powershell
+   # Start API server only
+   .\start_api.ps1
+   
+   # In a separate terminal, start the UI
+   .\run_ui_fixed.ps1
+   ```
+
+4. **Run Tests**
+   ```powershell
+   # Run all system tests
+   python run_tests.py
+   ```
+
+### Accessing the Application
+
+- **UI Dashboard**: http://localhost:8501
+- **API Documentation**: http://localhost:8000/docs
+- **API Health Check**: http://localhost:8000/health
+
+## System Architecture
+
+The system consists of two main components that work together:
+
+### 1. API Server (Backend)
+
+The API server handles all the data processing, fraud detection logic, and provides endpoints for the UI to consume:
+
+- **RESTful API** built with FastAPI
+- **Machine Learning Models** for transaction analysis
+- **LLM Integration** for advanced fraud pattern analysis
+- **Vector Database** for storing historical fraud patterns
+- **Secure Authentication** with API keys
+
+### 2. Streamlit UI (Frontend)
+
+The UI provides a user-friendly interface for monitoring fraud detection results and managing the system:
+
+- **Dashboard** for monitoring system performance
+- **Transaction Analysis** for reviewing individual transactions
+- **Fraud Pattern Management** for maintaining the fraud pattern database
+- **System Health Monitoring** for tracking system performance
+
+## API and UI Integration
+
+The UI communicates with the API server to perform operations:
+
+1. **Fetch Data**: The UI retrieves fraud patterns, transaction history, and metrics from the API
+2. **Add/Update Patterns**: The UI allows analysts to create and modify fraud patterns via the API
+3. **Transaction Analysis**: The UI sends transaction data to the API for analysis
+
+If the API is unavailable, the UI will display mock data for demonstration purposes, but in production, all data should come from the API.
+
 ## Project Structure
 
 ```
@@ -16,8 +90,15 @@ creditcardfrauddetection/
 ├── README.md                         # Project documentation
 ├── requirements.txt                  # Python dependencies
 ├── .env.example                      # Environment variables template
+├── .gitignore                        # Git ignore file
+├── RUN_INSTRUCTIONS.md               # Detailed instructions for running the system
 ├── docker-compose.yml                # Docker composition configuration
 ├── Dockerfile                        # Docker container definition
+├── run_server.py                     # Server startup script
+├── run_ui_fixed.ps1                  # Script to start the UI with shared environment
+├── start_api.ps1                     # Script to start the API server
+├── start_system.ps1                  # Script to start both API and UI
+├── run_tests.py                      # Script to run all system tests
 ├── app/                              # Main application code
 │   ├── __init__.py
 │   ├── main.py                       # Application entry point
@@ -50,9 +131,15 @@ creditcardfrauddetection/
 │   │   ├── __init__.py
 │   │   └── fraud_patterns.json       # Sample fraud patterns
 ├── scripts/                          # Utility scripts
-│   │   ├── __init__.py
-│   └── init_vector_db.py             # Initialize vector database
+│   ├── __init__.py
+│   ├── init_vector_db.py             # Initialize vector database
 │   └── generate_sample_data.py       # Generate sample transaction data
+├── tests/                            # Test files
+│   ├── README.md                     # Test documentation
+│   ├── run_integration_tests.py      # Test runner
+│   ├── test_api_integration.py       # API integration tests
+│   ├── test_feedback_integration.py  # Feedback integration tests
+│   └── test_pattern_ingestion_integration.py  # Pattern ingestion tests
 
 ```
 
@@ -66,6 +153,15 @@ creditcardfrauddetection/
 - Feedback loop for continual system improvement
 - RESTful API for easy integration with payment processing systems
 - Comprehensive logging and monitoring
+- Interactive Streamlit-based user interface for analysts and administrators
+
+## Recent Improvements (May 2025)
+
+- **Fixed Vector Database Integration**: Resolved issues with storing and retrieving complex metadata in the vector database by properly handling JSON serialization/deserialization
+- **Removed Mock Data Dependencies**: Updated the UI to always use real data from the API instead of fallbacks to mock data
+- **Simplified Script Structure**: Removed redundant scripts and consolidated to a few key scripts for system operation
+- **Enhanced Documentation**: Updated README.md and RUN_INSTRUCTIONS.md with clearer instructions
+- **Fixed API Client Issues**: Resolved indentation errors and added proper support for all HTTP methods
 
 ## RAG Implementation Details
 
@@ -125,7 +221,15 @@ The system includes:
    cd fraud-detection-system
    ```
 
-2. Create a virtual environment and install dependencies:
+2. Use the shared environment or create a new virtual environment and install dependencies:
+   
+   **Option 1: Using shared environment (recommended)**
+   ```powershell
+   # Activate the shared environment
+   & "d:\Study\AILearning\shared_Environment\Scripts\Activate.ps1"
+   ```
+   
+   **Option 2: Create new environment**
    ```
    python -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
@@ -145,6 +249,8 @@ The system includes:
 
 5. Start the API server:
    ```
+   python run_server.py
+   # Or alternatively:
    uvicorn app.main:app --reload
    ```
 
@@ -332,8 +438,13 @@ cp .env.example .env
 # Initialize the vector database
 python scripts/init_vector_db.py
 
+# Run tests
+python tests/run_integration_tests.py
+
 # Start the API server in development mode
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+python run_server.py
+# Or with uvicorn directly:
+# uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### Docker Deployment

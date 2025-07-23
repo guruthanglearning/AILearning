@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 # Initialize global service instances
 _fraud_detection_service = None
+_llm_service = None
 
 # API key security
 API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
@@ -36,6 +37,18 @@ def get_fraud_detection_service() -> FraudDetectionService:
         _fraud_detection_service = FraudDetectionService()
     
     return _fraud_detection_service
+
+def get_llm_service():
+    """
+    Get the LLM service instance.
+    
+    Returns:
+        LLM service instance from the fraud detection service
+    """
+    fraud_detection_service = get_fraud_detection_service()
+    if fraud_detection_service and hasattr(fraud_detection_service, 'llm_service'):
+        return fraud_detection_service.llm_service
+    return None
 
 async def verify_api_key_header(api_key: str = Depends(API_KEY_HEADER)) -> str:
     """

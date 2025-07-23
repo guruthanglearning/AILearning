@@ -1,0 +1,31 @@
+transaction_id,amount,is_online,merchant_category,merchant_country,timestamp,is_fraud
+tx_001,125.99,True,Electronics,US,2025-06-01T08:15:22,0
+tx_002,49.99,True,Clothing,US,2025-06-01T09:30:45,0
+tx_003,1299.99,True,Electronics,FR,2025-06-01T10:20:10,1
+tx_004,15.75,False,Restaurant,US,2025-06-01T12:45:30,0
+tx_005,250.00,True,Entertainment,UK,2025-06-01T15:30:22,0
+tx_006,799.99,True,Electronics,RU,2025-06-01T18:05:17,1
+tx_007,3.99,True,Digital Goods,US,2025-06-01T20:10:45,0
+tx_008,599.50,False,Jewelry,US,2025-06-02T09:15:33,0
+tx_009,999.99,True,Electronics,CN,2025-06-02T10:25:11,1
+tx_010,45.25,False,Restaurant,US,2025-06-02T12:30:45,0
+tx_011,75.00,True,Clothing,US,2025-06-02T14:22:10,0
+tx_012,5.99,True,Digital Goods,US,2025-06-02T16:18:33,0
+tx_013,1500.00,True,Electronics,NG,2025-06-02T19:05:27,1
+tx_014,30.50,False,Groceries,US,2025-06-03T08:30:12,0
+tx_015,120.75,True,Home Goods,US,2025-06-03T10:45:30,0
+tx_016,2499.99,True,Electronics,RO,2025-06-03T11:25:18,1
+tx_017,25.99,False,Restaurant,US,2025-06-03T13:15:42,0
+tx_018,199.99,True,Clothing,US,2025-06-03T15:30:22,0
+tx_019,899.00,True,Electronics,US,2025-06-03T17:45:11,0
+tx_020,5.00,True,Digital Goods,US,2025-06-03T19:25:30,0
+tx_021,150.00,False,Home Goods,US,2025-06-04T08:10:15,0
+tx_022,1999.99,True,Electronics,BR,2025-06-04T09:30:45,1
+tx_023,35.25,False,Restaurant,US,2025-06-04T12:20:33,0
+tx_024,79.99,True,Clothing,US,2025-06-04T14:15:22,0
+tx_025,399.99,True,Entertainment,US,2025-06-04T16:30:10,0
+tx_026,1299.00,True,Electronics,DE,2025-06-04T18:25:45,0
+tx_027,9.99,True,Digital Goods,US,2025-06-04T20:15:33,0
+tx_028,50.00,False,Restaurant,US,2025-06-05T08:45:22,0
+tx_029,2100.00,True,Electronics,RU,2025-06-05T09:25:11,1
+tx_030,75.50,True,Clothing,US,2025-06-05T11:30:45,0

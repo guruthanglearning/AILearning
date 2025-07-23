@@ -120,11 +120,31 @@ async def health_check():
     Health check endpoint to verify the API is running.
     This endpoint doesn't require authentication.
     """
+    # Import here to avoid circular imports
+    from app.api.dependencies import get_llm_service
+    
+    # Get current LLM service type
+    llm_service = get_llm_service()
+    llm_type = llm_service.llm_service_type if llm_service else "unknown"
+    
+    # Get model name based on service type
+    model_name = "N/A"
+    if llm_type == "openai":
+        model_name = settings.LLM_MODEL
+    elif llm_type == "local":
+        model_name = settings.LOCAL_LLM_MODEL
+    elif llm_type == "enhanced_mock":
+        model_name = "Enhanced Mock LLM"
+    elif llm_type == "basic_mock":
+        model_name = "Basic Mock LLM"
+    
     return {
         "status": "healthy",  # Changed from "ok" to match what dashboard expects
         "status_code": "ok",  # Keep "ok" as a backup field
         "version": settings.VERSION,
         "environment": settings.APP_ENV,
+        "llm_service_type": llm_type,
+        "llm_model": model_name,
         "timestamp": time.time()
     }
 

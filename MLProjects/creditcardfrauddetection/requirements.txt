@@ -27,7 +27,7 @@ tiktoken>=0.5.1
 sentence-transformers>=2.2.2
 
 # Vector Databases (choose one or both)
-pinecone-client>=2.2.4
+pinecone>=2.2.4  # Updated from pinecone-client to pinecone
 chromadb>=0.4.15
 
 # Utilities
@@ -36,6 +36,7 @@ loguru>=0.7.2
 httpx>=0.25.0
 ujson>=5.8.0
 tqdm>=4.66.1
+requests>=2.31.0  # For API calls to online Ollama services
 
 # Testing
 pytest>=7.4.2
@@ -47,8 +48,8 @@ prometheus-client>=0.16.0
 prometheus-fastapi-instrumentator>=6.0.0
 
 # UI
-streamlit>=1.28.0
-plotly>=5.14.0
+streamlit>=1.31.0  # Updated to latest version
+plotly>=5.18.0    # Updated to latest version
 python-dotenv>=1.0.0
 plotly>=5.17.0
 pandas-profiling>=3.6.6

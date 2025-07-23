@@ -315,31 +315,23 @@ def historical_lookup():
     
     # Get API client
     api_client = get_api_client()
+      # Instructions for transaction lookup
+    st.markdown("""
+    Enter a transaction ID to look up its details and analysis results.
+    Transaction IDs can be found in the dashboard or from previous analyses.
+    """)
     
     transaction_id = st.text_input("Enter Transaction ID to look up")
-    
     if st.button("Look Up Transaction"):
-        if transaction_id:
+        if transaction_id:            
             with st.spinner("Looking up transaction..."):
-                # This would call a history endpoint in a real implementation
-                # For now, we'll simulate a response
-                if transaction_id.startswith("tx_"):
-                    # Mock data for demo
-                    result = {
-                        "transaction_id": transaction_id,
-                        "timestamp": "2025-05-21T09:45:23",
-                        "amount": 123.45,
-                        "merchant_name": "Grocery Store",
-                        "merchant_category": "Groceries",
-                        "is_fraud": False,
-                        "requires_review": False,
-                        "confidence_score": 0.15,
-                        "processing_time_ms": 235.67,
-                        "decision_reason": "Transaction is consistent with customer's regular shopping patterns. Amount and merchant category are within normal ranges."
-                    }
+                # Call the API for transaction history
+                result = api_client.get_transaction_history(transaction_id)
+                
+                if result:
                     display_transaction_result(result)
                 else:
-                    st.error("Transaction not found. Please check the ID and try again.")
+                    st.error("Transaction not found or API unavailable. Please check the transaction ID and ensure the API server is running.")
         else:
             st.warning("Please enter a transaction ID.")
 

@@ -16,7 +16,7 @@ import plotly.graph_objects as go
 from dotenv import load_dotenv
 
 # Import page functions
-from pages.fraud_patterns import display_fraud_patterns
+from pages.fraud_patterns import show_fraud_patterns
 from pages.system_health import display_system_health
 from pages.dashboard import show_dashboard
 from pages.transaction_analysis import show_transaction_analysis
@@ -166,8 +166,7 @@ def main():
     page = st.sidebar.radio(
         "Select a page:",
         ["Dashboard", "Transaction Analysis", "Fraud Patterns", "System Health"]
-    )
-      # Sidebar API configuration
+    )    # Sidebar API configuration
     st.sidebar.title("API Configuration")
     api_url = st.sidebar.text_input("API URL", value=API_URL)
     api_key = st.sidebar.text_input("API Key", value=API_KEY, type="password")
@@ -180,7 +179,8 @@ def main():
         API_URL = api_url
         API_KEY = api_key
         st.sidebar.success("API configuration updated!")
-      # Display the selected page
+    
+    # Display the selected page
     if page == "Dashboard":
         show_dashboard()
         
@@ -191,7 +191,7 @@ def main():
         st.markdown("<h2 class='sub-header'>Fraud Pattern Management</h2>", unsafe_allow_html=True)
         
         # Use the show_fraud_patterns function from the imported module
-        display_fraud_patterns()
+        show_fraud_patterns()
     
     elif page == "System Health":
         st.markdown("<h2 class='sub-header'>System Health & Monitoring</h2>", unsafe_allow_html=True)

@@ -89,10 +89,10 @@ def get_api_key_hash(api_key: str) -> str:
     Returns:
         Hashed API key
     """
-    # In a production system, this would use a secure hashing algorithm
-    # For demonstration purposes, we're just returning the key
-    # TODO: Implement proper hashing
-    return api_key
+    # In production, use proper hashing like bcrypt or pbkdf2
+    # For development/demo purposes, we use a simple hash
+    import hashlib
+    return hashlib.sha256(api_key.encode()).hexdigest()
 
 def verify_api_key(api_key: str) -> bool:
     """

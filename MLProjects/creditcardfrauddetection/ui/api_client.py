@@ -5,6 +5,7 @@ Utility functions for the Streamlit UI to interact with the API.
 import requests
 import json
 import streamlit as st
+import traceback
 
 class FraudDetectionAPI:
     """Class to interact with the Fraud Detection API."""
@@ -87,6 +88,19 @@ class FraudDetectionAPI:
         url = f"{self.base_url}/api/v1/fraud-patterns/{pattern_id}"
         return self._make_request("PUT", url, pattern_data)
     
+    def delete_fraud_pattern(self, pattern_id):
+        """
+        Delete an existing fraud pattern.
+        
+        Args:
+            pattern_id: ID of the pattern to delete
+            
+        Returns:
+            The API response as a dict, or None if there was an error
+        """
+        url = f"{self.base_url}/api/v1/fraud-patterns/{pattern_id}"
+        return self._make_request("DELETE", url)
+    
     def get_metrics(self):
         """
         Get system metrics.
@@ -112,7 +126,7 @@ class FraudDetectionAPI:
         Get transaction history.
         
         Args:
-            transaction_id: Optional transaction ID to get details for a specific transaction
+            transaction_id: Optional transaction ID to filter by
             
         Returns:
             The API response as a dict, or None if there was an error
@@ -121,100 +135,122 @@ class FraudDetectionAPI:
             url = f"{self.base_url}/api/v1/transactions/{transaction_id}"
         else:
             url = f"{self.base_url}/api/v1/transactions"
+        return self._make_request("GET", url)
+    
+    def get_llm_status(self):
+        """
+        Get LLM service status.
         
-        return self._make_request("GET", url)    
+        Returns:
+            The API response as a dict, or None if there was an error
+        """
+        url = f"{self.base_url}/api/v1/llm/status"
+        return self._make_request("GET", url)
+    
+    def switch_llm_model(self, model_type):
+        """
+        Switch LLM model.
+        
+        Args:
+            model_type: The model type to switch to
+            
+        Returns:
+            The API response as a dict, or None if there was an error
+        """
+        url = f"{self.base_url}/api/v1/llm/switch"
+        return self._make_request("POST", url, {"model_type": model_type})
     
     def _make_request(self, method, url, data=None):
         """
         Make an HTTP request to the API.
         
         Args:
-            method: The HTTP method (GET, POST, etc.)
-            url: The URL to make the request to
+            method: HTTP method (GET, POST, PUT, DELETE)
+            url: URL to make the request to
             data: Optional data to send with the request
             
         Returns:
             The API response as a dict, or None if there was an error
         """
-        if st.session_state.get('debug_mode', False):
-            st.sidebar.write(f"API Request: {method} {url}")
-            if data:
-                st.sidebar.write("Request Data:")
-                st.sidebar.json(data)
-        
         try:
             if method == "GET":
                 response = requests.get(url, headers=self.headers, timeout=10)
             elif method == "POST":
-                response = requests.post(url, headers=self.headers, json=data, timeout=10) 
+                response = requests.post(url, headers=self.headers, json=data, timeout=10)
             elif method == "PUT":
                 response = requests.put(url, headers=self.headers, json=data, timeout=10)
+            elif method == "DELETE":
+                response = requests.delete(url, headers=self.headers, timeout=10)
             else:
                 st.error(f"Unsupported HTTP method: {method}")
                 return None
             
-            # Process response
             if response.status_code == 200:
-                try:
-                    response_data = response.json()
-                    if st.session_state.get('debug_mode', False):
-                        st.sidebar.write("Response Data:")
-                        st.sidebar.json(response_data)
-                    return response_data
-                except ValueError:
-                    st.error("API returned invalid JSON")
-                    return None
+                return response.json()
             else:
-                st.error(f"API Error: {response.status_code} - {response.text}")
+                st.error(f"API request failed with status code {response.status_code}: {response.text}")
                 return None
                 
         except requests.exceptions.ConnectionError:
-            st.error(f"Connection error: Could not connect to {url}. Make sure the API server is running.")
+            st.error("Could not connect to the API server. Please ensure the server is running.")
             return None
         except requests.exceptions.Timeout:
-            st.error(f"Request timed out: {url} did not respond within timeout period.")
+            st.error("API request timed out. Please try again.")
+            return None
+        except requests.exceptions.RequestException as e:
+            st.error(f"API request failed: {str(e)}")
+            return None
+        except json.JSONDecodeError:
+            st.error("Invalid JSON response from API.")
             return None
         except Exception as e:
-            st.error(f"Error calling API: {str(e)}")
+            st.error(f"Unexpected error: {str(e)}")
+            st.error(f"Traceback: {traceback.format_exc()}")
             return None
 
-# Function to get or create a session-specific API client
+@st.cache_resource
 def get_api_client():
     """
-    Get or create a session-specific API client.
+    Get a cached API client instance.
     
     Returns:
-        A FraudDetectionAPI instance
+        FraudDetectionAPI instance
     """
-    if 'api_client' not in st.session_state:
-        # Get API URL and key from session state or use defaults
-        api_url = st.session_state.get('api_url', 'http://localhost:8000')
-        api_key = st.session_state.get('api_key', 'development_api_key_for_testing')
+    try:
+        # Check if we're running in Streamlit
+        if hasattr(st, 'session_state'):
+            # Try to get config from Streamlit secrets first
+            if hasattr(st, 'secrets') and 'api' in st.secrets:
+                base_url = st.secrets.api.get("base_url", "http://localhost:8000")
+                api_key = st.secrets.api.get("api_key", "development_api_key_for_testing")
+            else:
+                # Fall back to default values
+                base_url = "http://localhost:8000"
+                api_key = "development_api_key_for_testing"
+        else:
+            # Not in Streamlit context, use defaults
+            base_url = "http://localhost:8000"
+            api_key = "development_api_key_for_testing"
         
-        # Create the API client
-        st.session_state.api_client = FraudDetectionAPI(api_url, api_key)
+        # Display connection info
+        st.sidebar.markdown("### API Connection")
+        st.sidebar.markdown(f"**URL:** {base_url}")
+        st.sidebar.markdown(f"**Status:** Testing connection...")
         
-        # For debugging
-        if st.session_state.get('debug_mode', False):
-            st.sidebar.write(f"API Client created with URL: {api_url}")
-    
-    return st.session_state.api_client
-
-# Function to update API configuration
-def update_api_config(api_url, api_key):
-    """
-    Update the API configuration.
-    
-    Args:
-        api_url: The base URL of the API
-        api_key: The API key for authentication
-    """
-    # Update session state
-    st.session_state['api_url'] = api_url
-    st.session_state['api_key'] = api_key
-    
-    # Create a new API client
-    st.session_state.api_client = FraudDetectionAPI(api_url, api_key)
-    
-    # Return the new client
-    return st.session_state.api_client
+        # Create and test the API client
+        api_client = FraudDetectionAPI(base_url, api_key)
+        
+        # Test the connection
+        health_check = api_client.get_health()
+        if health_check:
+            st.sidebar.markdown(f"**Status:** ✅ Connected")
+            return api_client
+        else:
+            st.sidebar.markdown(f"**Status:** ❌ Connection failed")
+            st.error("API CLIENT ERROR: Connection error: Could not connect to http://localhost:8000/health. Make sure the API server is running.")
+            return api_client  # Return anyway so the UI can still load
+            
+    except Exception as e:
+        st.error(f"Error creating API client: {str(e)}")
+        # Return a basic client anyway
+        return FraudDetectionAPI("http://localhost:8000", "development_api_key_for_testing")

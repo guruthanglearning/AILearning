@@ -16,9 +16,9 @@ from app.api.models import (
     FraudDetectionResponse, 
     FeedbackModel, 
     HealthCheckResponse,
-    ErrorResponse
+    ErrorResponse,
+    ModelMetricsResponse
 )
-from app.api.metrics import ModelMetricsResponse
 from app.services.fraud_detection_service import FraudDetectionService
 from app.core.config import settings
 from app.api.dependencies import get_fraud_detection_service, verify_api_key_header
@@ -330,6 +330,56 @@ async def update_fraud_pattern(
         logger.error(f"Error updating fraud pattern: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error updating fraud pattern: {str(e)}")
 
+@router.delete("/fraud-patterns/{pattern_id}", response_model=Dict[str, Any], responses={
+    401: {"model": ErrorResponse, "description": "Unauthorized"},
+    404: {"model": ErrorResponse, "description": "Pattern not found"},
+    500: {"model": ErrorResponse, "description": "Internal server error"}
+})
+async def delete_fraud_pattern(
+    pattern_id: str,
+    request: Request,
+    fraud_service: FraudDetectionService = Depends(get_fraud_detection_service),
+    api_key: str = Depends(verify_api_key_header)
+):
+    """
+    Delete an existing fraud pattern.
+    
+    Args:
+        pattern_id: ID of the pattern to delete
+        
+    Returns:
+        Success message
+    """
+    try:
+        # Get request ID for logging
+        request_id = getattr(request.state, "request_id", "unknown")
+        logger.info(f"[{request_id}] Received request to delete fraud pattern: {pattern_id}")
+          # First, check if the pattern exists
+        if not fraud_service.vector_db_service.pattern_exists(pattern_id):
+            logger.error(f"[{request_id}] Pattern with ID {pattern_id} not found")
+            raise HTTPException(status_code=404, detail=f"Pattern with ID {pattern_id} not found")
+        
+        # Delete the pattern from the vector database
+        result = fraud_service.vector_db_service.delete_fraud_pattern(pattern_id)
+        
+        if result:
+            logger.info(f"[{request_id}] Successfully deleted fraud pattern with ID: {pattern_id}")
+            return {
+                "status": "success",
+                "message": f"Successfully deleted fraud pattern with ID: {pattern_id}",
+                "pattern_id": pattern_id
+            }
+        else:
+            logger.error(f"[{request_id}] Failed to delete fraud pattern")
+            raise HTTPException(status_code=500, detail="Failed to delete fraud pattern")
+    
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting fraud pattern: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error deleting fraud pattern: {str(e)}")
+
 @router.get("/metrics", response_model=ModelMetricsResponse, responses={
     401: {"model": ErrorResponse, "description": "Unauthorized"},
     500: {"model": ErrorResponse, "description": "Internal server error"}
@@ -345,16 +395,251 @@ async def get_metrics(
     Returns:
         Dict containing various system metrics and model performance data
     """
+   
     try:
         # Get request ID for logging
         request_id = getattr(request.state, "request_id", "unknown")
         logger.info(f"[{request_id}] Received request to get system metrics")
         
+        
         # Get real model metrics data from the fraud detection service
         metrics = fraud_service.get_model_metrics()
+        
+        # Log the metrics for debugging
+        logger.critical(f"METRICS: {metrics}")
         
         # Return the metrics
         return metrics
     except Exception as e:
         logger.error(f"Error getting metrics: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error getting metrics: {str(e)}")
+
+@router.get("/transactions", response_model=List[Dict[str, Any]], responses={
+    401: {"model": ErrorResponse, "description": "Unauthorized"},
+    500: {"model": ErrorResponse, "description": "Internal server error"}
+})
+async def get_transactions(
+    request: Request,
+    limit: int = 10,
+    fraud_service: FraudDetectionService = Depends(get_fraud_detection_service),
+    api_key: str = Depends(verify_api_key_header)
+):
+    """
+    Get transaction history.
+    
+    Args:
+        limit: Maximum number of transactions to return (default: 10)
+        
+    Returns:
+        List of recent transactions
+    """
+    try:
+        # Get request ID for logging
+        request_id = getattr(request.state, "request_id", "unknown")
+        logger.info(f"[{request_id}] Received request to get transaction history (limit={limit})")
+        
+        # Get transaction history from the service
+        transactions = fraud_service.get_transaction_history(limit)
+        
+        return transactions
+    except Exception as e:
+        logger.error(f"Error getting transaction history: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error getting transaction history: {str(e)}")
+
+@router.get("/transactions/{transaction_id}", response_model=Dict[str, Any], responses={
+    401: {"model": ErrorResponse, "description": "Unauthorized"},
+    404: {"model": ErrorResponse, "description": "Transaction not found"},
+    500: {"model": ErrorResponse, "description": "Internal server error"}
+})
+async def get_transaction(
+    transaction_id: str,
+    request: Request,
+    fraud_service: FraudDetectionService = Depends(get_fraud_detection_service),
+    api_key: str = Depends(verify_api_key_header)
+):
+    """
+    Get details for a specific transaction.
+    
+    Args:
+        transaction_id: ID of the transaction to retrieve
+        
+    Returns:
+        Transaction details
+    """
+    try:
+        # Get request ID for logging
+        request_id = getattr(request.state, "request_id", "unknown")
+        logger.info(f"[{request_id}] Received request to get transaction {transaction_id}")
+        
+        # Get transaction details from the service
+        transaction = fraud_service.get_transaction_by_id(transaction_id)
+        
+        if not transaction:
+            logger.warning(f"[{request_id}] Transaction {transaction_id} not found")
+            raise HTTPException(status_code=404, detail=f"Transaction {transaction_id} not found")
+            
+        return transaction
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        logger.error(f"Error getting transaction: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error getting transaction: {str(e)}")
+
+@router.get("/llm-status", response_model=Dict[str, Any])
+async def get_llm_status(
+    fraud_service: FraudDetectionService = Depends(get_fraud_detection_service),
+    api_key: str = Depends(verify_api_key_header)
+):
+    """
+    Get the current LLM service status.
+    
+    Returns:
+        Dictionary containing LLM service information
+    """
+    llm_service = fraud_service.llm_service
+    
+    # Get model name based on service type
+    model_name = "N/A"
+    if llm_service.llm_service_type == "openai":
+        model_name = settings.LLM_MODEL
+    elif llm_service.llm_service_type == "local":
+        model_name = settings.LOCAL_LLM_MODEL
+    elif llm_service.llm_service_type == "enhanced_mock":
+        model_name = "Enhanced Mock LLM"
+    elif llm_service.llm_service_type == "basic_mock":
+        model_name = "Basic Mock LLM"
+    
+    return {
+        "llm_service_type": llm_service.llm_service_type,
+        "llm_model": model_name,
+        "is_api": llm_service.llm_service_type == "openai",
+        "is_local": llm_service.llm_service_type == "local",
+        "is_mock": llm_service.llm_service_type in ["enhanced_mock", "basic_mock"]
+    }
+
+@router.post("/switch-llm-model", response_model=Dict[str, Any])
+async def switch_llm_model(
+    model_type: Dict[str, str],
+    fraud_service: FraudDetectionService = Depends(get_fraud_detection_service),
+    api_key: str = Depends(verify_api_key_header)
+):
+    """
+    Switch the LLM model type.
+    
+    Args:
+        model_type: Dictionary with "type" key containing either "openai", "local", or "mock"
+        
+    Returns:
+        Dictionary with result of the switch operation
+    """
+    llm_service = fraud_service.llm_service
+    target_type = model_type.get("type", "").lower()
+    current_type = llm_service.llm_service_type
+    
+    if target_type == current_type:
+        return {
+            "success": True,
+            "message": f"Already using {target_type} LLM model",
+            "current_type": current_type
+        }
+    
+    # Handle switching based on target type
+    if target_type == "openai":
+        # Try to switch to OpenAI
+        try:
+            from langchain.schema.messages import HumanMessage
+            from langchain_openai import ChatOpenAI
+            
+            # Attempt to initialize OpenAI
+            api_key = settings.OPENAI_API_KEY
+            if not api_key or len(api_key) < 20:
+                return {
+                    "success": False,
+                    "message": "Cannot switch to OpenAI: Invalid API key",
+                    "current_type": current_type
+                }
+            
+            temp_llm = ChatOpenAI(
+                model_name=settings.LLM_MODEL,
+                temperature=0,
+                openai_api_key=api_key
+            )
+            
+            # Test connection
+            test_response = temp_llm.invoke([HumanMessage(content="Test")])
+            
+            # If successful, switch the LLM type
+            llm_service.llm = temp_llm
+            llm_service.llm_service_type = "openai"
+            
+            return {
+                "success": True,
+                "message": f"Successfully switched to OpenAI LLM ({settings.LLM_MODEL})",
+                "current_type": "openai"
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"Failed to switch to OpenAI LLM: {str(e)}",
+                "current_type": current_type
+            }
+            
+    elif target_type == "local":
+        # Try to switch to local LLM
+        try:
+            from app.services.local_llm_service import LocalLLMService
+            
+            local_llm = LocalLLMService(model_name=settings.LOCAL_LLM_MODEL)
+            if local_llm.available:
+                llm_service.local_llm_service = local_llm
+                llm_service.llm_service_type = "local"
+                
+                # Create a placeholder llm instance for compatibility
+                from langchain_community.llms.fake import FakeListLLM
+                llm_service.llm = FakeListLLM(responses=["Local LLM will be used instead"])
+                
+                return {
+                    "success": True,
+                    "message": f"Successfully switched to local LLM ({settings.LOCAL_LLM_MODEL})",
+                    "current_type": "local"
+                }
+            else:
+                return {
+                    "success": False,
+                    "message": "Local LLM is not available",
+                    "current_type": current_type
+                }
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"Failed to switch to local LLM: {str(e)}",
+                "current_type": current_type
+            }
+            
+    elif target_type == "mock":
+        # Switch to enhanced mock LLM
+        try:
+            from app.services.enhanced_mock_llm import EnhancedMockLLM, EnhancedFakeListLLM
+            
+            llm_service.enhanced_mock = EnhancedMockLLM()
+            llm_service.llm = EnhancedFakeListLLM()
+            llm_service.llm_service_type = "enhanced_mock"
+            
+            return {
+                "success": True,
+                "message": "Successfully switched to enhanced mock LLM",
+                "current_type": "enhanced_mock"
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"Failed to switch to mock LLM: {str(e)}",
+                "current_type": current_type
+            }
+    else:
+        return {
+            "success": False,
+            "message": f"Invalid model type '{target_type}'. Supported types: openai, local, mock",
+            "current_type": current_type
+        }

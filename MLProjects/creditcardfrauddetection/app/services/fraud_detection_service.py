@@ -254,7 +254,7 @@ class FraudDetectionService:
         except Exception as e:
             logger.error(f"Error ingesting fraud patterns: {str(e)}")
             raise
-    
+            
     def get_system_status(self) -> Dict[str, Any]:
         """
         Get the status of the fraud detection system.
@@ -264,19 +264,33 @@ class FraudDetectionService:
         """
         vector_db_stats = self.vector_db_service.get_stats()
         
+        # Get LLM service type information
+        llm_type = "unknown"
+        if hasattr(self.llm_service, "llm_service_type"):
+            llm_type = self.llm_service.llm_service_type or "unknown"
+        
+        # Check if using local LLM
+        local_model = None
+        if hasattr(self.llm_service, "local_llm_service") and self.llm_service.local_llm_service:
+            local_model = self.llm_service.local_llm_service.model_name
+        
         return {
-            "status": "healthy",
+            "status": "operational",
             "ml_model": {
                 "type": type(self.ml_model).__name__,
             },
             "llm": {
                 "model": settings.LLM_MODEL,
+                "service_type": llm_type,
+                "local_model": local_model
             },
             "vector_db": vector_db_stats,
             "config": {
                 "confidence_threshold": settings.CONFIDENCE_THRESHOLD,
                 "similarity_threshold": settings.DEFAULT_SIMILARITY_THRESHOLD,
-                "transaction_history_window": settings.TRANSACTION_HISTORY_WINDOW
+                "transaction_history_window": settings.TRANSACTION_HISTORY_WINDOW,
+                "use_local_llm": getattr(settings, "USE_LOCAL_LLM", False),
+                "force_local_llm": getattr(settings, "FORCE_LOCAL_LLM", False)
             }
         }
         
@@ -291,6 +305,11 @@ class FraudDetectionService:
         import json
         from datetime import datetime
         import random
+        import logging
+        
+        # Get logger for debugging
+        logger = logging.getLogger(__name__)
+        logger.critical("BREAKPOINT: Inside FraudDetectionService.get_model_metrics method")
         
         # Define paths for model metrics
         metrics_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "metrics")
@@ -450,3 +469,188 @@ class FraudDetectionService:
             logger.error(f"Error saving metrics file {metrics_path}: {str(e)}")
         
         return result
+
+    def get_transaction_history(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        Get recent transaction history.
+        
+        In a production system, this would retrieve from a database.
+        For demo purposes, this returns generated transaction data.
+        
+        Args:
+            limit: Maximum number of transactions to return
+            
+        Returns:
+            List of recent transactions
+        """
+        logger.info(f"Getting transaction history (limit={limit})")
+        
+        # In production, this would query a database
+        # For now, we'll generate sample transactions
+        
+        # Get transactions from a mock storage
+        transactions = self._get_mock_transactions(limit)
+        
+        return transactions
+    
+    def get_transaction_by_id(self, transaction_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get details for a specific transaction.
+        
+        In a production system, this would retrieve from a database.
+        For demo purposes, this returns generated transaction data if ID format matches.
+        
+        Args:
+            transaction_id: ID of the transaction to retrieve
+            
+        Returns:
+            Transaction details or None if not found
+        """
+        logger.info(f"Looking up transaction {transaction_id}")
+        
+        # Check for special test transactions first
+        test_transaction = self._get_test_transaction(transaction_id)
+        if test_transaction:
+            return test_transaction
+            
+        # In production, this would query a database by ID
+        # For now, we'll check if the ID exists in our mock storage
+        transactions = self._get_mock_transactions(100)  # Get a larger set to search through
+        
+        # Find the transaction with the matching ID
+        for transaction in transactions:
+            if transaction["transaction_id"] == transaction_id:
+                return transaction
+                
+        # Transaction not found
+        logger.warning(f"Transaction {transaction_id} not found")
+        return None
+        
+    def _get_test_transaction(self, transaction_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get a predefined test transaction by ID.
+        
+        Args:
+            transaction_id: ID of the test transaction to retrieve
+            
+        Returns:
+            Transaction details or None if not found
+        """
+        # Predefined test transactions
+        if transaction_id == "test_transaction_1":
+            return {
+                "transaction_id": "test_transaction_1",
+                "timestamp": "2025-06-01T12:34:56",
+                "amount": 199.99,
+                "merchant_name": "TestStore",
+                "merchant_category": "Electronics",
+                "is_fraud": False,
+                "confidence_score": 0.95,
+                "requires_review": False,
+                "processing_time_ms": 123.45,
+                "decision_reason": "Transaction matches normal spending patterns"
+            }
+        elif transaction_id == "test_fraud_transaction_1":
+            return {
+                "transaction_id": "test_fraud_transaction_1",
+                "timestamp": "2025-06-01T15:45:23",
+                "amount": 2999.99,
+                "merchant_name": "SuspiciousVendor",
+                "merchant_category": "Travel",
+                "is_fraud": True,
+                "confidence_score": 0.87,
+                "requires_review": True,
+                "processing_time_ms": 234.56,
+                "decision_reason": "High-value transaction from unusual merchant with suspicious pattern"
+            }
+            
+        return None
+    
+    def _get_mock_transactions(self, count: int) -> List[Dict[str, Any]]:
+        """
+        Generate mock transaction data for demonstration purposes.
+        
+        In a production system, this wouldn't exist - real data would be used.
+        
+        Args:
+            count: Number of transactions to generate
+            
+        Returns:
+            List of transaction dictionaries
+        """
+        import random
+        from datetime import datetime, timedelta
+        
+        # Use fixed seed for deterministic results
+        # This ensures the same transaction IDs are generated each time
+        random.seed(42)
+        
+        transactions = []
+        
+        # Merchant categories
+        merchant_categories = ["Retail", "Dining", "Travel", "Entertainment", "Groceries", "Electronics"]
+        merchant_names = {
+            "Retail": ["FashionHub", "DepartmentStore", "ClothesAndMore"],
+            "Dining": ["GourmetBites", "QuickEats", "FamousRestaurant"],
+            "Travel": ["AirlineBooking", "HotelStay", "CarRental"],
+            "Entertainment": ["CinemaPlex", "ThemePark", "ConcertTickets"],
+            "Groceries": ["SuperMarket", "OrganicFoods", "LocalGrocery"],
+            "Electronics": ["TechStore", "GadgetShop", "ComputerWorld"]
+        }
+        
+        # Reference timestamp for consistent generation
+        reference_time = int(datetime(2025, 6, 1).timestamp())
+        
+        # Generate transactions with deterministic IDs
+        for i in range(count):
+            # Determine if transaction is fraudulent (10% chance)
+            is_fraud = random.random() < 0.1
+            
+            # Select merchant category and name
+            merchant_category = merchant_categories[i % len(merchant_categories)]
+            merchant_name = merchant_names[merchant_category][i % len(merchant_names[merchant_category])]
+            
+            # Generate consistent timestamp within last 30 days
+            days_ago = i % 30
+            hours_ago = (i * 7) % 24
+            minutes_ago = (i * 13) % 60
+            timestamp = (datetime(2025, 6, 1) - timedelta(days=days_ago, hours=hours_ago, minutes=minutes_ago)).isoformat()
+            
+            # Generate amount based on category and fraud status
+            if merchant_category in ["Electronics", "Travel"] and is_fraud:
+                # Higher amounts for fraudulent electronics and travel
+                amount = round(random.uniform(500, 5000), 2)
+            elif merchant_category in ["Electronics", "Travel"]:
+                # Moderate to high for legitimate electronics and travel
+                amount = round(random.uniform(100, 1500), 2)
+            elif is_fraud:
+                # Lower amounts for other fraudulent transactions
+                amount = round(random.uniform(50, 500), 2)
+            else:
+                # Low amounts for other legitimate transactions
+                amount = round(random.uniform(5, 200), 2)
+            
+            # Create a consistent transaction ID based on the index
+            tx_time = reference_time - (days_ago * 86400 + hours_ago * 3600 + minutes_ago * 60)
+            transaction_id = f"tx_{tx_time:x}_{i:02x}"
+            
+            # Generate transaction data
+            transaction = {
+                "transaction_id": transaction_id,
+                "timestamp": timestamp,
+                "amount": amount,
+                "merchant_name": merchant_name,
+                "merchant_category": merchant_category,
+                "is_fraud": is_fraud,
+                "confidence_score": round(random.uniform(0.7, 0.99), 2),
+                "requires_review": is_fraud or random.random() < 0.15,  # Fraud or 15% chance
+                "processing_time_ms": round(random.uniform(50, 300), 2),
+                "decision_reason": "High-risk transaction pattern identified" if is_fraud else "Transaction matches normal spending patterns"
+            }
+            
+            transactions.append(transaction)
+            
+        # Sort transactions by timestamp (newest first)
+        transactions.sort(key=lambda x: x["timestamp"], reverse=True)
+        
+        return transactions

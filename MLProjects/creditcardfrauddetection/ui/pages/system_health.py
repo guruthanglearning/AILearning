@@ -19,6 +19,45 @@ def display_system_health():
     api_client = get_api_client()
       # System status
     st.markdown("### System Status")
+    
+    # Check for model switch notification
+    if 'model_switch_notification' in st.session_state and not st.session_state['model_switch_notification'].get('displayed', False):
+        notification = st.session_state['model_switch_notification']
+        st.warning(f"⚠️ LLM Model Switch: {notification['message']} (From: {notification['from_model']} → To: {notification['to_model']})")
+        st.session_state['model_switch_notification']['displayed'] = True
+    
+    # Get health info to check LLM status
+    health_info = api_client.get_health()
+    llm_type = health_info.get('llm_service_type', 'unknown') if health_info else 'unknown'
+    llm_model = health_info.get('llm_model', 'N/A') if health_info else 'N/A'
+    
+    # Add a new row for LLM information
+    st.markdown("#### Current LLM Service")
+    cols_llm = st.columns(2)
+    with cols_llm[0]:
+        if llm_type == 'openai':
+            st.success(f"Using OpenAI API: {llm_model}")
+        elif llm_type == 'local':
+            st.info(f"Using Local LLM: {llm_model}")
+        elif llm_type in ['enhanced_mock', 'basic_mock']:
+            st.warning(f"Using Mock LLM: {llm_model}")
+        else:
+            st.error("LLM Service: Unknown")
+    
+    with cols_llm[1]:
+        if llm_type == 'openai':
+            st.markdown("**Status:** Connected to OpenAI API")
+        elif llm_type == 'local':
+            st.markdown("**Status:** Using local model (no API costs)")
+        elif llm_type in ['enhanced_mock', 'basic_mock']:
+            st.markdown("**Status:** Using simulated responses (demonstration mode)")
+        else:
+            st.markdown("**Status:** Unknown LLM service state")
+    
+    # Add separator
+    st.markdown("---")
+    
+    # Original system metrics columns
     cols = st.columns(3)
     
     # Try to get system metrics from API
@@ -236,6 +275,81 @@ def display_system_health():
                 )
             
             st.plotly_chart(fig, use_container_width=True)
+    
+    # After the current model metrics section, add model switching controls
+    st.markdown("### LLM Model Controls")
+    
+    # Get current LLM status
+    llm_status = api_client.get_llm_status()
+    current_model_type = llm_status.get("llm_service_type", "unknown") if llm_status else "unknown"
+    
+    # Create model switching form
+    with st.form("switch_model_form"):
+        st.markdown("**Switch LLM Model**")
+        st.markdown("Use this to manually switch between different LLM service types:")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            openai_button = st.form_submit_button("Use OpenAI API", 
+                type="primary" if current_model_type == "openai" else "secondary",
+                disabled=current_model_type == "openai")
+                
+        with col2:
+            local_button = st.form_submit_button("Use Local LLM", 
+                type="primary" if current_model_type == "local" else "secondary",
+                disabled=current_model_type == "local")
+                
+        with col3:
+            mock_button = st.form_submit_button("Use Mock LLM", 
+                type="primary" if current_model_type in ["enhanced_mock", "basic_mock"] else "secondary",
+                disabled=current_model_type in ["enhanced_mock", "basic_mock"])
+                
+        # Handle button clicks
+        if openai_button:
+            with st.spinner("Switching to OpenAI API..."):
+                result = api_client.switch_llm_model("openai")
+                if result and result.get("success"):
+                    st.success(result.get("message", "Successfully switched to OpenAI API"))
+                    st.session_state['model_switch_notification'] = {
+                        'timestamp': datetime.datetime.now().isoformat(),
+                        'message': 'Manually switched to OpenAI API',
+                        'from_model': current_model_type,
+                        'to_model': 'OpenAI API',
+                        'displayed': False
+                    }
+                else:
+                    st.error(result.get("message", "Failed to switch to OpenAI API"))
+                    
+        elif local_button:
+            with st.spinner("Switching to Local LLM..."):
+                result = api_client.switch_llm_model("local")
+                if result and result.get("success"):
+                    st.success(result.get("message", "Successfully switched to Local LLM"))
+                    st.session_state['model_switch_notification'] = {
+                        'timestamp': datetime.datetime.now().isoformat(),
+                        'message': 'Manually switched to Local LLM',
+                        'from_model': current_model_type,
+                        'to_model': 'Local LLM',
+                        'displayed': False
+                    }
+                else:
+                    st.error(result.get("message", "Failed to switch to Local LLM"))
+                    
+        elif mock_button:
+            with st.spinner("Switching to Mock LLM..."):
+                result = api_client.switch_llm_model("mock")
+                if result and result.get("success"):
+                    st.success(result.get("message", "Successfully switched to Mock LLM"))
+                    st.session_state['model_switch_notification'] = {
+                        'timestamp': datetime.datetime.now().isoformat(),
+                        'message': 'Manually switched to Mock LLM',
+                        'from_model': current_model_type,
+                        'to_model': 'Mock LLM',
+                        'displayed': False
+                    }
+                else:
+                    st.error(result.get("message", "Failed to switch to Mock LLM"))
     
     # Resource utilization
     st.markdown("### Resource Utilization")

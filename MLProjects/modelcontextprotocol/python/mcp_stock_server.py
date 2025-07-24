@@ -7,6 +7,8 @@ This server provides stock quote functionality through the Model Context Protoco
 import asyncio
 import json
 import sys
+import logging
+import os
 from typing import Any, Sequence
 import yfinance as yf
 from datetime import datetime, timedelta
@@ -22,6 +24,21 @@ from mcp.types import (
     EmbeddedResource,
 )
 import mcp.types as types
+
+# Set up logging
+log_dir = "logs"
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(f'{log_dir}/mcp_stock_server.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # Create a server instance
 server = Server("stock-server")
@@ -49,7 +66,7 @@ async def handle_list_tools() -> list[Tool]:
         ),
         Tool(
             name="get_stock_info",
-            description="Get detailed stock information including company info, financials, and market data",
+            description="Get detailed company information and financial metrics for a given ticker symbol",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -63,7 +80,7 @@ async def handle_list_tools() -> list[Tool]:
         ),
         Tool(
             name="get_stock_history",
-            description="Get historical stock price data for a given period",
+            description="Get historical stock price data for a given ticker symbol",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -90,6 +107,9 @@ async def handle_call_tool(name: str, arguments: dict[str, Any] | None) -> list[
     if not arguments:
         raise ValueError("Missing arguments")
 
+    # Log tool usage
+    logger.info(f"Tool called: {name} with arguments: {arguments}")
+
     if name == "get_stock_price":
         symbol = arguments.get("symbol")
         if not symbol:
@@ -108,10 +128,17 @@ async def handle_call_tool(name: str, arguments: dict[str, Any] | None) -> list[
             
             current_price = hist['Close'].iloc[-1]
             previous_close = info.get('previousClose', hist['Close'].iloc[-1])
-            change = current_price - previous_close
+            change = current_price - previous_close            
             change_percent = (change / previous_close) * 100 if previous_close else 0
             
             result = {
+                "_mcp_tool_info": {
+                    "tool_name": "get_stock_price",
+                    "server": "AILearning_StockServer",
+                    "data_source": "Custom_YFinance_Server",
+                    "query_timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                },
+                "_tool_attribution": "📊 Data retrieved using: get_stock_price tool",
                 "symbol": symbol.upper(),
                 "company_name": info.get('longName', 'N/A'),
                 "current_price": round(float(current_price), 2),
@@ -124,12 +151,14 @@ async def handle_call_tool(name: str, arguments: dict[str, Any] | None) -> list[
                 "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
             
+            logger.info(f"Successfully retrieved stock price for {symbol}")
             return [types.TextContent(
                 type="text",
                 text=json.dumps(result, indent=2)
             )]
             
         except Exception as e:
+            logger.error(f"Error fetching stock data for {symbol}: {str(e)}")
             return [types.TextContent(
                 type="text",
                 text=f"Error fetching stock data for {symbol}: {str(e)}"
@@ -154,6 +183,13 @@ async def handle_call_tool(name: str, arguments: dict[str, Any] | None) -> list[
                     return default
             
             result = {
+                "_mcp_tool_info": {
+                    "tool_name": "get_stock_info",
+                    "server": "AILearning_StockServer",
+                    "data_source": "Custom_YFinance_Server",
+                    "query_timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                },
+                "_tool_attribution": "📋 Data retrieved using: get_stock_info tool",
                 "symbol": symbol.upper(),
                 "company_name": info.get('longName', 'N/A'),
                 "sector": info.get('sector', 'N/A'),
@@ -173,12 +209,14 @@ async def handle_call_tool(name: str, arguments: dict[str, Any] | None) -> list[
                 "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
             
+            logger.info(f"Successfully retrieved stock info for {symbol}")
             return [types.TextContent(
                 type="text",
                 text=json.dumps(result, indent=2)
             )]
             
         except Exception as e:
+            logger.error(f"Error fetching stock info for {symbol}: {str(e)}")
             return [types.TextContent(
                 type="text",
                 text=f"Error fetching stock info for {symbol}: {str(e)}"
@@ -201,10 +239,10 @@ async def handle_call_tool(name: str, arguments: dict[str, Any] | None) -> list[
                     text=f"No historical data found for symbol: {symbol}"
                 )]
             
-            # Convert to JSON-serializable format
-            hist_data = []
+            # Convert to a list of dictionaries for JSON serialization
+            history_data = []
             for date, row in hist.iterrows():
-                hist_data.append({
+                history_data.append({
                     "date": date.strftime("%Y-%m-%d"),
                     "open": round(float(row['Open']), 2),
                     "high": round(float(row['High']), 2),
@@ -214,25 +252,35 @@ async def handle_call_tool(name: str, arguments: dict[str, Any] | None) -> list[
                 })
             
             result = {
+                "_mcp_tool_info": {
+                    "tool_name": "get_stock_history",
+                    "server": "AILearning_StockServer",
+                    "data_source": "Custom_YFinance_Server",
+                    "query_timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                },
+                "_tool_attribution": "📈 Data retrieved using: get_stock_history tool",
                 "symbol": symbol.upper(),
                 "period": period,
-                "data_points": len(hist_data),
-                "history": hist_data[-10:],  # Last 10 data points to avoid too much data
+                "data_points": len(history_data),
+                "history": history_data[-10:] if len(history_data) > 10 else history_data,  # Return last 10 data points
                 "summary": {
-                    "highest_price": round(float(hist['High'].max()), 2),
-                    "lowest_price": round(float(hist['Low'].min()), 2),
-                    "average_volume": int(hist['Volume'].mean()),
-                    "total_volume": int(hist['Volume'].sum())
+                    "start_date": history_data[0]["date"] if history_data else "N/A",
+                    "end_date": history_data[-1]["date"] if history_data else "N/A",
+                    "highest_price": max([d["high"] for d in history_data]) if history_data else 0,
+                    "lowest_price": min([d["low"] for d in history_data]) if history_data else 0,
+                    "average_volume": sum([d["volume"] for d in history_data]) / len(history_data) if history_data else 0
                 },
                 "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
             
+            logger.info(f"Successfully retrieved stock history for {symbol} (period: {period})")
             return [types.TextContent(
                 type="text",
                 text=json.dumps(result, indent=2)
             )]
             
         except Exception as e:
+            logger.error(f"Error fetching stock history for {symbol}: {str(e)}")
             return [types.TextContent(
                 type="text",
                 text=f"Error fetching stock history for {symbol}: {str(e)}"

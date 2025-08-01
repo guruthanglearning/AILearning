@@ -246,7 +246,9 @@ StockPrediction
       ```powershell
      python ./Src/Clean_Symbol_Information.py
      ```
-9. **Comprehensive Workflow Diagram**
+## 📊 **Workflow Diagrams**
+
+### 🔄 **Main System Workflow**
 
 ```mermaid
 graph TD
@@ -305,6 +307,212 @@ graph TD
     style Y fill:#e0f2f1
 ```
 
+### 🏗️ **System Architecture Diagram**
+
+```mermaid
+graph TB
+    subgraph "📱 Frontend Layer"
+        UI[Streamlit UI]
+        API[FastAPI Server]
+    end
+    
+    subgraph "🧠 AI/ML Layer"
+        BERT[FinBERT Model]
+        XGB1[XGBoost Regression]
+        XGB2[XGBoost Classification]
+        SENT[Sentiment Engine]
+        RECOM[Recommendation Engine]
+    end
+    
+    subgraph "📊 Data Processing Layer"
+        TECH[Technical Indicators]
+        FEAT[Feature Engineering]
+        PREP[Data Preprocessing]
+    end
+    
+    subgraph "🌐 External APIs"
+        YF[Yahoo Finance API]
+        FH[Finnhub API]
+        NEWS[NewsAPI]
+    end
+    
+    subgraph "💾 Data Storage"
+        HIST[Historical Data]
+        MODELS[Trained Models]
+        CACHE[Cache Layer]
+    end
+    
+    UI --> API
+    API --> RECOM
+    RECOM --> XGB1
+    RECOM --> XGB2
+    RECOM --> SENT
+    
+    XGB1 --> FEAT
+    XGB2 --> FEAT
+    SENT --> BERT
+    
+    FEAT --> TECH
+    TECH --> PREP
+    
+    PREP --> YF
+    PREP --> FH
+    BERT --> NEWS
+    
+    FEAT --> HIST
+    XGB1 --> MODELS
+    XGB2 --> MODELS
+    PREP --> CACHE
+    
+    style UI fill:#e3f2fd
+    style API fill:#f3e5f5
+    style BERT fill:#fff3e0
+    style XGB1 fill:#e8f5e8
+    style XGB2 fill:#e8f5e8
+    style RECOM fill:#fff8e1
+```
+
+### ⚡ **Data Flow Architecture**
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant UI as Streamlit UI
+    participant API as FastAPI
+    participant DataLoader as Data Loader
+    participant YFinance as Yahoo Finance
+    participant Finnhub as Finnhub API
+    participant NewsAPI as News API
+    participant FinBERT as FinBERT Model
+    participant XGBoost as XGBoost Models
+    participant RecommendationEngine as Recommendation Engine
+    
+    User->>UI: Input Stock Symbol (e.g., AAPL)
+    UI->>API: POST /predict/{symbol}
+    
+    API->>DataLoader: Request data for symbol
+    
+    par Parallel Data Fetching
+        DataLoader->>YFinance: Get historical OHLCV data
+        YFinance-->>DataLoader: Returns price history
+        and
+        DataLoader->>Finnhub: Get fundamental data
+        Finnhub-->>DataLoader: Returns P/E, Market Cap, etc.
+        and
+        DataLoader->>NewsAPI: Get latest news
+        NewsAPI-->>DataLoader: Returns news articles
+    end
+    
+    DataLoader->>FinBERT: Process news for sentiment
+    FinBERT-->>DataLoader: Returns sentiment scores
+    
+    DataLoader->>API: Combined dataset ready
+    
+    API->>XGBoost: Train/Predict with features
+    XGBoost-->>API: Price & trend predictions
+    
+    API->>RecommendationEngine: Combine predictions + sentiment
+    RecommendationEngine-->>API: BUY/SELL/HOLD recommendation
+    
+    API-->>UI: JSON response with predictions
+    UI-->>User: Display results dashboard
+    
+    Note over User,RecommendationEngine: Total process time: ~4-6 seconds
+```
+
+### 🔄 **Model Training Pipeline**
+
+```mermaid
+flowchart LR
+    subgraph "📥 Data Input"
+        A1[Historical Prices]
+        A2[Fundamental Data]
+        A3[News Articles]
+    end
+    
+    subgraph "🔧 Preprocessing"
+        B1[Technical Indicators]
+        B2[Feature Scaling]
+        B3[Sentiment Analysis]
+    end
+    
+    subgraph "🤖 Model Training"
+        C1[Price Forecasting Model]
+        C2[Trend Classification Model]
+    end
+    
+    subgraph "✅ Validation"
+        D1[Cross Validation]
+        D2[Performance Metrics]
+        D3[Model Persistence]
+    end
+    
+    A1 --> B1
+    A2 --> B2
+    A3 --> B3
+    
+    B1 --> C1
+    B1 --> C2
+    B2 --> C1
+    B2 --> C2
+    B3 --> C1
+    B3 --> C2
+    
+    C1 --> D1
+    C2 --> D1
+    D1 --> D2
+    D2 --> D3
+    
+    style A1 fill:#e1f5fe
+    style A2 fill:#e1f5fe
+    style A3 fill:#e1f5fe
+    style C1 fill:#e8f5e8
+    style C2 fill:#e8f5e8
+    style D3 fill:#fff8e1
+```
+
+### 🎯 **Decision Engine Logic**
+
+```mermaid
+graph TD
+    START[Input: Predictions + Sentiment] --> TREND{Trend Prediction}
+    
+    TREND -->|Uptrend 📈| UP[Trend Score > 0.6]
+    TREND -->|Downtrend 📉| DOWN[Trend Score > 0.6]
+    TREND -->|Stable ⚖️| STABLE[Low Volatility]
+    
+    UP --> SENT_UP{Sentiment Check}
+    DOWN --> SENT_DOWN{Sentiment Check}
+    STABLE --> HOLD[💛 HOLD Recommendation]
+    
+    SENT_UP -->|Positive > 0.6| STRONG_BUY[💚 Strong BUY]
+    SENT_UP -->|Positive 0.3-0.6| WEAK_BUY[💚 Weak BUY]
+    SENT_UP -->|Negative| CONFLICT[⚠️ Mixed Signals]
+    
+    SENT_DOWN -->|Negative < -0.6| STRONG_SELL[❤️ Strong SELL]
+    SENT_DOWN -->|Negative -0.3 to -0.6| WEAK_SELL[❤️ Weak SELL]
+    SENT_DOWN -->|Positive| CONFLICT2[⚠️ Mixed Signals]
+    
+    CONFLICT --> HOLD2[💛 HOLD - Wait for clarity]
+    CONFLICT2 --> HOLD3[💛 HOLD - Wait for clarity]
+    
+    STRONG_BUY --> CONFIDENCE[High Confidence: 85-95%]
+    WEAK_BUY --> CONFIDENCE2[Medium Confidence: 65-75%]
+    STRONG_SELL --> CONFIDENCE3[High Confidence: 85-95%]
+    WEAK_SELL --> CONFIDENCE4[Medium Confidence: 65-75%]
+    HOLD --> CONFIDENCE5[Variable Confidence: 45-65%]
+    HOLD2 --> CONFIDENCE5
+    HOLD3 --> CONFIDENCE5
+    
+    style STRONG_BUY fill:#4caf50
+    style WEAK_BUY fill:#8bc34a
+    style STRONG_SELL fill:#f44336
+    style WEAK_SELL fill:#ff9800
+    style HOLD fill:#ffeb3b
+    style HOLD2 fill:#ffeb3b
+    style HOLD3 fill:#ffeb3b
+```
+
 ### 🔄 **Detailed Process Flow**
 
 #### **Phase 1: Data Collection & Preprocessing**
@@ -342,6 +550,7 @@ graph TD
 | **XGBoost Price Model** | ~0.1 seconds | ~5MB | RMSE: 2-5% |
 | **XGBoost Trend Model** | ~0.1 seconds | ~3MB | 75-85% accuracy |
 | **Total Pipeline** | ~4-6 seconds | ~450MB | Combined score |
+
 ## 📋 **Configuration**
 
 ### Environment Variables
@@ -373,8 +582,8 @@ HISTORICAL_DAYS=365
 #### **Model Training Fails**
 ```bash
 # Solution: Clear old model data
-rm -rf Models/price_forecast/*
-rm -rf Models/trend_classification/*
+Remove-Item -Recurse -Force Models/price_forecast/*
+Remove-Item -Recurse -Force Models/trend_classification/*
 python Src/Price_forecast.py
 ```
 
@@ -382,22 +591,20 @@ python Src/Price_forecast.py
 ```bash
 # Solution: Implement caching or upgrade API plan
 # Check last_run_date.txt for data freshness
-cat Data/last_run_date.txt
+Get-Content Data/last_run_date.txt
 ```
 
 #### **FinBERT Model Download Issues**
 ```bash
 # Solution: Manual download
-python -c "from transformers import BertTokenizer, BertForSequenceClassification; 
-BertTokenizer.from_pretrained('yiyanghkust/finbert-tone');
-BertForSequenceClassification.from_pretrained('yiyanghkust/finbert-tone')"
+python -c "from transformers import BertTokenizer, BertForSequenceClassification; BertTokenizer.from_pretrained('yiyanghkust/finbert-tone'); BertForSequenceClassification.from_pretrained('yiyanghkust/finbert-tone')"
 ```
 
 #### **Memory Issues with Large Datasets**
 ```bash
 # Solution: Reduce historical data range
 # Edit Data_loader.py, change period parameter
-period="6mo"  # Instead of "1y"
+# period="6mo"  # Instead of "1y"
 ```
 
 ## 📊 **Example API Responses**
@@ -476,34 +683,129 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - ❌ No warranty provided
 - ❌ No liability assumed
 
-## ⚠️ **Disclaimer**
+## ⚠️ **IMPORTANT DISCLAIMERS**
 
-> **IMPORTANT NOTICE**: This software is designed for **educational and research purposes only**.
+> **🚨 CRITICAL NOTICE**: This software is designed for **EDUCATIONAL AND RESEARCH PURPOSES ONLY**
 
-### Financial Disclaimer
-- 📚 **Educational Tool**: This project is intended for learning machine learning, data analysis, and software development
-- 🚫 **Not Financial Advice**: Predictions and recommendations are algorithmic outputs, not professional financial advice
-- 💰 **Risk Warning**: Trading stocks involves substantial risk of loss. Never risk money you cannot afford to lose
-- 📊 **No Guarantees**: Past performance and predictions do not guarantee future results
-- 🔍 **Do Your Research**: Always conduct your own research and consult financial professionals before making investment decisions
+### 🔴 **Financial Risk Disclaimers**
 
-### Technical Disclaimer
-- 🤖 **AI Limitations**: Machine learning models can produce incorrect predictions
-- 📡 **Data Dependency**: Accuracy depends on data quality and market conditions
-- 🔄 **Market Changes**: Models may become less effective as market conditions evolve
-- 🧪 **Experimental**: This is a research project, not production-ready trading software
+#### **NOT FINANCIAL ADVICE**
+- 📚 **Educational Tool Only**: This project is intended for learning machine learning, data analysis, and software development concepts
+- 🚫 **No Investment Advice**: All predictions, recommendations, and analyses are algorithmic outputs generated by computer models, NOT professional financial advice
+- 👨‍💼 **Consult Professionals**: Always consult qualified financial advisors, certified investment professionals, or licensed brokers before making any investment decisions
+- 📊 **No Guarantees**: Past performance and algorithmic predictions do not guarantee future investment results
 
-**By using this software, you acknowledge that you understand these risks and agree to use it responsibly.**
+#### **HIGH RISK WARNING**
+- 💰 **Substantial Risk**: Trading stocks, securities, and financial instruments involves substantial risk of financial loss
+- 🚨 **Loss of Capital**: You may lose some or all of your invested capital
+- 💸 **Never Risk Essential Funds**: Never invest money you cannot afford to lose, including emergency funds, rent money, or essential living expenses
+- 📉 **Market Volatility**: Financial markets are highly volatile and unpredictable, especially during economic uncertainty
+
+#### **NO PERFORMANCE GUARANTEES**
+- 🎲 **Uncertain Outcomes**: Investment results are inherently uncertain and unpredictable
+- 📈 **Variable Performance**: AI/ML models may perform well in backtesting but fail in real market conditions
+- 🔄 **Model Degradation**: Machine learning models may become less accurate over time as market conditions change
+- 📊 **Historical Bias**: Models trained on historical data may not reflect future market behavior
+
+### 🤖 **Technical & AI Limitations Disclaimers**
+
+#### **ARTIFICIAL INTELLIGENCE LIMITATIONS**
+- 🧠 **AI Uncertainty**: Machine learning models can produce incorrect, biased, or misleading predictions
+- 📊 **Data Dependency**: Model accuracy is entirely dependent on data quality, completeness, and market conditions
+- 🔄 **Concept Drift**: Financial markets evolve, making historical patterns potentially irrelevant for future predictions
+- 🎯 **False Confidence**: High confidence scores from models do not guarantee accuracy
+
+#### **DATA SOURCE LIMITATIONS**
+- 📡 **Third-Party Dependencies**: This system relies on external APIs (Yahoo Finance, Finnhub, NewsAPI) which may experience:
+  - Service outages or interruptions
+  - Data delays or inaccuracies
+  - Rate limiting or access restrictions
+  - Changes to data formats or availability
+- 🗞️ **News Sentiment Bias**: Sentiment analysis may misinterpret news context, sarcasm, or complex financial language
+- 📊 **Historical Data Limitations**: Past price data may not reflect current market structure or regulatory environment
+
+#### **SOFTWARE LIMITATIONS**
+- 🧪 **Experimental Software**: This is a research project, not production-ready trading software
+- 🐛 **Potential Bugs**: Software may contain bugs, errors, or unexpected behaviors
+- 🔧 **No Warranty**: Software is provided "as-is" without any warranty of functionality or performance
+- 📱 **Platform Dependencies**: Performance may vary across different operating systems, Python versions, or hardware configurations
+
+### ⚖️ **Legal & Compliance Disclaimers**
+
+#### **REGULATORY COMPLIANCE**
+- 📋 **Securities Laws**: Users are responsible for compliance with all applicable securities laws and regulations in their jurisdiction
+- 🌍 **International Compliance**: Securities regulations vary by country and region
+- 📊 **Investment Advisor Rules**: Using this software for advising others may require appropriate licenses and registrations
+- 🏛️ **Regulatory Changes**: Financial regulations are subject to change and may affect the use of this software
+
+#### **LIABILITY LIMITATIONS**
+- 🚫 **No Liability**: The authors, contributors, and distributors assume NO responsibility for:
+  - Financial losses from using this software
+  - Trading decisions based on software output
+  - Data inaccuracies or system failures
+  - Legal or regulatory violations
+- ⚖️ **User Responsibility**: Users assume full responsibility for their investment decisions and outcomes
+- 🛡️ **Indemnification**: Users agree to indemnify and hold harmless all project contributors from any claims or damages
+
+#### **INTELLECTUAL PROPERTY**
+- 📚 **Educational Use**: This software is intended for educational and research purposes
+- 🔬 **Academic Research**: Suitable for academic research, thesis projects, and learning exercises
+- 🏢 **Commercial Use Restrictions**: Commercial use may require additional licenses for third-party components (FinBERT, external APIs)
+
+### 🎯 **Responsible Use Guidelines**
+
+#### **RECOMMENDED PRACTICES**
+- 📖 **Education First**: Use this tool to learn about machine learning, not as a primary investment strategy
+- 💭 **Critical Thinking**: Question and validate all predictions and recommendations
+- 🔍 **Independent Research**: Conduct thorough independent research before making investment decisions
+- 📊 **Diversification**: Never rely on a single tool or strategy for investment decisions
+- 🎓 **Continuous Learning**: Stay informed about market conditions, economic factors, and investment principles
+
+#### **RISK MANAGEMENT**
+- 💰 **Start Small**: If testing in real markets, start with very small amounts you can afford to lose
+- 🎯 **Paper Trading**: Practice with simulated trading before risking real money
+- 📈 **Portfolio Limits**: Never allocate more than a small percentage of your portfolio based on algorithmic recommendations
+- ⏰ **Regular Review**: Regularly review and reassess your investment strategy and risk tolerance
+
+### 🌟 **Positive Use Cases**
+
+#### **APPROPRIATE APPLICATIONS**
+- 🎓 **Learning ML/AI**: Understanding machine learning applications in finance
+- 📊 **Research Projects**: Academic research on algorithmic trading and sentiment analysis
+- 💻 **Software Development**: Learning API integration, data processing, and web development
+- 📈 **Market Analysis**: Supplementary tool for broader market research (not primary decision-making)
+- 🧠 **Educational Demonstrations**: Teaching concepts of financial modeling and prediction
 
 ---
 
-### 📞 **Support & Contact**
+## 📞 **Support & Contact**
 
-- 🐛 **Bug Reports**: Open an issue on GitHub
+### 🛠️ **Technical Support**
+- 🐛 **Bug Reports**: Open detailed issues on GitHub with reproduction steps
 - 💡 **Feature Requests**: Submit enhancement proposals via GitHub Issues  
-- 📧 **General Questions**: Contact the development team
-- 📖 **Documentation**: Check this README and inline code comments
+- 📖 **Documentation**: Check this README and inline code comments first
+- 💬 **Discussions**: Use GitHub Discussions for general questions and community support
+
+### 🚨 **Important Notices**
+- 🔒 **No Investment Advice**: We do not provide investment advice or recommendations
+- 📧 **No Financial Consultation**: Technical support is limited to software functionality only
+- ⚖️ **Legal Questions**: Consult appropriate legal professionals for regulatory compliance questions
 
 ---
 
-**Happy Trading! 📈** *(But remember, always trade responsibly!)* 🛡️
+## 🎯 **Final Acknowledgment**
+
+By downloading, installing, using, or contributing to this software, you explicitly acknowledge that:
+
+1. **You have read and understood all disclaimers and warnings**
+2. **You accept all risks associated with using this software**
+3. **You will not hold the creators liable for any financial losses**
+4. **You understand this is educational software, not professional financial advice**
+5. **You will comply with all applicable laws and regulations**
+6. **You will use this software responsibly and ethically**
+
+---
+
+**🎉 Happy Learning and Responsible Coding! 📈🛡️**
+
+*Remember: The best investment is in your education and understanding of the markets!*

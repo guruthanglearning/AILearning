@@ -73,7 +73,85 @@ The system implements a **tri-tier classification approach** based on log source
   - Deprecation Warnings
   - Complex business logic errors
 
-### 2. Model Selection Rationale
+### 2. Classification Decision Flow
+
+The system uses a **source-based routing strategy** with **conditional fallback logic**:
+
+#### 🔄 **Decision Tree Logic**
+```
+Log Input (source, message)
+        ↓
+    Is source == "LegacyCRM"?
+        ↓ YES                    ↓ NO
+   🧠 LLM Classification    📝 Regex Classification
+      (Llama 3.3 70B)              ↓
+           ↓                 Pattern Match Found?
+      Return Result               ↓ YES        ↓ NO
+                            Return Category  🤖 BERT Classification
+                                                 ↓
+                                           Confidence > 0.5?
+                                             ↓ YES    ↓ NO
+                                        Return Category "Unknown"
+```
+
+#### 🎯 **When Each Method is Called**
+
+##### 1. **LLM (Llama) is Called When:**
+- **Source System**: `LegacyCRM` **ONLY**
+- **Trigger Condition**: `if source == "LegacyCRM"`
+- **Use Case**: Complex, unstructured legacy system logs
+- **Examples**:
+  - "Case escalation for ticket ID 7324 failed because the assigned support agent is no longer active"
+  - "The 'ReportGenerator' module will be retired in version 4.0. Please migrate to 'AdvancedAnalyticsSuite'"
+  - "Invoice generation process aborted for order ID 8910 due to invalid tax calculation module"
+
+##### 2. **Regex is Called When:**
+- **Source Systems**: All **EXCEPT** `LegacyCRM` (ModernCRM, BillingSystem, AnalyticsEngine, ModernHR, ThirdPartyAPI)
+- **Trigger Condition**: `if source != "LegacyCRM"`
+- **Pattern Matching**: 8 predefined regex patterns
+- **Examples**:
+  ```
+  Pattern: r"User User\d+ logged (in|out)."
+  Match: "User User123 logged in." → "User Action"
+  
+  Pattern: r"Backup (started|ended) at .*"
+  Match: "Backup started at 2023-10-01 12:00:00." → "System Notification"
+  
+  Pattern: r"File .* uploaded successfully by user .*"
+  Match: "File data.csv uploaded successfully by user User456." → "System Notification"
+  ```
+
+##### 3. **BERT is Called When:**
+- **Source Systems**: All **EXCEPT** `LegacyCRM`
+- **Trigger Condition**: `if label is None` (after regex fails to match)
+- **Confidence Threshold**: Must be > 0.5, otherwise returns "Unknown"
+- **Examples**:
+  - "IP 192.168.133.114 blocked due to potential attack" → "Security Alert"
+  - "Email service experiencing issues with sending" → "Critical Error"
+  - "nova.osapi_compute.wsgi.server HTTP/1.1 status 200" → "HTTP Status"
+
+#### 📊 **Processing Priority & Performance**
+
+| Priority | Method | Trigger | Performance | Coverage |
+|----------|---------|---------|-------------|----------|
+| 1st | **Regex** | Non-LegacyCRM sources | ~0.1ms | Structured patterns |
+| 2nd | **BERT** | Regex fails (returns None) | ~10ms | Semi-structured logs |
+| 3rd | **LLM** | LegacyCRM source only | ~500ms | Unstructured/complex |
+
+#### 🔍 **Detailed Examples by Source**
+
+**ModernCRM Source:**
+1. Try Regex: "User User123 logged in." → ✅ **Regex Match** → "User Action"
+2. Try Regex: "Database connection timeout" → ❌ **No Match** → Try BERT → ✅ **BERT** → "Critical Error"
+
+**LegacyCRM Source:**
+1. Skip Regex & BERT → ✅ **Direct to LLM** → "Workflow Error" or "Deprecation Warning"
+
+**BillingSystem Source:**
+1. Try Regex: "Account with ID 101 created by Admin." → ✅ **Regex Match** → "User Action"
+2. Try Regex: "Unauthorized access detected" → ❌ **No Match** → Try BERT → ✅ **BERT** → "Security Alert"
+
+### 3. Model Selection Rationale
 
 #### Why BERT (Sentence-BERT)?
 - **Semantic Understanding**: Captures contextual meaning beyond keyword matching

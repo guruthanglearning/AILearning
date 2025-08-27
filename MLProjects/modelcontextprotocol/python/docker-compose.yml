@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  mcp-stock-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mcp-stock-server:latest
+    container_name: mcp-stock-server
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    environment:
+      - MCP_SERVER_NAME=AILearning_DockerStockServer
+      - MCP_SERVER_SOURCE=Docker_YFinance_Server
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+networks:
+  default:
+    name: mcp-network

@@ -25,20 +25,27 @@ from mcp.types import (
 )
 import mcp.types as types
 
-# Set up logging
+# Set up enhanced logging for Docker monitoring
 log_dir = "logs"
 if not os.path.exists(log_dir):
     os.makedirs(log_dir)
 
+# Configure detailed logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
+    format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
     handlers=[
         logging.FileHandler(f'{log_dir}/mcp_stock_server.log'),
-        logging.StreamHandler()
+        # Note: Removed stdout handler to avoid interfering with MCP JSON protocol
+        # For Docker: logs will be in the log file, use docker exec to view them
     ]
 )
 logger = logging.getLogger(__name__)
+
+# Log server startup
+logger.info("MCP Stock Server starting up...")
+logger.info(f"Log directory: {log_dir}")
+logger.info("Running locally")
 
 # Create a server instance
 server = Server("stock-server")
@@ -99,26 +106,73 @@ async def handle_list_tools() -> list[Tool]:
         ),
     ]
 
+
+
 @server.call_tool()
 async def handle_call_tool(name: str, arguments: dict[str, Any] | None) -> list[types.TextContent]:
     """
-    Handle tool execution requests.
+    Handle tool execution requests with enhanced logging for Docker monitoring.
     """
+    # Debug logging to stderr to see if handler is called
+    print(f"DEBUG: handle_call_tool called with name={name}, args={arguments}", file=sys.stderr)
+    
+    # Enhanced request logging for Docker Desktop visibility
+    logger.info("FIRE" + "=" * 58 + "FIRE")
+    logger.info("INCOMING MCP REQUEST")
+    logger.info(f"Tool Requested: {name}")
+    logger.info(f"Arguments: {arguments}")
+    logger.info(f"Request Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info("FIRE" + "=" * 58 + "FIRE")
+    
     if not arguments:
+        logger.error("ERROR: Missing arguments in request")
         raise ValueError("Missing arguments")
-
-    # Log tool usage
+    
+    # Log tool usage (original logging)
     logger.info(f"Tool called: {name} with arguments: {arguments}")
 
     if name == "get_stock_price":
+        print(f"DEBUG: Processing get_stock_price for symbol: {arguments.get('symbol') if arguments else 'None'}", file=sys.stderr)
         symbol = arguments.get("symbol")
         if not symbol:
+            print("DEBUG: Missing symbol argument", file=sys.stderr)
             raise ValueError("Missing symbol argument")
             
         try:
+            print(f"DEBUG: Creating yf.Ticker for {symbol}", file=sys.stderr)
             stock = yf.Ticker(symbol.upper())
-            info = stock.info
-            hist = stock.history(period="1d")
+            print(f"DEBUG: Getting info for {symbol}", file=sys.stderr)
+            
+            # Add timeout handling for yfinance calls
+            import asyncio
+            import functools
+            
+            # Wrap the blocking yfinance calls with timeout
+            loop = asyncio.get_event_loop()
+            
+            try:
+                # Get info with timeout
+                print(f"DEBUG: Getting stock info with timeout...", file=sys.stderr)
+                info = await asyncio.wait_for(
+                    loop.run_in_executor(None, lambda: stock.info),
+                    timeout=10.0
+                )
+                print(f"DEBUG: Got stock info successfully", file=sys.stderr)
+                
+                # Get history with timeout
+                print(f"DEBUG: Getting stock history with timeout...", file=sys.stderr)
+                hist = await asyncio.wait_for(
+                    loop.run_in_executor(None, lambda: stock.history(period="1d")),
+                    timeout=10.0
+                )
+                print(f"DEBUG: Got stock history successfully", file=sys.stderr)
+                
+            except asyncio.TimeoutError:
+                print(f"DEBUG: Timeout occurred getting data for {symbol}", file=sys.stderr)
+                return [types.TextContent(
+                    type="text",
+                    text=f"Timeout getting data for {symbol}. Please try again later."
+                )]
             
             if hist.empty:
                 return [types.TextContent(
@@ -138,7 +192,7 @@ async def handle_call_tool(name: str, arguments: dict[str, Any] | None) -> list[
                     "data_source": "Custom_YFinance_Server",
                     "query_timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 },
-                "_tool_attribution": "📊 Data retrieved using: get_stock_price tool",
+                "_tool_attribution": "DATA retrieved using: get_stock_price tool",
                 "symbol": symbol.upper(),
                 "company_name": info.get('longName', 'N/A'),
                 "current_price": round(float(current_price), 2),
@@ -189,7 +243,7 @@ async def handle_call_tool(name: str, arguments: dict[str, Any] | None) -> list[
                     "data_source": "Custom_YFinance_Server",
                     "query_timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 },
-                "_tool_attribution": "📋 Data retrieved using: get_stock_info tool",
+                "_tool_attribution": "DATA retrieved using: get_stock_info tool",
                 "symbol": symbol.upper(),
                 "company_name": info.get('longName', 'N/A'),
                 "sector": info.get('sector', 'N/A'),
@@ -258,7 +312,7 @@ async def handle_call_tool(name: str, arguments: dict[str, Any] | None) -> list[
                     "data_source": "Custom_YFinance_Server",
                     "query_timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 },
-                "_tool_attribution": "📈 Data retrieved using: get_stock_history tool",
+                "_tool_attribution": "DATA retrieved using: get_stock_history tool",
                 "symbol": symbol.upper(),
                 "period": period,
                 "data_points": len(history_data),
@@ -278,7 +332,6 @@ async def handle_call_tool(name: str, arguments: dict[str, Any] | None) -> list[
                 type="text",
                 text=json.dumps(result, indent=2)
             )]
-            
         except Exception as e:
             logger.error(f"Error fetching stock history for {symbol}: {str(e)}")
             return [types.TextContent(
@@ -287,7 +340,21 @@ async def handle_call_tool(name: str, arguments: dict[str, Any] | None) -> list[
             )]
     
     else:
+        logger.error(f"ERROR: Unknown tool requested: {name}")
         raise ValueError(f"Unknown tool: {name}")
+
+# Add this function to wrap all responses with logging
+def log_response(tool_name: str, result: list[types.TextContent]) -> list[types.TextContent]:
+    """Log response details for Docker monitoring"""
+    response_size = len(str(result))
+    logger.info("ROCKET" + "=" * 58 + "ROCKET")
+    logger.info("MCP RESPONSE SENT")
+    logger.info(f"Tool: {tool_name}")
+    logger.info(f"Response Size: {response_size} characters")
+    logger.info(f"Status: SUCCESS")
+    logger.info(f"Response Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info("ROCKET" + "=" * 58 + "ROCKET")
+    return result
 
 async def main():
     # Run the server using stdin/stdout streams

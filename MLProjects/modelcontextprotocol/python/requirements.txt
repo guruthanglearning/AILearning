@@ -1,0 +1,25 @@
+# Python MCP Server Dependencies
+# Core MCP dependencies
+mcp>=1.0.0
+
+# Data fetching
+yfinance>=0.2.18
+requests>=2.31.0
+
+# Time handling  
+python-dateutil>=2.8.2
+
+# Async support
+asyncio-mqtt>=0.13.0
+aiohttp>=3.8.5
+
+# Logging and utilities
+python-dotenv>=1.0.0
+
+# Optional: FastAPI for HTTP endpoints
+fastapi>=0.104.0
+uvicorn>=0.24.0
+
+# Data processing (if needed)
+pandas>=2.0.0
+numpy>=1.24.0

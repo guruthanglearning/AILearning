@@ -1,0 +1,26 @@
+# Learning Stock Prediction Model Dependencies
+# Core ML Libraries
+numpy>=1.24.0
+pandas>=2.0.0
+scikit-learn>=1.3.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Data Collection
+yfinance>=0.2.0
+requests>=2.31.0
+
+# Technical Analysis
+ta>=0.10.0
+ta-lib>=0.4.0
+
+# Progress and Utils
+tqdm>=4.65.0
+joblib>=1.3.0
+
+# Jupyter for experimentation (optional)
+jupyter>=1.0.0
+ipykernel>=6.25.0
+
+# Visualization
+plotly>=5.15.0

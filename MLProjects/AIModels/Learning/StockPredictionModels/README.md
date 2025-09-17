@@ -46,78 +46,91 @@ A comprehensive educational project for learning machine learning concepts using
 
 ## 🔄 **Project Workflow Diagram**
 
+### **📊 Main Learning Flow**
+
 ```mermaid
 flowchart TD
-    A[🚀 Start: Choose Entry Point] --> B{Select Learning Path}
+    A[🚀 Start Project] --> B{Choose Learning Path}
     
-    B --> C[📚 Beginner Path]
-    B --> D[🎯 Intermediate Path]
-    B --> E[🚀 Advanced Path]
+    B -->|Beginner| C[📚 simple_stock_predictor.py]
+    B -->|Intermediate| D[🧪 interactive_tester.py]
+    B -->|Advanced| E[🔬 model_tester.py]
     
-    C --> F[📁 simple_stock_predictor.py<br/>Main Learning Pipeline]
-    D --> G[🧪 interactive_tester.py<br/>Interactive Experiments]
-    E --> H[🔬 model_tester.py<br/>Comprehensive Testing]
+    C --> F[📊 Data Collection]
+    D --> F
+    E --> F
     
-    F --> I[📊 Data Collection<br/>yfinance API]
-    G --> I
-    H --> I
+    F --> G[🔧 Feature Engineering]
+    G --> H[🎯 Create Targets]
+    H --> I{Select Problem Type}
     
-    I --> J[🔧 Feature Engineering<br/>Technical Indicators]
-    J --> K[🎯 Create Target Variables<br/>Direction & Price]
+    I -->|Direction| J[📈 Classification Models]
+    I -->|Price| K[💰 Regression Models]
     
-    K --> L{Problem Type Selection}
+    J --> L[🌳 Random Forest<br/>📊 Logistic Regression<br/>🎯 SVM]
+    K --> M[🌳 Random Forest<br/>📈 Linear Regression<br/>🎯 SVR]
     
-    L --> M[📈 Classification<br/>Direction Prediction]
-    L --> N[💰 Regression<br/>Price Prediction]
+    L --> N[📊 Validation]
+    M --> N
     
-    M --> O[🌳 Random Forest<br/>📊 Logistic Regression<br/>🎯 SVM]
-    N --> P[🌳 Random Forest<br/>📈 Linear Regression<br/>🎯 SVR]
+    N --> O{Meet Thresholds?}
+    O -->|✅ Yes| P[🎉 Success!]
+    O -->|❌ No| Q[🔄 Optimize]
     
-    O --> Q[📊 Performance Validation<br/>Threshold Checking]
-    P --> Q
+    Q --> H
+    P --> R[📈 Analysis]
+    R --> S{Continue?}
     
-    Q --> R{Meet Thresholds?}
-    
-    R -->|✅ Yes| S[🎉 Success!<br/>Models Ready]
-    R -->|❌ No| T[⚠️ Needs Improvement<br/>Tune Parameters]
-    
-    T --> U[🔄 Model Optimization<br/>Feature Selection<br/>Hyperparameter Tuning]
-    U --> K
-    
-    S --> V[📈 Model Analysis<br/>Feature Importance<br/>Error Analysis]
-    
-    V --> W{Continue Learning?}
-    W -->|🔄 Yes| X[🎯 Try Different Stock<br/>📅 Change Time Period<br/>🧪 Add Features]
-    W -->|🎓 Complete| Y[🏆 Learning Complete!<br/>Ready for Real Projects]
-    
-    X --> I
-    
-    subgraph Tools ["🛠️ Available Tools"]
-        Z1[📁 simple_stock_predictor.py<br/>🔹 Main learning pipeline<br/>🔹 Automated workflow<br/>🔹 Built-in validation]
-        Z2[🧪 interactive_tester.py<br/>🔹 Stock comparison<br/>🔹 Feature experiments<br/>🔹 Custom parameters]
-        Z3[🔬 model_tester.py<br/>🔹 Comprehensive testing<br/>🔹 Multiple runs<br/>🔹 Edge case handling]
-        Z4[📊 model_evaluation.py<br/>🔹 Advanced visualizations<br/>🔹 Performance metrics<br/>🔹 Detailed analysis]
-        Z5[🎯 predict_direction.py<br/>🔹 Specialized direction prediction<br/>🔹 Ensemble methods<br/>🔹 Voting algorithms]
-        Z6[✅ threshold_validator.py<br/>🔹 Performance validation<br/>🔹 Quality assurance<br/>🔹 Standards checking]
-    end
-    
-    subgraph Thresholds ["📊 Performance Thresholds"]
-        T1[🎯 Direction Prediction<br/>🔹 Minimum: ≥45% accuracy<br/>🔹 Good: ≥55% accuracy<br/>🔹 Excellent: ≥60% accuracy<br/>🔹 CV Stability: ≥40% mean, ≤15% std]
-        T2[💰 Price Prediction<br/>🔹 Minimum: R² ≥0.30<br/>🔹 Good: R² ≥0.50<br/>🔹 Excellent: R² ≥0.70<br/>🔹 MAPE: ≤10% max, ≤5% excellent]
-    end
-    
-    subgraph Features ["🔧 Feature Categories"]
-        F1[📈 Price Features<br/>🔹 Price changes<br/>🔹 High-Low ratios<br/>🔹 Open-Close ratios]
-        F2[📊 Moving Averages<br/>🔹 MA_5, MA_10, MA_20, MA_50<br/>🔹 Price/MA ratios<br/>🔹 Trend indicators]
-        F3[🎯 Technical Indicators<br/>🔹 RSI (momentum)<br/>🔹 Bollinger Bands<br/>🔹 Volatility measures]
-        F4[📦 Volume Features<br/>🔹 Volume ratios<br/>🔹 Volume moving averages<br/>🔹 Activity indicators]
-    end
+    S -->|Yes| T[🎯 Try New Stock]
+    S -->|No| U[🏆 Complete!]
+    T --> F
     
     style A fill:#e1f5fe
-    style S fill:#c8e6c9
-    style Y fill:#fff3e0
-    style T fill:#ffecb3
+    style P fill:#c8e6c9
+    style U fill:#fff3e0
+    style Q fill:#ffecb3
 ```
+
+### **🛠️ Available Tools & Components**
+
+```mermaid
+graph LR
+    subgraph Main["🎯 Core Scripts"]
+        A1[📁 simple_stock_predictor.py<br/>Complete Pipeline]
+        A2[🧪 interactive_tester.py<br/>Experiments]
+        A3[🔬 model_tester.py<br/>Testing Framework]
+    end
+    
+    subgraph Support["🔧 Support Tools"]
+        B1[📊 model_evaluation.py<br/>Visualizations]
+        B2[🎯 predict_direction.py<br/>Predictions]
+        B3[✅ threshold_validator.py<br/>Validation]
+        B4[🎯 threshold_demo.py<br/>Education]
+    end
+    
+    subgraph Features["📈 Feature Types"]
+        C1[Price Changes]
+        C2[Moving Averages]
+        C3[Technical Indicators]
+        C4[Volume Analysis]
+    end
+    
+    Main --> Support
+    Support --> Features
+    
+    style Main fill:#e1f5fe
+    style Support fill:#c8e6c9
+    style Features fill:#fff3e0
+```
+
+### **📊 Performance Thresholds**
+
+| **Model Type** | **Minimum** | **Good** | **Excellent** |
+|----------------|-------------|-----------|---------------|
+| **🎯 Direction Accuracy** | ≥ 45% | ≥ 55% | ≥ 60% |
+| **💰 Price R² Score** | ≥ 0.30 | ≥ 0.50 | ≥ 0.70 |
+| **📐 MAPE Error** | ≤ 10% | ≤ 7% | ≤ 5% |
+| **📊 CV Stability** | ≤ 15% std | ≤ 10% std | ≤ 5% std |
 
 ### 🎯 **Workflow Explanation**
 

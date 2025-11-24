@@ -1,0 +1,5 @@
+<Project>
+  <PropertyGroup>
+    <RestorePackagesPath>$(MSBuildThisFileDirectory)..\..\..\..\shared_Environment\dotnet\packages</RestorePackagesPath>
+  </PropertyGroup>
+</Project>

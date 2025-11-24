@@ -1,0 +1,290 @@
+using Xunit;
+using Moq;
+using FluentAssertions;
+using Microsoft.Extensions.Logging;
+using TorchSharpInspector.Services;
+using TorchSharpInspector.Models;
+
+namespace TorchSharpInspector.Tests.Services
+{
+    public class SystemDiagnosticsServiceTests
+    {
+        private readonly Mock<ILogger<SystemDiagnosticsService>> _mockLogger;
+        private readonly SystemDiagnosticsService _service;
+
+        public SystemDiagnosticsServiceTests()
+        {
+            _mockLogger = new Mock<ILogger<SystemDiagnosticsService>>();
+            _service = new SystemDiagnosticsService(_mockLogger.Object);
+        }
+
+        [Fact]
+        public async Task GetSystemDiagnosticsAsync_ShouldReturnValidDiagnostics()
+        {
+            // Act
+            var result = await _service.GetSystemDiagnosticsAsync();
+
+            // Assert
+            result.Should().NotBeNull();
+            result.CheckTime.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));
+            result.ProcessorCores.Should().BeGreaterThan(0);
+            result.DotNetVersion.Should().NotBeNullOrEmpty();
+            result.OperatingSystem.Should().NotBeNullOrEmpty();
+            result.TorchSharpVersion.Should().NotBeNullOrEmpty();
+            result.AvailableDevices.Should().NotBeEmpty();
+            result.AvailableDevices.Should().Contain("cpu");
+        }
+
+        [Fact]
+        public async Task ValidateTorchSharpInstallationAsync_ShouldReturnTrue()
+        {
+            // Act
+            var result = await _service.ValidateTorchSharpInstallationAsync();
+
+            // Assert
+            result.Should().BeTrue();
+        }
+
+        [Fact]
+        public async Task GetSystemDiagnosticsAsync_ShouldLogInformation()
+        {
+            // Act
+            await _service.GetSystemDiagnosticsAsync();
+
+            // Assert
+            _mockLogger.Verify(
+                x => x.Log(
+                    LogLevel.Information,
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("System diagnostics completed successfully")),
+                    It.IsAny<Exception>(),
+                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                Times.Once);
+        }
+    }
+
+    public class CheckpointInspectionServiceTests
+    {
+        private readonly Mock<ILogger<CheckpointInspectionService>> _mockLogger;
+        private readonly CheckpointInspectionService _service;
+
+        public CheckpointInspectionServiceTests()
+        {
+            _mockLogger = new Mock<ILogger<CheckpointInspectionService>>();
+            _service = new CheckpointInspectionService(_mockLogger.Object);
+        }
+
+        [Fact]
+        public async Task InspectCheckpointAsync_WithNonExistentFile_ShouldReturnInvalidCheckpoint()
+        {
+            // Arrange
+            var nonExistentPath = "non_existent_file.pt";
+
+            // Act
+            var result = await _service.InspectCheckpointAsync(nonExistentPath);
+
+            // Assert
+            result.Should().NotBeNull();
+            result.FilePath.Should().Be(nonExistentPath);
+            result.IsValidCheckpoint.Should().BeFalse();
+            result.CheckTime.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));
+        }
+
+        [Fact]
+        public async Task InspectCheckpointAsync_WithValidParameters_ShouldReturnCheckpointInfo()
+        {
+            // Arrange
+            var checkpointPath = "test.pt";
+
+            // Act
+            var result = await _service.InspectCheckpointAsync(checkpointPath);
+
+            // Assert
+            result.Should().NotBeNull();
+            result.FilePath.Should().Be(checkpointPath);
+            result.CheckTime.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));
+        }
+
+        [Fact]
+        public async Task GetCheckpointMetadataAsync_ShouldReturnDictionary()
+        {
+            // Arrange
+            var checkpointPath = "test.pt";
+
+            // Act
+            var result = await _service.GetCheckpointMetadataAsync(checkpointPath);
+
+            // Assert
+            result.Should().NotBeNull();
+            result.Should().BeOfType<Dictionary<string, object>>();
+        }
+    }
+
+    public class TensorOperationsServiceTests
+    {
+        private readonly Mock<ILogger<TensorOperationsService>> _mockLogger;
+        private readonly TensorOperationsService _service;
+
+        public TensorOperationsServiceTests()
+        {
+            _mockLogger = new Mock<ILogger<TensorOperationsService>>();
+            _service = new TensorOperationsService(_mockLogger.Object);
+        }
+
+        [Fact]
+        public async Task TestTensorOperationsAsync_ShouldReturnResults()
+        {
+            // Act
+            var result = await _service.TestTensorOperationsAsync();
+
+            // Assert
+            result.Should().NotBeNull();
+            result.TestTime.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));
+            result.SupportedDevices.Should().NotBeEmpty();
+            result.SupportedDevices.Should().Contain("cpu");
+            result.TestResults.Should().NotBeEmpty();
+            result.OperationTimings.Should().NotBeEmpty();
+        }
+
+        [Fact]
+        public async Task ValidateGpuAvailabilityAsync_ShouldReturnBool()
+        {
+            // Act
+            var result = await _service.ValidateGpuAvailabilityAsync();
+
+            // Assert
+            result.Should().BeOfType<bool>();
+        }
+
+        [Fact]
+        public async Task TestTensorOperationsAsync_ShouldLogInformation()
+        {
+            // Act
+            await _service.TestTensorOperationsAsync();
+
+            // Assert
+            _mockLogger.Verify(
+                x => x.Log(
+                    LogLevel.Information,
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Tensor operations test completed successfully")),
+                    It.IsAny<Exception>(),
+                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                Times.Once);
+        }
+    }
+
+    public class ReportExportServiceTests
+    {
+        private readonly Mock<ILogger<ReportExportService>> _mockLogger;
+        private readonly ReportExportService _service;
+
+        public ReportExportServiceTests()
+        {
+            _mockLogger = new Mock<ILogger<ReportExportService>>();
+            _service = new ReportExportService(_mockLogger.Object);
+        }
+
+        [Fact]
+        public async Task ExportReportAsJsonAsync_ShouldReturnValidJson()
+        {
+            // Arrange
+            var report = CreateTestReport();
+
+            // Act
+            var result = await _service.ExportReportAsJsonAsync(report);
+
+            // Assert
+            result.Should().NotBeNull();
+            result.Length.Should().BeGreaterThan(0);
+            
+            var jsonString = System.Text.Encoding.UTF8.GetString(result);
+            jsonString.Should().Contain("generatedAt");
+            jsonString.Should().Contain("checkpointPath");
+        }
+
+        [Fact]
+        public async Task ExportReportAsCsvAsync_ShouldReturnValidCsv()
+        {
+            // Arrange
+            var report = CreateTestReport();
+
+            // Act
+            var result = await _service.ExportReportAsCsvAsync(report);
+
+            // Assert
+            result.Should().NotBeNull();
+            result.Length.Should().BeGreaterThan(0);
+            
+            var csvString = System.Text.Encoding.UTF8.GetString(result);
+            csvString.Should().Contain("Category,Property,Value");
+            csvString.Should().Contain("System,");
+        }
+
+        [Fact]
+        public async Task SaveReportToFileAsync_WithJsonFormat_ShouldReturnFilePath()
+        {
+            // Arrange
+            var report = CreateTestReport();
+            var format = "json";
+
+            // Act
+            var result = await _service.SaveReportToFileAsync(report, format);
+
+            // Assert
+            result.Should().NotBeNullOrEmpty();
+            result.Should().EndWith(".json");
+            result.Should().Contain("torch_inspector_report_");
+        }
+
+        [Fact]
+        public async Task SaveReportToFileAsync_WithUnsupportedFormat_ShouldThrowException()
+        {
+            // Arrange
+            var report = CreateTestReport();
+            var format = "xml";
+
+            // Act & Assert
+            await Assert.ThrowsAsync<ArgumentException>(
+                () => _service.SaveReportToFileAsync(report, format));
+        }
+
+        private InspectorReport CreateTestReport()
+        {
+            return new InspectorReport
+            {
+                CheckpointPath = "test.pt",
+                GeneratedAt = DateTime.UtcNow,
+                SystemInfo = new SystemDiagnostics
+                {
+                    TorchSharpVersion = "0.105.1",
+                    ProcessorCores = 4,
+                    TotalMemoryMB = 8192
+                },
+                CheckpointInfo = new CheckpointInfo
+                {
+                    FilePath = "test.pt",
+                    IsValidCheckpoint = true
+                },
+                ArchitectureInfo = new ArchitectureInfo
+                {
+                    NumLayers = 6,
+                    EmbeddingDim = 384
+                },
+                BenchmarkResults = new BenchmarkResults
+                {
+                    InferenceTimeMs = 100,
+                    TokensPerSecond = 50
+                },
+                MemoryAnalysis = new MemoryAnalysis
+                {
+                    ModelSizeMB = 100
+                },
+                TensorResults = new TensorOperationResults
+                {
+                    BasicOperationsWorking = true
+                }
+            };
+        }
+    }
+}

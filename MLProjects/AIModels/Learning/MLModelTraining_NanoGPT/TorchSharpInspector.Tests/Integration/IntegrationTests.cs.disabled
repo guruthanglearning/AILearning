@@ -1,0 +1,389 @@
+using Xunit;
+using FluentAssertions;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
+using System.Net.Http.Json;
+using System.Text.Json;
+using TorchSharpInspector.Models;
+
+namespace TorchSharpInspector.Tests.Integration
+{
+    public class ApiIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
+    {
+        private readonly WebApplicationFactory<Program> _factory;
+        private readonly HttpClient _client;
+
+        public ApiIntegrationTests(WebApplicationFactory<Program> factory)
+        {
+            _factory = factory;
+            _client = _factory.CreateClient();
+        }
+
+        [Fact]
+        public async Task HealthEndpoint_ShouldReturnHealthy()
+        {
+            // Act
+            var response = await _client.GetAsync("/api/health");
+
+            // Assert
+            response.EnsureSuccessStatusCode();
+            var content = await response.Content.ReadAsStringAsync();
+            content.Should().Contain("Healthy");
+        }
+
+        [Fact]
+        public async Task GetSystemDiagnostics_ShouldReturnValidResponse()
+        {
+            // Act
+            var response = await _client.GetAsync("/api/inspector/system");
+
+            // Assert
+            response.EnsureSuccessStatusCode();
+            var content = await response.Content.ReadAsStringAsync();
+            
+            var apiResponse = JsonSerializer.Deserialize<ApiResponse<SystemDiagnostics>>(content, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
+
+            apiResponse.Should().NotBeNull();
+            apiResponse!.Success.Should().BeTrue();
+            apiResponse.Data.Should().NotBeNull();
+            apiResponse.Data!.ProcessorCores.Should().BeGreaterThan(0);
+            apiResponse.Data.TorchSharpVersion.Should().NotBeNullOrEmpty();
+        }
+
+        [Fact]
+        public async Task ValidateCheckpoint_WithInvalidPath_ShouldReturnFalse()
+        {
+            // Arrange
+            var invalidPath = "nonexistent.pt";
+
+            // Act
+            var response = await _client.PostAsJsonAsync("/api/inspector/validate", invalidPath);
+
+            // Assert
+            response.EnsureSuccessStatusCode();
+            var content = await response.Content.ReadAsStringAsync();
+            
+            var apiResponse = JsonSerializer.Deserialize<ApiResponse<bool>>(content, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
+
+            apiResponse.Should().NotBeNull();
+            apiResponse!.Success.Should().BeTrue();
+            apiResponse.Data.Should().BeFalse();
+        }
+
+        [Fact]
+        public async Task ValidateCheckpoint_WithEmptyPath_ShouldReturnBadRequest()
+        {
+            // Act
+            var response = await _client.PostAsJsonAsync("/api/inspector/validate", "");
+
+            // Assert
+            response.StatusCode.Should().Be(System.Net.HttpStatusCode.BadRequest);
+        }
+
+        [Fact]
+        public async Task InspectCheckpoint_WithInvalidRequest_ShouldReturnBadRequest()
+        {
+            // Arrange
+            var invalidRequest = new InspectionRequest(); // Empty checkpoint path
+
+            // Act
+            var response = await _client.PostAsJsonAsync("/api/inspector/inspect", invalidRequest);
+
+            // Assert
+            response.StatusCode.Should().Be(System.Net.HttpStatusCode.BadRequest);
+        }
+
+        [Fact]
+        public async Task GetAvailableCheckpoints_ShouldReturnList()
+        {
+            // Act
+            var response = await _client.GetAsync("/api/inspector/checkpoints");
+
+            // Assert
+            response.EnsureSuccessStatusCode();
+            var content = await response.Content.ReadAsStringAsync();
+            
+            var apiResponse = JsonSerializer.Deserialize<ApiResponse<List<string>>>(content, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
+
+            apiResponse.Should().NotBeNull();
+            apiResponse!.Success.Should().BeTrue();
+            apiResponse.Data.Should().NotBeNull();
+        }
+
+        [Fact]
+        public async Task ExportReport_WithUnsupportedFormat_ShouldReturnBadRequest()
+        {
+            // Arrange
+            var report = new InspectorReport();
+
+            // Act
+            var response = await _client.PostAsJsonAsync("/api/inspector/export/xml", report);
+
+            // Assert
+            response.StatusCode.Should().Be(System.Net.HttpStatusCode.BadRequest);
+        }
+
+        [Fact]
+        public async Task SwaggerUI_ShouldBeAccessible()
+        {
+            // Act
+            var response = await _client.GetAsync("/api-docs");
+
+            // Assert
+            response.EnsureSuccessStatusCode();
+            var content = await response.Content.ReadAsStringAsync();
+            content.Should().Contain("swagger");
+        }
+    }
+
+    public class WebIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
+    {
+        private readonly WebApplicationFactory<Program> _factory;
+        private readonly HttpClient _client;
+
+        public WebIntegrationTests(WebApplicationFactory<Program> factory)
+        {
+            _factory = factory;
+            _client = _factory.CreateClient();
+        }
+
+        [Fact]
+        public async Task HomePage_ShouldReturnSuccessAndContainExpectedContent()
+        {
+            // Act
+            var response = await _client.GetAsync("/");
+
+            // Assert
+            response.EnsureSuccessStatusCode();
+            var content = await response.Content.ReadAsStringAsync();
+            content.Should().Contain("TorchSharp Model Inspector");
+            content.Should().Contain("System Status");
+        }
+
+        [Fact]
+        public async Task PrivacyPage_ShouldReturnSuccessAndContainExpectedContent()
+        {
+            // Act
+            var response = await _client.GetAsync("/Home/Privacy");
+
+            // Assert
+            response.EnsureSuccessStatusCode();
+            var content = await response.Content.ReadAsStringAsync();
+            content.Should().Contain("Privacy Policy");
+            content.Should().Contain("Data Collection");
+        }
+
+        [Fact]
+        public async Task ErrorPage_ShouldReturnSuccessAndContainExpectedContent()
+        {
+            // Act
+            var response = await _client.GetAsync("/Home/Error");
+
+            // Assert
+            response.EnsureSuccessStatusCode();
+            var content = await response.Content.ReadAsStringAsync();
+        }
+
+        [Fact]
+        public async Task PostInspectionRequest_WithEmptyData_ShouldReturnFormWithErrors()
+        {
+            // Arrange
+            var formData = new Dictionary<string, string>
+            {
+                ["CheckpointPath"] = "",
+                ["MaxTokens"] = "100",
+                ["Temperature"] = "0.8"
+            };
+
+            var formContent = new FormUrlEncodedContent(formData);
+
+            // Act
+            var response = await _client.PostAsync("/Home/Inspect", formContent);
+
+            // Assert
+            response.EnsureSuccessStatusCode();
+            var content = await response.Content.ReadAsStringAsync();
+            // Should return to form view with validation errors
+            content.Should().Contain("form");
+        }
+    }
+
+    public class ServiceIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
+    {
+        private readonly WebApplicationFactory<Program> _factory;
+
+        public ServiceIntegrationTests(WebApplicationFactory<Program> factory)
+        {
+            _factory = factory;
+        }
+
+        [Fact]
+        public void Services_ShouldBeRegisteredCorrectly()
+        {
+            // Arrange
+            using var scope = _factory.Services.CreateScope();
+            var serviceProvider = scope.ServiceProvider;
+
+            // Act & Assert
+            serviceProvider.GetService<ITorchSharpInspectorService>().Should().NotBeNull();
+            serviceProvider.GetService<ISystemDiagnosticsService>().Should().NotBeNull();
+            serviceProvider.GetService<ICheckpointInspectionService>().Should().NotBeNull();
+            serviceProvider.GetService<IArchitectureAnalysisService>().Should().NotBeNull();
+            serviceProvider.GetService<IPerformanceBenchmarkService>().Should().NotBeNull();
+            serviceProvider.GetService<ITensorOperationsService>().Should().NotBeNull();
+            serviceProvider.GetService<IMemoryAnalysisService>().Should().NotBeNull();
+            serviceProvider.GetService<IReportExportService>().Should().NotBeNull();
+        }
+
+        [Fact]
+        public async Task SystemDiagnosticsService_Integration_ShouldWork()
+        {
+            // Arrange
+            using var scope = _factory.Services.CreateScope();
+            var service = scope.ServiceProvider.GetRequiredService<ISystemDiagnosticsService>();
+
+            // Act
+            var result = await service.GetSystemDiagnosticsAsync();
+
+            // Assert
+            result.Should().NotBeNull();
+            result.ProcessorCores.Should().BeGreaterThan(0);
+            result.TorchSharpVersion.Should().NotBeNullOrEmpty();
+        }
+
+        [Fact]
+        public async Task TensorOperationsService_Integration_ShouldWork()
+        {
+            // Arrange
+            using var scope = _factory.Services.CreateScope();
+            var service = scope.ServiceProvider.GetRequiredService<ITensorOperationsService>();
+
+            // Act
+            var result = await service.TestTensorOperationsAsync();
+
+            // Assert
+            result.Should().NotBeNull();
+            result.SupportedDevices.Should().NotBeEmpty();
+            result.SupportedDevices.Should().Contain("cpu");
+        }
+
+        [Fact]
+        public async Task ReportExportService_Integration_ShouldWork()
+        {
+            // Arrange
+            using var scope = _factory.Services.CreateScope();
+            var service = scope.ServiceProvider.GetRequiredService<IReportExportService>();
+            var report = new InspectorReport
+            {
+                CheckpointPath = "test.pt",
+                SystemInfo = new SystemDiagnostics { TorchSharpVersion = "0.105.1" }
+            };
+
+            // Act
+            var jsonResult = await service.ExportReportAsJsonAsync(report);
+            var csvResult = await service.ExportReportAsCsvAsync(report);
+
+            // Assert
+            jsonResult.Should().NotBeNull();
+            jsonResult.Length.Should().BeGreaterThan(0);
+            
+            csvResult.Should().NotBeNull();
+            csvResult.Length.Should().BeGreaterThan(0);
+            
+            var jsonString = System.Text.Encoding.UTF8.GetString(jsonResult);
+            jsonString.Should().Contain("checkpointPath");
+            
+            var csvString = System.Text.Encoding.UTF8.GetString(csvResult);
+            csvString.Should().Contain("Category,Property,Value");
+        }
+    }
+
+    public class EndToEndTests : IClassFixture<WebApplicationFactory<Program>>
+    {
+        private readonly WebApplicationFactory<Program> _factory;
+        private readonly HttpClient _client;
+
+        public EndToEndTests(WebApplicationFactory<Program> factory)
+        {
+            _factory = factory;
+            _client = _factory.CreateClient();
+        }
+
+        [Fact]
+        public async Task FullWorkflow_SystemDiagnostics_ShouldComplete()
+        {
+            // Step 1: Get system diagnostics
+            var systemResponse = await _client.GetAsync("/api/inspector/system");
+            systemResponse.EnsureSuccessStatusCode();
+            
+            var systemContent = await systemResponse.Content.ReadAsStringAsync();
+            var systemResult = JsonSerializer.Deserialize<ApiResponse<SystemDiagnostics>>(systemContent, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
+
+            systemResult!.Success.Should().BeTrue();
+            systemResult.Data.Should().NotBeNull();
+
+            // Step 2: Try to validate a non-existent checkpoint
+            var validateResponse = await _client.PostAsJsonAsync("/api/inspector/validate", "nonexistent.pt");
+            validateResponse.EnsureSuccessStatusCode();
+            
+            var validateContent = await validateResponse.Content.ReadAsStringAsync();
+            var validateResult = JsonSerializer.Deserialize<ApiResponse<bool>>(validateContent, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
+
+            validateResult!.Success.Should().BeTrue();
+            validateResult.Data.Should().BeFalse();
+
+            // Step 3: Get available checkpoints
+            var checkpointsResponse = await _client.GetAsync("/api/inspector/checkpoints");
+            checkpointsResponse.EnsureSuccessStatusCode();
+            
+            var checkpointsContent = await checkpointsResponse.Content.ReadAsStringAsync();
+            var checkpointsResult = JsonSerializer.Deserialize<ApiResponse<List<string>>>(checkpointsContent, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
+
+            checkpointsResult!.Success.Should().BeTrue();
+            checkpointsResult.Data.Should().NotBeNull();
+        }
+
+        [Fact]
+        public async Task HomePageToApiWorkflow_ShouldComplete()
+        {
+            // Step 1: Access home page
+            var homeResponse = await _client.GetAsync("/");
+            homeResponse.EnsureSuccessStatusCode();
+            
+            var homeContent = await homeResponse.Content.ReadAsStringAsync();
+            homeContent.Should().Contain("TorchSharp Model Inspector");
+
+            // Step 2: Access API documentation
+            var swaggerResponse = await _client.GetAsync("/api-docs");
+            swaggerResponse.EnsureSuccessStatusCode();
+            
+            var swaggerContent = await swaggerResponse.Content.ReadAsStringAsync();
+            swaggerContent.Should().Contain("swagger");
+
+            // Step 3: Test health endpoint
+            var healthResponse = await _client.GetAsync("/api/health");
+            healthResponse.EnsureSuccessStatusCode();
+            
+            var healthContent = await healthResponse.Content.ReadAsStringAsync();
+            healthContent.Should().Contain("Healthy");
+        }
+    }
+}

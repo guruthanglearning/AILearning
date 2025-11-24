@@ -1,0 +1,31 @@
+{
+  "model": {
+    "vocab_size": 256,
+    "block_size": 256,
+    "embedding_dim": 384,
+    "num_layers": 6,
+    "num_heads": 6,
+    "dropout": 0.2
+  },
+  "optimization": {
+    "batch_size": 64,
+    "learning_rate": 3e-4,
+    "max_iters": 5000,
+    "eval_interval": 500,
+    "eval_iters": 200,
+    "weight_decay": 0.1,
+    "gradient_clip": 1.0
+  },
+  "dataset": {
+    "training_file": "data/shakespeare_train.txt",
+    "validation_file": "data/shakespeare_val.txt"
+  },
+  "checkpointing": {
+    "output_directory": "checkpoints",
+    "save_interval": 1000
+  },
+  "monitoring": {
+    "log_directory": "logs",
+    "enable_tensorboard": false
+  }
+}

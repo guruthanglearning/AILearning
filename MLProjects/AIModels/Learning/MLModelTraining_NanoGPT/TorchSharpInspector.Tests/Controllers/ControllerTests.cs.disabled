@@ -1,0 +1,333 @@
+using Xunit;
+using Moq;
+using FluentAssertions;
+using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Mvc;
+using TorchSharpInspector.Controllers;
+using TorchSharpInspector.Services;
+using TorchSharpInspector.Models;
+
+namespace TorchSharpInspector.Tests.Controllers
+{
+    public class HomeControllerTests
+    {
+        private readonly Mock<ILogger<HomeController>> _mockLogger;
+        private readonly Mock<ITorchSharpInspectorService> _mockInspectorService;
+        private readonly Mock<ISystemDiagnosticsService> _mockSystemService;
+        private readonly HomeController _controller;
+
+        public HomeControllerTests()
+        {
+            _mockLogger = new Mock<ILogger<HomeController>>();
+            _mockInspectorService = new Mock<ITorchSharpInspectorService>();
+            _mockSystemService = new Mock<ISystemDiagnosticsService>();
+            _controller = new HomeController(_mockLogger.Object, _mockInspectorService.Object, _mockSystemService.Object);
+        }
+
+        [Fact]
+        public async Task Index_ShouldReturnViewWithSystemInfo()
+        {
+            // Arrange
+            var systemInfo = new SystemDiagnostics
+            {
+                TorchSharpVersion = "0.105.1",
+                ProcessorCores = 4
+            };
+            
+            _mockSystemService.Setup(x => x.GetSystemDiagnosticsAsync())
+                            .ReturnsAsync(systemInfo);
+            _mockSystemService.Setup(x => x.ValidateTorchSharpInstallationAsync())
+                            .ReturnsAsync(true);
+
+            // Act
+            var result = await _controller.Index();
+
+            // Assert
+            result.Should().BeOfType<ViewResult>();
+            var viewResult = result as ViewResult;
+            viewResult!.ViewData["SystemInfo"].Should().Be(systemInfo);
+            viewResult.ViewData["TorchSharpValid"].Should().Be(true);
+        }
+
+        [Fact]
+        public async Task Index_WhenExceptionOccurs_ShouldHandleGracefully()
+        {
+            // Arrange
+            _mockSystemService.Setup(x => x.GetSystemDiagnosticsAsync())
+                            .ThrowsAsync(new Exception("Test exception"));
+
+            // Act
+            var result = await _controller.Index();
+
+            // Assert
+            result.Should().BeOfType<ViewResult>();
+            var viewResult = result as ViewResult;
+            viewResult!.ViewData["SystemInfo"].Should().BeNull();
+            viewResult.ViewData["TorchSharpValid"].Should().Be(false);
+        }
+
+        [Fact]
+        public async Task Inspect_WithValidModel_ShouldRedirectToReport()
+        {
+            // Arrange
+            var request = new InspectionRequest
+            {
+                CheckpointPath = "valid.pt"
+            };
+            
+            _mockInspectorService.Setup(x => x.ValidateCheckpointAsync(request.CheckpointPath))
+                               .ReturnsAsync(true);
+
+            // Act
+            var result = await _controller.Inspect(request);
+
+            // Assert
+            result.Should().BeOfType<RedirectToActionResult>();
+            var redirectResult = result as RedirectToActionResult;
+            redirectResult!.ActionName.Should().Be("Report");
+        }
+
+        [Fact]
+        public async Task Inspect_WithInvalidModel_ShouldReturnViewWithError()
+        {
+            // Arrange
+            var request = new InspectionRequest
+            {
+                CheckpointPath = "invalid.pt"
+            };
+            
+            _mockInspectorService.Setup(x => x.ValidateCheckpointAsync(request.CheckpointPath))
+                               .ReturnsAsync(false);
+
+            // Act
+            var result = await _controller.Inspect(request);
+
+            // Assert
+            result.Should().BeOfType<ViewResult>();
+            var viewResult = result as ViewResult;
+            viewResult!.ViewName.Should().Be("Index");
+            _controller.ModelState.IsValid.Should().BeFalse();
+        }
+
+        [Fact]
+        public async Task Report_WithValidCheckpointPath_ShouldReturnViewWithReport()
+        {
+            // Arrange
+            var checkpointPath = "test.pt";
+            var report = new InspectorReport
+            {
+                CheckpointPath = checkpointPath
+            };
+            
+            _mockInspectorService.Setup(x => x.GenerateFullReportAsync(checkpointPath))
+                               .ReturnsAsync(report);
+
+            // Act
+            var result = await _controller.Report(checkpointPath);
+
+            // Assert
+            result.Should().BeOfType<ViewResult>();
+            var viewResult = result as ViewResult;
+            viewResult!.Model.Should().Be(report);
+        }
+
+        [Fact]
+        public async Task Report_WithEmptyCheckpointPath_ShouldRedirectToIndex()
+        {
+            // Act
+            var result = await _controller.Report("");
+
+            // Assert
+            result.Should().BeOfType<RedirectToActionResult>();
+            var redirectResult = result as RedirectToActionResult;
+            redirectResult!.ActionName.Should().Be("Index");
+        }
+
+        [Fact]
+        public void Privacy_ShouldReturnView()
+        {
+            // Act
+            var result = _controller.Privacy();
+
+            // Assert
+            result.Should().BeOfType<ViewResult>();
+        }
+
+        [Fact]
+        public void Error_ShouldReturnView()
+        {
+            // Act
+            var result = _controller.Error();
+
+            // Assert
+            result.Should().BeOfType<ViewResult>();
+        }
+    }
+
+    public class InspectorControllerTests
+    {
+        private readonly Mock<ILogger<InspectorController>> _mockLogger;
+        private readonly Mock<ITorchSharpInspectorService> _mockInspectorService;
+        private readonly Mock<ISystemDiagnosticsService> _mockSystemService;
+        private readonly Mock<IReportExportService> _mockExportService;
+        private readonly InspectorController _controller;
+
+        public InspectorControllerTests()
+        {
+            _mockLogger = new Mock<ILogger<InspectorController>>();
+            _mockInspectorService = new Mock<ITorchSharpInspectorService>();
+            _mockSystemService = new Mock<ISystemDiagnosticsService>();
+            _mockExportService = new Mock<IReportExportService>();
+            _controller = new InspectorController(
+                _mockLogger.Object,
+                _mockInspectorService.Object,
+                _mockSystemService.Object,
+                _mockExportService.Object);
+        }
+
+        [Fact]
+        public async Task GetSystemDiagnostics_ShouldReturnSuccessResponse()
+        {
+            // Arrange
+            var systemInfo = new SystemDiagnostics
+            {
+                TorchSharpVersion = "0.105.1",
+                ProcessorCores = 4
+            };
+            
+            _mockSystemService.Setup(x => x.GetSystemDiagnosticsAsync())
+                            .ReturnsAsync(systemInfo);
+
+            // Act
+            var result = await _controller.GetSystemDiagnostics();
+
+            // Assert
+            result.Should().BeOfType<ActionResult<ApiResponse<SystemDiagnostics>>>();
+            var okResult = result.Result as OkObjectResult;
+            okResult.Should().NotBeNull();
+            
+            var response = okResult!.Value as ApiResponse<SystemDiagnostics>;
+            response!.Success.Should().BeTrue();
+            response.Data.Should().Be(systemInfo);
+        }
+
+        [Fact]
+        public async Task GetSystemDiagnostics_WhenExceptionOccurs_ShouldReturnErrorResponse()
+        {
+            // Arrange
+            _mockSystemService.Setup(x => x.GetSystemDiagnosticsAsync())
+                            .ThrowsAsync(new Exception("Test error"));
+
+            // Act
+            var result = await _controller.GetSystemDiagnostics();
+
+            // Assert
+            var statusCodeResult = result.Result as ObjectResult;
+            statusCodeResult!.StatusCode.Should().Be(500);
+            
+            var response = statusCodeResult.Value as ApiResponse<SystemDiagnostics>;
+            response!.Success.Should().BeFalse();
+            response.Errors.Should().Contain("Test error");
+        }
+
+        [Fact]
+        public async Task ValidateCheckpoint_WithValidPath_ShouldReturnTrue()
+        {
+            // Arrange
+            var checkpointPath = "valid.pt";
+            _mockInspectorService.Setup(x => x.ValidateCheckpointAsync(checkpointPath))
+                               .ReturnsAsync(true);
+
+            // Act
+            var result = await _controller.ValidateCheckpoint(checkpointPath);
+
+            // Assert
+            var okResult = result.Result as OkObjectResult;
+            var response = okResult!.Value as ApiResponse<bool>;
+            response!.Success.Should().BeTrue();
+            response.Data.Should().BeTrue();
+        }
+
+        [Fact]
+        public async Task ValidateCheckpoint_WithEmptyPath_ShouldReturnBadRequest()
+        {
+            // Act
+            var result = await _controller.ValidateCheckpoint("");
+
+            // Assert
+            var badRequestResult = result.Result as BadRequestObjectResult;
+            badRequestResult.Should().NotBeNull();
+            
+            var response = badRequestResult!.Value as ApiResponse<bool>;
+            response!.Success.Should().BeFalse();
+        }
+
+        [Fact]
+        public async Task InspectCheckpoint_WithValidRequest_ShouldReturnReport()
+        {
+            // Arrange
+            var request = new InspectionRequest
+            {
+                CheckpointPath = "test.pt"
+            };
+            var report = new InspectorReport();
+            
+            _mockInspectorService.Setup(x => x.GenerateFullReportAsync(request.CheckpointPath))
+                               .ReturnsAsync(report);
+
+            // Act
+            var result = await _controller.InspectCheckpoint(request);
+
+            // Assert
+            var okResult = result.Result as OkObjectResult;
+            var response = okResult!.Value as ApiResponse<InspectorReport>;
+            response!.Success.Should().BeTrue();
+            response.Data.Should().Be(report);
+        }
+
+        [Fact]
+        public async Task ExportReport_WithJsonFormat_ShouldReturnFile()
+        {
+            // Arrange
+            var report = new InspectorReport();
+            var jsonData = System.Text.Encoding.UTF8.GetBytes("{\"test\": \"data\"}");
+            
+            _mockExportService.Setup(x => x.ExportReportAsJsonAsync(report))
+                            .ReturnsAsync(jsonData);
+
+            // Act
+            var result = await _controller.ExportReport("json", report);
+
+            // Assert
+            result.Should().BeOfType<FileContentResult>();
+            var fileResult = result as FileContentResult;
+            fileResult!.ContentType.Should().Be("application/json");
+        }
+
+        [Fact]
+        public async Task ExportReport_WithUnsupportedFormat_ShouldReturnBadRequest()
+        {
+            // Arrange
+            var report = new InspectorReport();
+
+            // Act
+            var result = await _controller.ExportReport("xml", report);
+
+            // Assert
+            result.Should().BeOfType<BadRequestObjectResult>();
+        }
+
+        [Fact]
+        public async Task GetAvailableCheckpoints_ShouldReturnCheckpointList()
+        {
+            // Act
+            var result = await _controller.GetAvailableCheckpoints();
+
+            // Assert
+            var okResult = result.Result as OkObjectResult;
+            var response = okResult!.Value as ApiResponse<List<string>>;
+            response!.Success.Should().BeTrue();
+            response.Data.Should().NotBeNull();
+        }
+    }
+}

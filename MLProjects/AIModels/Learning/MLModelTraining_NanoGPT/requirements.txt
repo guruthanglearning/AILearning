@@ -1,0 +1,57 @@
+# NanoGPT C# Project Dependencies
+# This file lists all NuGet packages and dependencies required for the project
+
+# Core ML Framework
+TorchSharp-cpu==0.105.1
+
+# Logging and Configuration
+Microsoft.Extensions.Logging.Abstractions==8.0.0
+Microsoft.Extensions.Configuration==8.0.0
+Microsoft.Extensions.Configuration.Json==8.0.0
+Microsoft.Extensions.DependencyInjection==8.0.0
+Microsoft.Extensions.Hosting==8.0.0
+Serilog==4.0.1
+Serilog.Extensions.Hosting==8.0.0
+Serilog.Sinks.Console==6.0.0
+Serilog.Sinks.File==6.0.0
+
+# Web API Dependencies
+Microsoft.AspNetCore.OpenApi==8.0.20
+Swashbuckle.AspNetCore==6.6.2
+Microsoft.AspNetCore.Mvc.NewtonsoftJson==8.0.20
+
+# Testing Dependencies
+Microsoft.NET.Test.Sdk==17.11.1
+xunit==2.9.3
+xunit.runner.visualstudio==2.8.2
+coverlet.collector==6.0.0
+Moq==4.20.70
+FluentAssertions==6.12.1
+
+# Performance and Monitoring
+Microsoft.AspNetCore.Diagnostics==2.2.0
+Microsoft.Extensions.Diagnostics.HealthChecks==8.0.0
+
+# JSON Processing
+Newtonsoft.Json==13.0.3
+System.Text.Json==8.0.0
+
+# HTTP Client
+Microsoft.Extensions.Http==8.0.0
+
+# Data Processing
+CsvHelper==33.0.1
+
+# Docker Health Checks
+Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions==8.0.0
+
+# Additional Dependencies for Production
+Microsoft.AspNetCore.Authentication.JwtBearer==8.0.20
+Microsoft.AspNetCore.Authorization==8.0.20
+
+# Development Tools
+Microsoft.EntityFrameworkCore.InMemory==8.0.0  # For testing purposes
+
+# Note: Install these packages using:
+# dotnet add package <PackageName> --version <Version>
+# or use the Package Manager Console in Visual Studio

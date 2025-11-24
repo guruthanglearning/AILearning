@@ -1,0 +1,297 @@
+using Xunit;
+using FluentAssertions;
+using TorchSharpInspector.Models;
+using System.ComponentModel.DataAnnotations;
+
+namespace TorchSharpInspector.Tests.Models
+{
+    public class InspectionRequestTests
+    {
+        [Fact]
+        public void InspectionRequest_WithValidData_ShouldPassValidation()
+        {
+            // Arrange
+            var request = new InspectionRequest
+            {
+                CheckpointPath = "test.pt",
+                TestPrompt = "Test prompt",
+                MaxTokens = 100,
+                Temperature = 0.8,
+                IncludeBenchmarks = true,
+                IncludeMemoryAnalysis = true
+            };
+
+            // Act
+            var validationResults = ValidateModel(request);
+
+            // Assert
+            validationResults.Should().BeEmpty();
+        }
+
+        [Fact]
+        public void InspectionRequest_WithEmptyCheckpointPath_ShouldFailValidation()
+        {
+            // Arrange
+            var request = new InspectionRequest
+            {
+                CheckpointPath = "", // Invalid: empty path
+                MaxTokens = 100,
+                Temperature = 0.8
+            };
+
+            // Act
+            var validationResults = ValidateModel(request);
+
+            // Assert
+            validationResults.Should().NotBeEmpty();
+            validationResults.Should().Contain(r => r.ErrorMessage!.Contains("required") || r.ErrorMessage!.Contains("Required"));
+        }
+
+        [Theory]
+        [InlineData(0)] // Below minimum
+        [InlineData(501)] // Above maximum
+        public void InspectionRequest_WithInvalidMaxTokens_ShouldFailValidation(int maxTokens)
+        {
+            // Arrange
+            var request = new InspectionRequest
+            {
+                CheckpointPath = "test.pt",
+                MaxTokens = maxTokens,
+                Temperature = 0.8
+            };
+
+            // Act
+            var validationResults = ValidateModel(request);
+
+            // Assert
+            validationResults.Should().NotBeEmpty();
+        }
+
+        [Theory]
+        [InlineData(0.05)] // Below minimum
+        [InlineData(2.5)] // Above maximum
+        public void InspectionRequest_WithInvalidTemperature_ShouldFailValidation(double temperature)
+        {
+            // Arrange
+            var request = new InspectionRequest
+            {
+                CheckpointPath = "test.pt",
+                MaxTokens = 100,
+                Temperature = temperature
+            };
+
+            // Act
+            var validationResults = ValidateModel(request);
+
+            // Assert
+            validationResults.Should().NotBeEmpty();
+        }
+
+        [Fact]
+        public void InspectionRequest_DefaultValues_ShouldBeSet()
+        {
+            // Arrange & Act
+            var request = new InspectionRequest();
+
+            // Assert
+            request.CheckpointPath.Should().Be(string.Empty);
+            request.IncludeBenchmarks.Should().BeTrue();
+            request.IncludeMemoryAnalysis.Should().BeTrue();
+            request.TestPrompt.Should().Be("Once upon a time");
+            request.MaxTokens.Should().Be(50);
+            request.Temperature.Should().Be(1.0);
+        }
+
+        private static List<ValidationResult> ValidateModel(object model)
+        {
+            var validationResults = new List<ValidationResult>();
+            var context = new ValidationContext(model, null, null);
+            Validator.TryValidateObject(model, context, validationResults, true);
+            return validationResults;
+        }
+    }
+
+    public class InspectorReportTests
+    {
+        [Fact]
+        public void InspectorReport_DefaultConstructor_ShouldInitializeProperties()
+        {
+            // Arrange & Act
+            var report = new InspectorReport();
+
+            // Assert
+            report.GeneratedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));
+            report.CheckpointPath.Should().Be(string.Empty);
+            report.SystemInfo.Should().NotBeNull();
+            report.CheckpointInfo.Should().NotBeNull();
+            report.ArchitectureInfo.Should().NotBeNull();
+            report.BenchmarkResults.Should().NotBeNull();
+            report.TensorResults.Should().NotBeNull();
+            report.MemoryAnalysis.Should().NotBeNull();
+            report.Warnings.Should().NotBeNull();
+            report.Recommendations.Should().NotBeNull();
+        }
+
+        [Fact]
+        public void InspectorReport_WithData_ShouldRetainValues()
+        {
+            // Arrange
+            var checkpointPath = "test.pt";
+            var warnings = new List<string> { "Test warning" };
+            var recommendations = new List<string> { "Test recommendation" };
+
+            // Act
+            var report = new InspectorReport
+            {
+                CheckpointPath = checkpointPath,
+                Warnings = warnings,
+                Recommendations = recommendations
+            };
+
+            // Assert
+            report.CheckpointPath.Should().Be(checkpointPath);
+            report.Warnings.Should().BeEquivalentTo(warnings);
+            report.Recommendations.Should().BeEquivalentTo(recommendations);
+        }
+    }
+
+    public class SystemDiagnosticsTests
+    {
+        [Fact]
+        public void SystemDiagnostics_DefaultConstructor_ShouldInitializeProperties()
+        {
+            // Arrange & Act
+            var diagnostics = new SystemDiagnostics();
+
+            // Assert
+            diagnostics.TorchSharpVersion.Should().Be(string.Empty);
+            diagnostics.DotNetVersion.Should().Be(string.Empty);
+            diagnostics.OperatingSystem.Should().Be(string.Empty);
+            diagnostics.ProcessorName.Should().Be(string.Empty);
+            diagnostics.CudaVersion.Should().Be(string.Empty);
+            diagnostics.ProcessorCores.Should().Be(0);
+            diagnostics.TotalMemoryMB.Should().Be(0);
+            diagnostics.AvailableMemoryMB.Should().Be(0);
+            diagnostics.CudaAvailable.Should().BeFalse();
+            diagnostics.AvailableDevices.Should().NotBeNull();
+            diagnostics.CheckTime.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));
+        }
+
+        [Fact]
+        public void SystemDiagnostics_WithData_ShouldRetainValues()
+        {
+            // Arrange
+            var torchSharpVersion = "0.105.1";
+            var processorCores = 8;
+            var devices = new List<string> { "cpu", "cuda:0" };
+
+            // Act
+            var diagnostics = new SystemDiagnostics
+            {
+                TorchSharpVersion = torchSharpVersion,
+                ProcessorCores = processorCores,
+                AvailableDevices = devices,
+                CudaAvailable = true
+            };
+
+            // Assert
+            diagnostics.TorchSharpVersion.Should().Be(torchSharpVersion);
+            diagnostics.ProcessorCores.Should().Be(processorCores);
+            diagnostics.AvailableDevices.Should().BeEquivalentTo(devices);
+            diagnostics.CudaAvailable.Should().BeTrue();
+        }
+    }
+
+    public class ApiResponseTests
+    {
+        [Fact]
+        public void ApiResponse_DefaultConstructor_ShouldInitializeProperties()
+        {
+            // Arrange & Act
+            var response = new ApiResponse<string>();
+
+            // Assert
+            response.Success.Should().BeFalse();
+            response.Data.Should().BeNull();
+            response.Message.Should().Be(string.Empty);
+            response.Errors.Should().NotBeNull();
+            response.Timestamp.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));
+        }
+
+        [Fact]
+        public void ApiResponse_WithData_ShouldRetainValues()
+        {
+            // Arrange
+            var data = "test data";
+            var message = "Success";
+            var errors = new List<string> { "Error 1", "Error 2" };
+
+            // Act
+            var response = new ApiResponse<string>
+            {
+                Success = true,
+                Data = data,
+                Message = message,
+                Errors = errors
+            };
+
+            // Assert
+            response.Success.Should().BeTrue();
+            response.Data.Should().Be(data);
+            response.Message.Should().Be(message);
+            response.Errors.Should().BeEquivalentTo(errors);
+        }
+    }
+
+    public class CheckpointInfoTests
+    {
+        [Fact]
+        public void CheckpointInfo_DefaultConstructor_ShouldInitializeProperties()
+        {
+            // Arrange & Act
+            var checkpointInfo = new CheckpointInfo();
+
+            // Assert
+            checkpointInfo.FilePath.Should().Be(string.Empty);
+            checkpointInfo.CheckpointType.Should().Be(string.Empty);
+            checkpointInfo.ModelFormat.Should().Be(string.Empty);
+            checkpointInfo.FileSizeMB.Should().Be(0);
+            checkpointInfo.ParameterCount.Should().Be(0);
+            checkpointInfo.IsValidCheckpoint.Should().BeFalse();
+            checkpointInfo.Metadata.Should().NotBeNull();
+            checkpointInfo.StateKeys.Should().NotBeNull();
+        }
+
+        [Fact]
+        public void CheckpointInfo_WithData_ShouldRetainValues()
+        {
+            // Arrange
+            var filePath = "test.pt";
+            var fileSizeMB = 100L;
+            var parameterCount = 1000000;
+            var metadata = new Dictionary<string, object> { { "key", "value" } };
+            var stateKeys = new List<string> { "layer1.weight", "layer1.bias" };
+
+            // Act
+            var checkpointInfo = new CheckpointInfo
+            {
+                FilePath = filePath,
+                FileSizeMB = fileSizeMB,
+                ParameterCount = parameterCount,
+                IsValidCheckpoint = true,
+                CheckpointType = "PyTorch",
+                Metadata = metadata,
+                StateKeys = stateKeys
+            };
+
+            // Assert
+            checkpointInfo.FilePath.Should().Be(filePath);
+            checkpointInfo.FileSizeMB.Should().Be(fileSizeMB);
+            checkpointInfo.ParameterCount.Should().Be(parameterCount);
+            checkpointInfo.IsValidCheckpoint.Should().BeTrue();
+            checkpointInfo.CheckpointType.Should().Be("PyTorch");
+            checkpointInfo.Metadata.Should().BeEquivalentTo(metadata);
+            checkpointInfo.StateKeys.Should().BeEquivalentTo(stateKeys);
+        }
+    }
+}

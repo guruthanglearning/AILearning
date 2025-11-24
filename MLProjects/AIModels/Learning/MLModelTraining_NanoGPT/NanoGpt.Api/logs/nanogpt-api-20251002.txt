@@ -1,0 +1,53 @@
+2025-10-02 18:23:54.303 -07:00 [INF] Starting NanoGPT API
+2025-10-02 18:23:54.457 -07:00 [INF] Now listening on: http://localhost:5012
+2025-10-02 18:23:54.461 -07:00 [INF] Application started. Press Ctrl+C to shut down.
+2025-10-02 18:23:54.463 -07:00 [INF] Hosting environment: Development
+2025-10-02 18:23:54.464 -07:00 [INF] Content root path: D:\Study\AILearning\MLProjects\AIModels\Learning\MLModelTraining_NanoGPT\NanoGpt.Api
+2025-10-02 18:24:33.267 -07:00 [INF] Request starting HTTP/1.1 GET http://localhost:5012/ - null null
+2025-10-02 18:24:33.430 -07:00 [WRN] Failed to determine the https port for redirect.
+2025-10-02 18:24:33.523 -07:00 [INF] Request finished HTTP/1.1 GET http://localhost:5012/ - 404 0 null 261.9086ms
+2025-10-02 18:24:33.602 -07:00 [INF] Request reached the end of the middleware pipeline without being handled by application code. Request path: GET http://localhost:5012/, Response status code: 404
+2025-10-02 18:28:03.379 -07:00 [INF] Request starting HTTP/1.1 GET http://localhost:5012/swagger - null null
+2025-10-02 18:28:03.390 -07:00 [INF] Request finished HTTP/1.1 GET http://localhost:5012/swagger - 301 0 null 10.6469ms
+2025-10-02 18:28:03.401 -07:00 [INF] Request starting HTTP/1.1 GET http://localhost:5012/swagger/index.html - null null
+2025-10-02 18:28:03.500 -07:00 [INF] Request finished HTTP/1.1 GET http://localhost:5012/swagger/index.html - 200 null text/html;charset=utf-8 99.2235ms
+2025-10-02 18:28:03.553 -07:00 [INF] Request starting HTTP/1.1 GET http://localhost:5012/swagger/swagger-ui.css - null null
+2025-10-02 18:28:03.566 -07:00 [INF] Request starting HTTP/1.1 GET http://localhost:5012/swagger/swagger-ui-standalone-preset.js - null null
+2025-10-02 18:28:03.567 -07:00 [INF] Request starting HTTP/1.1 GET http://localhost:5012/swagger/swagger-ui-bundle.js - null null
+2025-10-02 18:28:03.595 -07:00 [INF] Sending file. Request path: '/swagger-ui.css'. Physical path: 'N/A'
+2025-10-02 18:28:03.595 -07:00 [INF] Sending file. Request path: '/swagger-ui-standalone-preset.js'. Physical path: 'N/A'
+2025-10-02 18:28:03.600 -07:00 [INF] Request finished HTTP/1.1 GET http://localhost:5012/swagger/swagger-ui.css - 200 152034 text/css 47.0545ms
+2025-10-02 18:28:03.600 -07:00 [INF] Request finished HTTP/1.1 GET http://localhost:5012/swagger/swagger-ui-standalone-preset.js - 200 230280 text/javascript 33.4086ms
+2025-10-02 18:28:03.635 -07:00 [INF] Sending file. Request path: '/swagger-ui-bundle.js'. Physical path: 'N/A'
+2025-10-02 18:28:03.637 -07:00 [INF] Request finished HTTP/1.1 GET http://localhost:5012/swagger/swagger-ui-bundle.js - 200 1456926 text/javascript 70.8194ms
+2025-10-02 18:28:03.955 -07:00 [INF] Request starting HTTP/1.1 GET http://localhost:5012/swagger/v1/swagger.json - null null
+2025-10-02 18:28:03.986 -07:00 [INF] No action descriptors found. This may indicate an incorrectly configured application or missing application parts. To learn more, visit https://aka.ms/aspnet/mvc/app-parts
+2025-10-02 18:28:04.015 -07:00 [INF] Request starting HTTP/1.1 GET http://localhost:5012/swagger/favicon-32x32.png - null null
+2025-10-02 18:28:04.040 -07:00 [INF] Sending file. Request path: '/favicon-32x32.png'. Physical path: 'N/A'
+2025-10-02 18:28:04.052 -07:00 [INF] Request finished HTTP/1.1 GET http://localhost:5012/swagger/favicon-32x32.png - 200 628 image/png 35.972ms
+2025-10-02 18:28:04.309 -07:00 [INF] Request finished HTTP/1.1 GET http://localhost:5012/swagger/v1/swagger.json - 200 null application/json;charset=utf-8 353.6559ms
+2025-10-02 18:29:05.886 -07:00 [INF] Application is shutting down...
+2025-10-02 18:30:02.029 -07:00 [INF] Starting NanoGPT API
+2025-10-02 18:30:02.197 -07:00 [INF] Now listening on: http://localhost:5012
+2025-10-02 18:30:02.201 -07:00 [INF] Application started. Press Ctrl+C to shut down.
+2025-10-02 18:30:02.203 -07:00 [INF] Hosting environment: Development
+2025-10-02 18:30:02.204 -07:00 [INF] Content root path: D:\Study\AILearning\MLProjects\AIModels\Learning\MLModelTraining_NanoGPT\NanoGpt.Api
+2025-10-02 18:32:28.668 -07:00 [INF] Application is shutting down...
+2025-10-02 18:34:18.062 -07:00 [INF] Starting NanoGPT API
+2025-10-02 18:34:18.215 -07:00 [INF] Now listening on: http://localhost:5012
+2025-10-02 18:34:18.219 -07:00 [INF] Application started. Press Ctrl+C to shut down.
+2025-10-02 18:34:18.221 -07:00 [INF] Hosting environment: Development
+2025-10-02 18:34:18.221 -07:00 [INF] Content root path: D:\Study\AILearning\MLProjects\AIModels\Learning\MLModelTraining_NanoGPT\NanoGpt.Api
+2025-10-02 18:34:56.088 -07:00 [INF] Application is shutting down...
+2025-10-02 18:35:22.498 -07:00 [INF] Starting NanoGPT API
+2025-10-02 18:35:22.956 -07:00 [INF] Now listening on: http://localhost:5012
+2025-10-02 18:35:22.969 -07:00 [INF] Application started. Press Ctrl+C to shut down.
+2025-10-02 18:35:22.972 -07:00 [INF] Hosting environment: Development
+2025-10-02 18:35:22.974 -07:00 [INF] Content root path: D:\Study\AILearning\MLProjects\AIModels\Learning\MLModelTraining_NanoGPT\NanoGpt.Api
+2025-10-02 18:36:04.372 -07:00 [INF] Application is shutting down...
+2025-10-02 18:46:42.981 -07:00 [INF] Starting NanoGPT API
+2025-10-02 18:46:43.396 -07:00 [INF] Now listening on: http://localhost:5012
+2025-10-02 18:46:43.409 -07:00 [INF] Application started. Press Ctrl+C to shut down.
+2025-10-02 18:46:43.412 -07:00 [INF] Hosting environment: Development
+2025-10-02 18:46:43.414 -07:00 [INF] Content root path: D:\Study\AILearning\MLProjects\AIModels\Learning\MLModelTraining_NanoGPT\NanoGpt.Api
+2025-10-02 19:52:46.915 -07:00 [INF] Application is shutting down...

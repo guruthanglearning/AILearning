@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "dgSpecHash": "ld9gUDhu9sc=",
+  "success": true,
+  "projectFilePath": "D:\\Study\\AILearning\\MLProjects\\AIModels\\Learning\\MLModelTraining_NanoGPT\\NanoGpt.Core\\NanoGpt.Core.csproj",
+  "expectedPackageFiles": [
+    "D:\\Study\\AILearning\\shared_Environment\\dotnet\\packages\\google.protobuf\\3.21.9\\google.protobuf.3.21.9.nupkg.sha512",
+    "D:\\Study\\AILearning\\shared_Environment\\dotnet\\packages\\libtorch-cpu\\2.5.1\\libtorch-cpu.2.5.1.nupkg.sha512",
+    "D:\\Study\\AILearning\\shared_Environment\\dotnet\\packages\\libtorch-cpu-linux-x64\\2.5.1\\libtorch-cpu-linux-x64.2.5.1.nupkg.sha512",
+    "D:\\Study\\AILearning\\shared_Environment\\dotnet\\packages\\libtorch-cpu-osx-arm64\\2.5.1\\libtorch-cpu-osx-arm64.2.5.1.nupkg.sha512",
+    "D:\\Study\\AILearning\\shared_Environment\\dotnet\\packages\\libtorch-cpu-win-x64\\2.5.1\\libtorch-cpu-win-x64.2.5.1.nupkg.sha512",
+    "D:\\Study\\AILearning\\shared_Environment\\dotnet\\packages\\microsoft.extensions.dependencyinjection.abstractions\\8.0.0\\microsoft.extensions.dependencyinjection.abstractions.8.0.0.nupkg.sha512",
+    "D:\\Study\\AILearning\\shared_Environment\\dotnet\\packages\\microsoft.extensions.logging.abstractions\\8.0.0\\microsoft.extensions.logging.abstractions.8.0.0.nupkg.sha512",
+    "D:\\Study\\AILearning\\shared_Environment\\dotnet\\packages\\sharpziplib\\1.4.0\\sharpziplib.1.4.0.nupkg.sha512",
+    "D:\\Study\\AILearning\\shared_Environment\\dotnet\\packages\\skiasharp\\2.88.6\\skiasharp.2.88.6.nupkg.sha512",
+    "D:\\Study\\AILearning\\shared_Environment\\dotnet\\packages\\skiasharp.nativeassets.macos\\2.88.6\\skiasharp.nativeassets.macos.2.88.6.nupkg.sha512",
+    "D:\\Study\\AILearning\\shared_Environment\\dotnet\\packages\\skiasharp.nativeassets.win32\\2.88.6\\skiasharp.nativeassets.win32.2.88.6.nupkg.sha512",
+    "D:\\Study\\AILearning\\shared_Environment\\dotnet\\packages\\system.memory\\4.5.5\\system.memory.4.5.5.nupkg.sha512",
+    "D:\\Study\\AILearning\\shared_Environment\\dotnet\\packages\\torchsharp\\0.105.1\\torchsharp.0.105.1.nupkg.sha512",
+    "D:\\Study\\AILearning\\shared_Environment\\dotnet\\packages\\torchsharp-cpu\\0.105.1\\torchsharp-cpu.0.105.1.nupkg.sha512"
+  ],
+  "logs": []
+}

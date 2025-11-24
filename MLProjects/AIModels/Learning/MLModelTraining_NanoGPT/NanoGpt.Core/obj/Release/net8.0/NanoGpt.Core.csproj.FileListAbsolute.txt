@@ -1,0 +1,13 @@
+D:\Study\AILearning\MLProjects\AIModels\Learning\MLModelTraining_NanoGPT\NanoGpt.Core\bin\Release\net8.0\NanoGpt.Core.deps.json
+D:\Study\AILearning\MLProjects\AIModels\Learning\MLModelTraining_NanoGPT\NanoGpt.Core\bin\Release\net8.0\NanoGpt.Core.dll
+D:\Study\AILearning\MLProjects\AIModels\Learning\MLModelTraining_NanoGPT\NanoGpt.Core\bin\Release\net8.0\NanoGpt.Core.pdb
+D:\Study\AILearning\MLProjects\AIModels\Learning\MLModelTraining_NanoGPT\NanoGpt.Core\obj\Release\net8.0\NanoGpt.Core.csproj.AssemblyReference.cache
+D:\Study\AILearning\MLProjects\AIModels\Learning\MLModelTraining_NanoGPT\NanoGpt.Core\obj\Release\net8.0\NanoGpt.Core.GeneratedMSBuildEditorConfig.editorconfig
+D:\Study\AILearning\MLProjects\AIModels\Learning\MLModelTraining_NanoGPT\NanoGpt.Core\obj\Release\net8.0\NanoGpt.Core.AssemblyInfoInputs.cache
+D:\Study\AILearning\MLProjects\AIModels\Learning\MLModelTraining_NanoGPT\NanoGpt.Core\obj\Release\net8.0\NanoGpt.Core.AssemblyInfo.cs
+D:\Study\AILearning\MLProjects\AIModels\Learning\MLModelTraining_NanoGPT\NanoGpt.Core\obj\Release\net8.0\NanoGpt.Core.csproj.CoreCompileInputs.cache
+D:\Study\AILearning\MLProjects\AIModels\Learning\MLModelTraining_NanoGPT\NanoGpt.Core\obj\Release\net8.0\NanoGpt.Core.sourcelink.json
+D:\Study\AILearning\MLProjects\AIModels\Learning\MLModelTraining_NanoGPT\NanoGpt.Core\obj\Release\net8.0\NanoGpt.Core.dll
+D:\Study\AILearning\MLProjects\AIModels\Learning\MLModelTraining_NanoGPT\NanoGpt.Core\obj\Release\net8.0\refint\NanoGpt.Core.dll
+D:\Study\AILearning\MLProjects\AIModels\Learning\MLModelTraining_NanoGPT\NanoGpt.Core\obj\Release\net8.0\NanoGpt.Core.pdb
+D:\Study\AILearning\MLProjects\AIModels\Learning\MLModelTraining_NanoGPT\NanoGpt.Core\obj\Release\net8.0\ref\NanoGpt.Core.dll

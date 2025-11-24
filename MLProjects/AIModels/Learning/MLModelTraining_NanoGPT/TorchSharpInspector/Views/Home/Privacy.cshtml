@@ -1,0 +1,131 @@
+@{
+    ViewData["Title"] = "Privacy Policy";
+}
+
+<div class="row">
+    <div class="col-12">
+        <h1 class="section-title">
+            <i class="fas fa-shield-alt me-3"></i>Privacy Policy
+        </h1>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-body">
+                <h5><i class="fas fa-info-circle me-2"></i>Data Collection</h5>
+                <p>
+                    TorchSharp Inspector is designed to analyze your machine learning models locally. 
+                    The application processes your checkpoint files and system information to provide 
+                    diagnostic reports and recommendations.
+                </p>
+
+                <h5><i class="fas fa-database me-2"></i>Data Storage</h5>
+                <p>
+                    All analysis is performed locally on your machine. No model data, checkpoint files, 
+                    or personal information is transmitted to external servers. Analysis reports are 
+                    generated and stored temporarily in memory during the inspection process.
+                </p>
+
+                <h5><i class="fas fa-file-alt me-2"></i>Report Generation</h5>
+                <p>
+                    The application generates inspection reports containing:
+                </p>
+                <ul>
+                    <li>System hardware and software information</li>
+                    <li>Model architecture details from your checkpoint files</li>
+                    <li>Performance benchmarks and memory usage statistics</li>
+                    <li>Recommendations for optimization</li>
+                </ul>
+
+                <h5><i class="fas fa-download me-2"></i>Export Functionality</h5>
+                <p>
+                    You can export your analysis reports in JSON or CSV format. These exports contain 
+                    only the analysis results and system information - no raw model data is included.
+                </p>
+
+                <h5><i class="fas fa-lock me-2"></i>Security</h5>
+                <p>
+                    Your checkpoint files and model data remain on your local system at all times. 
+                    The application does not establish any external network connections for data 
+                    transmission purposes.
+                </p>
+
+                <h5><i class="fas fa-cog me-2"></i>Logging</h5>
+                <p>
+                    The application may generate local log files for debugging and monitoring purposes. 
+                    These logs contain technical information about the analysis process but do not 
+                    include sensitive model data.
+                </p>
+
+                <h5><i class="fas fa-question-circle me-2"></i>Questions</h5>
+                <p>
+                    If you have any questions about this privacy policy or the data handling practices 
+                    of TorchSharp Inspector, please review the application documentation or contact 
+                    the development team.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-key me-2"></i>Key Points</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-flex align-items-center mb-3">
+                    <i class="fas fa-home text-success me-3 fa-2x"></i>
+                    <div>
+                        <strong>Local Processing</strong><br>
+                        <small class="text-muted">All analysis happens on your machine</small>
+                    </div>
+                </div>
+
+                <div class="d-flex align-items-center mb-3">
+                    <i class="fas fa-shield-alt text-success me-3 fa-2x"></i>
+                    <div>
+                        <strong>No Data Transmission</strong><br>
+                        <small class="text-muted">Your models never leave your system</small>
+                    </div>
+                </div>
+
+                <div class="d-flex align-items-center mb-3">
+                    <i class="fas fa-eye-slash text-success me-3 fa-2x"></i>
+                    <div>
+                        <strong>Private Analysis</strong><br>
+                        <small class="text-muted">No external monitoring or tracking</small>
+                    </div>
+                </div>
+
+                <div class="d-flex align-items-center mb-3">
+                    <i class="fas fa-download text-info me-3 fa-2x"></i>
+                    <div>
+                        <strong>Export Control</strong><br>
+                        <small class="text-muted">You control what data is exported</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-tools me-2"></i>Open Source</h5>
+            </div>
+            <div class="card-body">
+                <p>
+                    TorchSharp Inspector is built with open source technologies 
+                    and follows transparent development practices. You can review 
+                    the source code to understand exactly how your data is processed.
+                </p>
+                
+                <div class="d-grid">
+                    <a href="@Url.Action("Index", "Home")" class="btn btn-primary">
+                        <i class="fas fa-arrow-left me-2"></i>Back to Inspector
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

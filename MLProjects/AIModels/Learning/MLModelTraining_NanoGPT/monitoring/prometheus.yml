@@ -1,0 +1,30 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  - job_name: 'nanogpt-api'
+    static_configs:
+      - targets: ['nanogpt-api:8080']
+    scrape_interval: 10s
+    metrics_path: '/metrics'
+    
+  - job_name: 'nanogpt-dashboard'
+    static_configs:
+      - targets: ['nanogpt-dashboard:8080']
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+    
+  - job_name: 'torchsharp-inspector'
+    static_configs:
+      - targets: ['torchsharp-inspector:8080']
+    scrape_interval: 15s
+    metrics_path: '/metrics'
+    
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

@@ -1,0 +1,323 @@
+@model TorchSharpInspector.Models.SystemDiagnostics
+
+@{
+    ViewData["Title"] = "TorchSharp Inspector - Dashboard";
+}
+
+<div class="container">
+    <div class="row">
+        <div class="col-12 text    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title">🔗 Quick Links</h5>
+                </div>
+                <div class="card-body">
+                    <a href="http://localhost:5169" class="btn btn-primary me-2" target="_blank">
+                        <i class="fas fa-tachometer-alt me-1"></i>🎭 NanoGPT Dashboard
+                    </a>
+                    <br><br>
+                    <a href="/api-docs" class="btn btn-outline-primary me-2">📋 API Documentation</a>
+                    <a href="/health" class="btn btn-outline-success me-2">🏥 Health Check</a>
+                    <a href="/api/version" class="btn btn-outline-info">📊 Version Info</a>
+                </div>
+            </div>
+        </div>          <h1 class="display-4 text-primary">🔍 TorchSharp Inspector</h1>
+            <p class="lead">Comprehensive model analysis and diagnostic tools for TorchSharp models</p>
+            <hr>
+        </div>
+    </div>
+    
+    @if (ViewBag.Error != null)
+    {
+        <div class="alert alert-warning">
+            <strong>Warning:</strong> @ViewBag.Error
+        </div>
+    }
+    
+    @if (Model != null)
+    {
+        <div class="row mt-4">
+            <div class="col-md-6">
+                <div class="card border-primary">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">🖥️ System Information</h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm">
+                            <tr><td><strong>Processor:</strong></td><td class="text-end">@Model.ProcessorName</td></tr>
+                            <tr><td><strong>Cores:</strong></td><td class="text-end">@Model.ProcessorCores</td></tr>
+                            <tr><td><strong>Total Memory:</strong></td><td class="text-end">@Model.TotalMemoryMB MB</td></tr>
+                            <tr><td><strong>Available Memory:</strong></td><td class="text-end">@Model.AvailableMemoryMB MB</td></tr>
+                            <tr><td><strong>Operating System:</strong></td><td class="text-end">@Model.OperatingSystem</td></tr>
+
+                            <tr><td><strong>.NET Version:</strong></td><td class="text-end">@Model.DotNetVersion</td></tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card border-success">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0">🔥 TorchSharp Status</h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm">
+                            <tr>
+                                <td><strong>Version:</strong></td>
+                                <td class="text-end">@Model.TorchSharpVersion</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Installation Status:</strong></td>
+                                <td class="text-end">
+                                    @if (Model.CudaAvailable)
+                                    {
+                                        <span class="badge bg-success">✅ CUDA Available</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning">⚠️ CPU Only</span>
+                                    }
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>Last Check:</strong></td>
+                                <td class="text-end">@Model.CheckTime.ToString("HH:mm:ss")</td>
+                            </tr>
+                        </table>
+                        
+                        <div class="mt-3">
+                            <button class="btn btn-sm btn-outline-primary" onclick="validateTorchSharp()">
+                                🔍 Validate Installation
+                            </button>
+                            <button class="btn btn-sm btn-outline-info" onclick="refreshData()">
+                                🔄 Refresh Data
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-md-4">
+                <div class="card border-info">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">⚡ Performance Metrics</h5>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Available Devices:</strong></p>
+                        <ul class="list-unstyled">
+                            @foreach (var device in Model.AvailableDevices)
+                            {
+                                <li><span class="badge bg-info">@device</span></li>
+                            }
+                        </ul>
+                        
+                        <p><strong>Memory Available:</strong> @Model.AvailableMemoryMB MB</p>
+                        <div class="progress mb-2">
+                            <div class="progress-bar bg-success" role="progressbar" style="width: @(Math.Min(100, (double)Model.AvailableMemoryMB / (double)Model.TotalMemoryMB * 100))%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-8">
+                <div class="card border-warning">
+                    <div class="card-header bg-warning text-dark">
+                        <h5 class="mb-0">💾 Storage Information</h5>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>CUDA Information:</strong></p>
+                        <p class="small text-muted">
+                            Version: @Model.CudaVersion<br>
+                            Status: @(Model.CudaAvailable ? "Available" : "Not Available")
+                        </p>
+                        
+                        <div class="mt-3">
+                            <small class="text-muted">
+                                <strong>Note:</strong> TorchSharp models can require significant disk space for model checkpoints and intermediate files.
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card border-dark">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0">🚀 TorchSharp Inspector Features</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <div class="feature-card p-3 border border-success rounded">
+                                <h6 class="text-success">🔍 System Diagnostics</h6>
+                                <p class="small">Hardware analysis, environment validation, performance monitoring</p>
+                                <button class="btn btn-sm btn-success" onclick="runSystemDiagnostics()">
+                                    ✅ Active - View Details
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <div class="feature-card p-3 border border-secondary rounded">
+                                <h6 class="text-secondary">🧠 Model Analysis</h6>
+                                <p class="small">Load and inspect TorchSharp models, parameter analysis, architecture visualization</p>
+                                <button class="btn btn-sm btn-secondary" disabled>
+                                    🚧 Coming Soon
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <div class="feature-card p-3 border border-secondary rounded">
+                                <h6 class="text-secondary">⚡ Performance Tests</h6>
+                                <p class="small">Benchmarking, inference speed testing, memory profiling</p>
+                                <button class="btn btn-sm btn-secondary" disabled>
+                                    🚧 Coming Soon
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <div class="feature-card p-3 border border-secondary rounded">
+                                <h6 class="text-secondary">🧮 Tensor Operations</h6>
+                                <p class="small">Test tensor creation, mathematical operations, GPU/CPU comparisons</p>
+                                <button class="btn btn-sm btn-secondary" disabled>
+                                    🚧 Coming Soon
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <div class="feature-card p-3 border border-secondary rounded">
+                                <h6 class="text-secondary">📊 Memory Analysis</h6>
+                                <p class="small">Memory leak detection, allocation tracking, optimization recommendations</p>
+                                <button class="btn btn-sm btn-secondary" disabled>
+                                    🚧 Coming Soon
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <div class="feature-card p-3 border border-secondary rounded">
+                                <h6 class="text-secondary">📋 Report Generation</h6>
+                                <p class="small">Comprehensive analysis reports in JSON, HTML, and PDF formats</p>
+                                <button class="btn btn-sm btn-secondary" disabled>
+                                    🚧 Coming Soon
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title">� Quick Links</h5>
+                </div>
+                <div class="card-body">
+                    <a href="/api-docs" class="btn btn-outline-primary me-2">📋 API Documentation</a>
+                    <a href="/health" class="btn btn-outline-success me-2">🏥 Health Check</a>
+                    <a href="/api/version" class="btn btn-outline-info">📊 Version Info</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title">📊 Application Status</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>Message:</strong> @ViewBag.Message</p>
+                    <p><strong>Version:</strong> @ViewBag.Version</p>
+                    <p><strong>Environment:</strong> @ViewBag.Environment</p>
+                    <p><strong>Last Updated:</strong> @ViewBag.Timestamp</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function validateTorchSharp() {
+    const button = event.target;
+    button.disabled = true;
+    button.innerHTML = '🔄 Validating...';
+    
+    fetch('/Home/ValidateTorchSharp')
+        .then(response => response.json())
+        .then(data => {
+            alert('TorchSharp Validation Result:\n\n' + data.message);
+            if (data.isValid) {
+                location.reload();
+            }
+        })
+        .catch(error => {
+            alert('Error validating TorchSharp:\n' + error);
+        })
+        .finally(() => {
+            button.disabled = false;
+            button.innerHTML = '🔍 Validate Installation';
+        });
+}
+
+function refreshData() {
+    location.reload();
+}
+
+function runSystemDiagnostics() {
+    fetch('/Home/SystemDiagnostics')
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                alert('Error running diagnostics:\n' + data.error);
+            } else {
+                const diagnosticsInfo = 
+                    `System Diagnostics Results:\n\n` +
+                    `Processor: ${data.processorName}\n` +
+                    `Cores: ${data.processorCores}\n` +
+                    `Total Memory: ${data.totalMemoryMB} MB\n` +
+                    `Available Memory: ${data.availableMemoryMB} MB\n` +
+                    `OS: ${data.operatingSystem}\n` +
+                    `TorchSharp: ${data.torchSharpVersion}\n` +
+                    `CUDA Available: ${data.cudaAvailable ? 'Yes' : 'No'}\n` +
+                    `Available Devices: ${data.availableDevices.join(', ')}`;
+                
+                alert(diagnosticsInfo);
+                console.log('Full System Diagnostics:', data);
+            }
+        })
+        .catch(error => {
+            alert('Error running diagnostics:\n' + error);
+        });
+}
+</script>
+
+<style>
+.feature-card {
+    height: 180px;
+    transition: transform 0.2s;
+}
+
+.feature-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.feature-card h6 {
+    margin-bottom: 10px;
+}
+
+.progress {
+    height: 8px;
+}
+</style>

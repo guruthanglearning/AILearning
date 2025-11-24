@@ -1,0 +1,424 @@
+﻿@page
+@model IndexModel
+@{
+    ViewData["Title"] = "NanoGPT Dashboard";
+}
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="display-4 text-center">🎭 NanoGPT Shakespeare Dashboard</h1>
+            <p class="text-center text-muted">Interactive text generation with your trained Shakespeare model</p>
+        </div>
+    </div>
+
+    <!-- API Status Row -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card border-@(Model.ApiHealthy ? "success" : "danger")">
+                <div class="card-header bg-@(Model.ApiHealthy ? "success" : "danger") text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-@(Model.ApiHealthy ? "check-circle" : "exclamation-triangle")"></i>
+                        API Status
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <h6 class="text-@(Model.ApiHealthy ? "success" : "danger")">
+                        @(Model.ApiHealthy ? "🟢 Online" : "🔴 Offline")
+                    </h6>
+                    <small class="text-muted">Status: @Model.HealthStatus</small><br/>
+                    <small class="text-muted">Endpoint: http://localhost:8080</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-info">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="fas fa-brain"></i> Model Info</h5>
+                </div>
+                <div class="card-body">
+                    <h6 class="text-info">Shakespeare NanoGPT</h6>
+                    <small class="text-muted">Architecture: 6-layer transformer</small><br/>
+                    <small class="text-muted">Embedding: 384 dimensions</small><br/>
+                    <small class="text-muted">Vocab Size: 256 characters</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0"><i class="fas fa-chart-line"></i> Training Metrics</h5>
+                </div>
+                <div class="card-body">
+                    <h6 class="text-warning">Latest Checkpoint</h6>
+                    <small class="text-muted">Loss: 2.49</small><br/>
+                    <small class="text-muted">Perplexity: 12.11</small><br/>
+                    <small class="text-muted">Iterations: 5000</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="row mb-3">
+            <div class="col-12">
+                <div class="alert alert-danger" role="alert">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    @Model.ErrorMessage
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Text Generation Section -->
+    <div class="row">
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-keyboard"></i> Generate Shakespeare Text</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" asp-page-handler="Generate">
+                        <div class="mb-3">
+                            <label asp-for="InputPrompt" class="form-label">Character Prompt</label>
+                            <input asp-for="InputPrompt" class="form-control" placeholder="HAMLET:, ROMEO:, JULIET:, etc.">
+                            <div class="form-text">
+                                Try: HAMLET:, ROMEO:, JULIET:, MACBETH:, "To be or not to be"
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label asp-for="MaxTokens" class="form-label">
+                                        <i class="fas fa-ruler"></i> Max Tokens 
+                                        <span class="badge bg-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top" 
+                                              title="Controls the length of generated text. Each token is roughly 1 character in Shakespeare text.">?</span>
+                                    </label>
+                                    <input asp-for="MaxTokens" type="number" class="form-control" min="10" max="500" step="10">
+                                    <div class="form-text">
+                                        <strong>Length Control:</strong><br>
+                                        • <span class="text-success">50-80</span>: Short phrases/sentences<br>
+                                        • <span class="text-warning">100-150</span>: Medium dialogue/speeches<br>
+                                        • <span class="text-danger">200+</span>: Long monologues/scenes
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label asp-for="Temperature" class="form-label">
+                                        <i class="fas fa-thermometer-half"></i> Temperature 
+                                        <span class="badge bg-info ms-1" data-bs-toggle="tooltip" data-bs-placement="top" 
+                                              title="Controls creativity vs consistency. Higher values = more creative but less coherent.">?</span>
+                                    </label>
+                                    <input asp-for="Temperature" type="number" class="form-control" min="0.1" max="2.0" step="0.1">
+                                    <div class="form-text">
+                                        <strong>Creativity Control:</strong><br>
+                                        • <span class="text-primary">0.1-0.3</span>: Very predictable, safe<br>
+                                        • <span class="text-success">0.4-0.8</span>: Balanced & natural<br>
+                                        • <span class="text-warning">0.9-1.2</span>: Creative & varied<br>
+                                        • <span class="text-danger">1.3+</span>: Highly experimental
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary" @(Model.ApiHealthy ? "" : "disabled")>
+                            <i class="fas fa-magic"></i> Generate Text
+                        </button>
+                        
+                        @if (!Model.ApiHealthy)
+                        {
+                            <div class="mt-2">
+                                <small class="text-danger">API must be online to generate text</small>
+                            </div>
+                        }
+                    </form>
+                </div>
+            </div>
+
+            <!-- Quick Prompts -->
+            <div class="card mt-3">
+                <div class="card-header bg-secondary text-white">
+                    <h6 class="mb-0"><i class="fas fa-bolt"></i> Quick Character Prompts</h6>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-start">
+                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="setPrompt('HAMLET:')">Hamlet</button>
+                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="setPrompt('ROMEO:')">Romeo</button>
+                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="setPrompt('JULIET:')">Juliet</button>
+                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="setPrompt('MACBETH:')">Macbeth</button>
+                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="setPrompt('OTHELLO:')">Othello</button>
+                    </div>
+                    <div class="mt-2 d-grid gap-2 d-md-flex justify-content-md-start">
+                        <button type="button" class="btn btn-outline-success btn-sm" onclick="setPrompt('To be or not to be')">Famous Quote 1</button>
+                        <button type="button" class="btn btn-outline-success btn-sm" onclick="setPrompt('Romeo, Romeo')">Famous Quote 2</button>
+                        <button type="button" class="btn btn-outline-success btn-sm" onclick="setPrompt('Enter ')">Stage Direction</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Parameter Guide -->
+            <div class="card mt-3">
+                <div class="card-header bg-dark text-white">
+                    <h6 class="mb-0"><i class="fas fa-book"></i> Parameter Guide & Examples</h6>
+                </div>
+                <div class="card-body">
+                    <div class="accordion" id="parameterAccordion">
+                        <!-- Max Tokens Explanation -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="tokensHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#tokensCollapse">
+                                    <i class="fas fa-ruler me-2"></i> Max Tokens Explained
+                                </button>
+                            </h2>
+                            <div id="tokensCollapse" class="accordion-collapse collapse" data-bs-parent="#parameterAccordion">
+                                <div class="accordion-body">
+                                    <p><strong>What are tokens?</strong> In Shakespeare text, each character (letter, space, punctuation) is roughly 1 token.</p>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <h6 class="text-success">Examples by Length:</h6>
+                                            <ul class="list-unstyled">
+                                                <li><span class="badge bg-success">50 tokens</span> → "HAMLET: To be or not to be, that is the question"</li>
+                                                <li><span class="badge bg-warning">100 tokens</span> → Full short dialogue exchange</li>
+                                                <li><span class="badge bg-danger">200+ tokens</span> → Extended monologue or scene</li>
+                                            </ul>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <h6 class="text-info">Usage Tips:</h6>
+                                            <ul class="list-unstyled">
+                                                <li>• <strong>Quick phrases:</strong> 30-50 tokens</li>
+                                                <li>• <strong>Character dialogue:</strong> 80-120 tokens</li>
+                                                <li>• <strong>Soliloquies:</strong> 150-300 tokens</li>
+                                                <li>• <strong>Scene excerpts:</strong> 300+ tokens</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Temperature Explanation -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="temperatureHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#temperatureCollapse">
+                                    <i class="fas fa-thermometer-half me-2"></i> Temperature Explained
+                                </button>
+                            </h2>
+                            <div id="temperatureCollapse" class="accordion-collapse collapse" data-bs-parent="#parameterAccordion">
+                                <div class="accordion-body">
+                                    <p><strong>What is temperature?</strong> Controls how "creative" vs "predictable" the AI is when choosing the next word.</p>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <h6 class="text-primary">Temperature Scale:</h6>
+                                            <div class="mb-2">
+                                                <span class="badge bg-primary">0.1-0.3</span> <strong>Conservative</strong>
+                                                <br><small class="text-muted">Always picks most likely words. Very predictable, sounds like training data.</small>
+                                            </div>
+                                            <div class="mb-2">
+                                                <span class="badge bg-success">0.4-0.6</span> <strong>Balanced</strong>
+                                                <br><small class="text-muted">Good mix of accuracy and variety. Natural-sounding Shakespeare.</small>
+                                            </div>
+                                            <div class="mb-2">
+                                                <span class="badge bg-warning">0.7-0.9</span> <strong>Creative</strong>
+                                                <br><small class="text-muted">More surprising word choices. Inventive but still coherent.</small>
+                                            </div>
+                                            <div class="mb-2">
+                                                <span class="badge bg-danger">1.0+</span> <strong>Experimental</strong>
+                                                <br><small class="text-muted">Highly creative but may be less coherent or off-topic.</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <h6 class="text-success">Recommended Settings:</h6>
+                                            <ul class="list-unstyled">
+                                                <li><strong>🎭 Character dialogue:</strong> 0.6-0.8</li>
+                                                <li><strong>📜 Famous quotes:</strong> 0.3-0.5</li>
+                                                <li><strong>🎪 Creative scenes:</strong> 0.8-1.0</li>
+                                                <li><strong>📖 Educational use:</strong> 0.4-0.6</li>
+                                            </ul>
+                                            <div class="alert alert-info mt-3">
+                                                <small><i class="fas fa-lightbulb"></i> <strong>Pro Tip:</strong> Start with 0.7 temperature and 100 tokens for balanced, natural Shakespeare text!</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Quick Presets -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="presetsHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#presetsCollapse">
+                                    <i class="fas fa-magic me-2"></i> Quick Presets
+                                </button>
+                            </h2>
+                            <div id="presetsCollapse" class="accordion-collapse collapse" data-bs-parent="#parameterAccordion">
+                                <div class="accordion-body">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <h6 class="text-primary">Preset Combinations:</h6>
+                                            <div class="d-grid gap-2">
+                                                <button type="button" class="btn btn-outline-primary btn-sm" onclick="setParams(100, 0.7, 'HAMLET:')">
+                                                    📖 Classic (100 tokens, 0.7 temp)
+                                                </button>
+                                                <button type="button" class="btn btn-outline-success btn-sm" onclick="setParams(50, 0.5, 'To be or not to be')">
+                                                    🎯 Precise (50 tokens, 0.5 temp)
+                                                </button>
+                                                <button type="button" class="btn btn-outline-warning btn-sm" onclick="setParams(150, 0.9, 'MACBETH:')">
+                                                    🎪 Creative (150 tokens, 0.9 temp)
+                                                </button>
+                                                <button type="button" class="btn btn-outline-danger btn-sm" onclick="setParams(200, 1.1, 'Enter ')">
+                                                    🚀 Experimental (200 tokens, 1.1 temp)
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <h6 class="text-success">Use Cases:</h6>
+                                            <ul class="list-unstyled">
+                                                <li>📖 <strong>Classic:</strong> General Shakespeare dialogue</li>
+                                                <li>🎯 <strong>Precise:</strong> Continuing famous quotes</li>
+                                                <li>🎪 <strong>Creative:</strong> Original scenes & monologues</li>
+                                                <li>🚀 <strong>Experimental:</strong> Artistic interpretation</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-scroll"></i> Generated Text</h5>
+                </div>
+                <div class="card-body">
+                    @if (!string.IsNullOrEmpty(Model.GeneratedText))
+                    {
+                        <div class="mb-3">
+                            <div class="bg-light p-3 rounded">
+                                <pre class="mb-0" style="white-space: pre-wrap; font-family: 'Georgia', serif; line-height: 1.6;">@Model.GeneratedText</pre>
+                            </div>
+                        </div>
+                        
+                        <div class="row text-muted small">
+                            <div class="col-md-4">
+                                <strong>Tokens:</strong> @Model.TokenCount
+                            </div>
+                            <div class="col-md-4">
+                                <strong>Response Time:</strong> @(Model.ResponseTime?.TotalMilliseconds.ToString("F0"))ms
+                            </div>
+                            <div class="col-md-4">
+                                <strong>Temperature:</strong> @Model.Temperature
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-center text-muted py-4">
+                            <i class="fas fa-feather-alt fa-3x mb-3"></i>
+                            <p>Your generated Shakespeare text will appear here</p>
+                            <small>Enter a character name or famous quote and click "Generate Text"</small>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- TorchSharp Inspector -->
+            <div class="card mt-3">
+                <div class="card-header bg-dark text-white">
+                    <h6 class="mb-0"><i class="fas fa-search"></i> Model Analysis Tools</h6>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex align-items-start mb-3">
+                        <div class="flex-shrink-0">
+                            <i class="fas fa-microscope fa-2x text-primary"></i>
+                        </div>
+                        <div class="flex-grow-1 ms-3">
+                            <h6 class="fw-bold">TorchSharp Inspector</h6>
+                            <p class="mb-2 text-muted">Comprehensive model analysis, performance benchmarking, and diagnostic tools for your NanoGPT checkpoint.</p>
+                            <div class="d-grid d-md-flex gap-2">
+                                <a href="http://localhost:5000" class="btn btn-primary btn-sm" target="_blank">
+                                    <i class="fas fa-external-link-alt me-1"></i>Open Inspector
+                                </a>
+                                <a href="http://localhost:5000/api-docs" class="btn btn-outline-secondary btn-sm" target="_blank">
+                                    <i class="fas fa-code me-1"></i>API Docs
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row text-center">
+                        <div class="col-4">
+                            <i class="fas fa-desktop text-info"></i>
+                            <small class="d-block text-muted">System Diagnostics</small>
+                        </div>
+                        <div class="col-4">
+                            <i class="fas fa-tachometer-alt text-warning"></i>
+                            <small class="d-block text-muted">Performance Tests</small>
+                        </div>
+                        <div class="col-4">
+                            <i class="fas fa-memory text-success"></i>
+                            <small class="d-block text-muted">Memory Analysis</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Links -->
+            <div class="card mt-3">
+                <div class="card-header bg-info text-white">
+                    <h6 class="mb-0"><i class="fas fa-link"></i> Development & Monitoring</h6>
+                </div>
+                <div class="card-body">
+                    <div class="list-group list-group-flush">
+                        <a href="http://localhost:8080/swagger" class="list-group-item list-group-item-action" target="_blank">
+                            <i class="fas fa-code text-primary"></i> API Documentation (Swagger)
+                            <small class="d-block text-muted">REST API endpoints and testing interface</small>
+                        </a>
+                        <a href="http://localhost:3001" class="list-group-item list-group-item-action" target="_blank">
+                            <i class="fas fa-chart-bar text-success"></i> Grafana Monitoring
+                            <small class="d-block text-muted">Performance metrics and dashboards</small>
+                        </a>
+                        <a href="http://localhost:9090" class="list-group-item list-group-item-action" target="_blank">
+                            <i class="fas fa-database text-warning"></i> Prometheus Metrics
+                            <small class="d-block text-muted">Raw metrics and monitoring data</small>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function setPrompt(prompt) {
+        document.querySelector('input[name="InputPrompt"]').value = prompt;
+    }
+    
+    function setParams(maxTokens, temperature, prompt) {
+        document.querySelector('input[name="MaxTokens"]').value = maxTokens;
+        document.querySelector('input[name="Temperature"]').value = temperature;
+        if (prompt) {
+            document.querySelector('input[name="InputPrompt"]').value = prompt;
+        }
+        
+        // Visual feedback
+        const form = document.querySelector('form');
+        form.style.boxShadow = '0 0 10px rgba(0,123,255,0.3)';
+        setTimeout(() => {
+            form.style.boxShadow = '';
+        }, 1000);
+    }
+
+    // Initialize Bootstrap tooltips
+    document.addEventListener('DOMContentLoaded', function () {
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl)
+        });
+    });
+</script>

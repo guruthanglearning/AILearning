@@ -290,14 +290,26 @@ def real_time_analysis():
                 "currency": transaction_data.get("currency", "USD")
             }
             
+            # Create placeholder for status message
+            status_placeholder = st.empty()
+            
+            # Show informative message about processing time
+            status_placeholder.info("⏳ **Analysis in progress...** This may take 45-60 seconds due to LLM processing. Please wait...")
+            
             # Show loading spinner
-            with st.spinner("Analyzing transaction..."):
+            with st.spinner("Analyzing transaction with ML Model + LLM..."):
                 # Call the API
                 result = api_client.detect_fraud(transaction)
-                
-                if result:
-                    # Display the result
-                    display_transaction_result(result)
+            
+            # Clear the status message after processing
+            status_placeholder.empty()
+            
+            if result:
+                # Display the result
+                st.success("✅ **Analysis Complete!**")
+                display_transaction_result(result)
+            else:
+                st.error("❌ Failed to analyze transaction. The API may be overloaded or the LLM service is unavailable. Please try again.")
                       # Store the transaction ID in session state to use it outside the form
             if submit_button and result:
                 st.session_state.transaction_for_feedback = transaction_id

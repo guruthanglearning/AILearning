@@ -13,11 +13,10 @@ from api_client import get_api_client
 
 def display_system_health():
     """Display system health metrics and monitoring information."""
-    st.markdown("## System Health & Monitoring")
-    
     # Get API client
     api_client = get_api_client()
-      # System status
+    
+    # System status
     st.markdown("### System Status")
     
     # Check for model switch notification
@@ -318,8 +317,10 @@ def display_system_health():
                         'to_model': 'OpenAI API',
                         'displayed': False
                     }
-                else:
+                elif result:
                     st.error(result.get("message", "Failed to switch to OpenAI API"))
+                else:
+                    st.error("Failed to switch to OpenAI API. API server may be unavailable.")
                     
         elif local_button:
             with st.spinner("Switching to Local LLM..."):
@@ -333,8 +334,10 @@ def display_system_health():
                         'to_model': 'Local LLM',
                         'displayed': False
                     }
-                else:
+                elif result:
                     st.error(result.get("message", "Failed to switch to Local LLM"))
+                else:
+                    st.error("Failed to switch to Local LLM. API server may be unavailable.")
                     
         elif mock_button:
             with st.spinner("Switching to Mock LLM..."):
@@ -348,8 +351,10 @@ def display_system_health():
                         'to_model': 'Mock LLM',
                         'displayed': False
                     }
-                else:
+                elif result:
                     st.error(result.get("message", "Failed to switch to Mock LLM"))
+                else:
+                    st.error("Failed to switch to Mock LLM. API server may be unavailable.")
     
     # Resource utilization
     st.markdown("### Resource Utilization")

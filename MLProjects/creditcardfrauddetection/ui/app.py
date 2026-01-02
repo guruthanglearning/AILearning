@@ -20,6 +20,7 @@ from pages.fraud_patterns import show_fraud_patterns
 from pages.system_health import display_system_health
 from pages.dashboard import show_dashboard
 from pages.transaction_analysis import show_transaction_analysis
+from api_client import display_api_connection_status
 
 # Load environment variables
 load_dotenv()
@@ -166,7 +167,9 @@ def main():
     page = st.sidebar.radio(
         "Select a page:",
         ["Dashboard", "Transaction Analysis", "Fraud Patterns", "System Health"]
-    )    # Sidebar API configuration
+    )
+    
+    # Sidebar API configuration
     st.sidebar.title("API Configuration")
     api_url = st.sidebar.text_input("API URL", value=API_URL)
     api_key = st.sidebar.text_input("API Key", value=API_KEY, type="password")
@@ -179,6 +182,9 @@ def main():
         API_URL = api_url
         API_KEY = api_key
         st.sidebar.success("API configuration updated!")
+    
+    # Display API connection status once in sidebar
+    display_api_connection_status()
     
     # Display the selected page
     if page == "Dashboard":

@@ -1,14 +1,14 @@
 {
   "model_name": "LLM+RAG",
-  "last_trained": "2025-07-22T07:22:51.901164",
-  "last_evaluated": "2025-07-23T07:22:51.901181",
+  "last_trained": "2025-12-26T13:19:54.513027",
+  "last_evaluated": "2026-01-02T13:19:54.513040",
   "metrics": {
-    "accuracy": 0.981184,
-    "precision": 0.957808,
-    "recall": 0.93871,
-    "f1_score": 0.932271,
-    "auc": 0.993919,
-    "latency_ms": 78.487441,
-    "throughput": 85.856155
+    "accuracy": 0.972131,
+    "precision": 0.9311,
+    "recall": 0.908927,
+    "f1_score": 0.922597,
+    "auc": 0.971055,
+    "latency_ms": 79.353096,
+    "throughput": 85.192223
   }
 }

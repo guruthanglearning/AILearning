@@ -968,12 +968,6 @@ python tests/test_transaction_endpoints.py
 # Test UI functionality
 cd ui
 python test_ui_functionality.py
-
-# Manual testing checklist:
-# 1. Dashboard metrics display
-# 2. Transaction analysis workflow
-# 3. Fraud patterns CRUD operations
-# 4. System health monitoring
 ```
 
 ### Unit Test Coverage
@@ -984,6 +978,138 @@ Current test coverage includes:
 - ✅ Database operation tests
 - ✅ UI component tests
 - ✅ End-to-end workflow tests
+
+### 📋 Manual Testing Guide
+
+#### **Fraud Patterns UI Testing**
+
+Access the application at **http://localhost:8501** and follow these test scenarios:
+
+##### **1. Navigation Test**
+- Open the Streamlit UI in your browser
+- Click "Fraud Patterns" in the sidebar
+- Verify the page loads with title "🔐 Fraud Pattern Management System"
+- Confirm 1,457+ fraud patterns are displayed
+
+##### **2. Search & Filter Tests**
+- **Search Test**: 
+  - Type "Card Not Present" in the search box
+  - Verify real-time filtering works
+  - Clear search and confirm all patterns return
+- **Filter Test**:
+  - Select fraud types from dropdown (Card Not Present, Account Takeover, etc.)
+  - Verify patterns filter correctly
+  - Use "Clear Filters" button to reset
+
+##### **3. CRUD Operations Tests**
+
+**Add Pattern:**
+- Click "➕ Add New Pattern" button
+- Fill form: Pattern Name, Fraud Type, Description
+- Adjust similarity threshold slider
+- Submit and verify success message
+
+**View Pattern:**
+- Click "👁️ View" button on any pattern
+- Verify popup shows complete details, JSON config, and metrics
+- Confirm action buttons (Edit, Delete, Close) are present
+
+**Edit Pattern:**
+- Click "✏️ Edit" button on any pattern
+- Modify name or description
+- Submit and verify updates are saved
+
+**Delete Pattern:**
+- Click "🗑️ Delete" button on any pattern
+- Confirm deletion dialog appears
+- Verify pattern is removed after confirmation
+
+##### **4. Performance Benchmarks**
+- Pattern loading: < 2 seconds
+- Search filtering: Instant response
+- Form submissions: < 3 seconds
+- Page navigation: Instant
+
+##### **5. Error Handling Tests**
+- Submit forms with empty required fields
+- Edit with invalid JSON
+- Verify appropriate error messages appear
+
+#### **Transaction Analysis Testing**
+
+##### **1. Sample Transaction Generation**
+- Navigate to "Transaction Analysis" page
+- Click "Generate Legitimate Transaction" button
+- Verify transaction details display correctly
+- Click "Generate Suspicious Transaction" button
+- Verify higher fraud scores for suspicious patterns
+
+##### **2. Fraud Detection Analysis**
+- Click "Analyze Transaction" button
+- Wait for LLM processing (45-60 seconds expected)
+- Verify progress message displays: "⏳ Analysis in progress..."
+- Confirm analysis results show:
+  - Fraud probability score
+  - Risk level (LOW/MEDIUM/HIGH)
+  - XGBoost model score
+  - Pattern similarity results
+  - LLM-generated explanation
+- Verify success message: "✅ Analysis Complete!"
+- Confirm progress message clears after completion
+
+##### **3. System Health Monitoring**
+- Navigate to "System Health & Monitoring" page
+- Verify system status displays correctly
+- Test LLM model switching:
+  - Click "Use OpenAI API" button
+  - Click "Use Local LLM" button  
+  - Click "Use Mock LLM" button
+- Confirm no AttributeError occurs
+- Verify appropriate success/error messages display
+
+#### **Test Data & Environment**
+- **API Server**: http://localhost:8000 (must be running)
+- **UI Server**: http://localhost:8501 (must be running)
+- **Patterns Available**: 1,457+ fraud patterns
+- **Browser Requirements**: Modern browser with JavaScript enabled (Chrome, Firefox, Edge, Safari)
+
+#### **Success Indicators**
+✅ All pages load without errors  
+✅ API connectivity maintained  
+✅ Real-time search and filtering works  
+✅ CRUD operations complete successfully  
+✅ Professional UI appearance  
+✅ Appropriate error handling  
+✅ Performance meets benchmarks  
+
+#### **Known Issues & Expected Behavior**
+- **LLM Processing Time**: Online Ollama API takes ~50 seconds (expected)
+- **Timeout Settings**: Transaction analysis timeout set to 120 seconds
+- **Progress Messages**: Use st.empty() pattern for clearable messages
+- **Error Handling**: System gracefully handles API unavailability
+
+#### **Troubleshooting**
+
+**Patterns not loading:**
+- Verify API server running on port 8000: `curl http://localhost:8000/health`
+- Check API key configuration in `.streamlit/secrets.toml`
+
+**Search not working:**
+- Check browser console for JavaScript errors
+- Clear browser cache and refresh page
+
+**Form submissions failing:**
+- Verify API server connectivity
+- Check form validation messages in UI
+
+**UI layout issues:**
+- Refresh browser (Ctrl+F5 or Cmd+Shift+R)
+- Verify browser compatibility
+
+**LLM Analysis timeout:**
+- Expected for slow LLM services (Online Ollama ~50s)
+- Consider switching to Mock LLM for faster testing
+- Verify timeout settings in `api_client.py` (120s default)
 
 ## 📊 Monitoring & Metrics
 

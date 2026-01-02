@@ -36,7 +36,8 @@ class FraudDetectionAPI:
             The API response as a dict, or None if there was an error
         """
         url = f"{self.base_url}/api/v1/detect-fraud"
-        return self._make_request("POST", url, transaction_data)
+        # Increased timeout to 120 seconds due to slow LLM API processing
+        return self._make_request("POST", url, transaction_data, timeout=120)
     
     def submit_feedback(self, feedback_data):
         """
@@ -160,7 +161,7 @@ class FraudDetectionAPI:
         url = f"{self.base_url}/api/v1/llm/switch"
         return self._make_request("POST", url, {"model_type": model_type})
     
-    def _make_request(self, method, url, data=None):
+    def _make_request(self, method, url, data=None, timeout=10):
         """
         Make an HTTP request to the API.
         
@@ -168,19 +169,20 @@ class FraudDetectionAPI:
             method: HTTP method (GET, POST, PUT, DELETE)
             url: URL to make the request to
             data: Optional data to send with the request
+            timeout: Request timeout in seconds (default: 10)
             
         Returns:
             The API response as a dict, or None if there was an error
         """
         try:
             if method == "GET":
-                response = requests.get(url, headers=self.headers, timeout=10)
+                response = requests.get(url, headers=self.headers, timeout=timeout)
             elif method == "POST":
-                response = requests.post(url, headers=self.headers, json=data, timeout=10)
+                response = requests.post(url, headers=self.headers, json=data, timeout=timeout)
             elif method == "PUT":
-                response = requests.put(url, headers=self.headers, json=data, timeout=10)
+                response = requests.put(url, headers=self.headers, json=data, timeout=timeout)
             elif method == "DELETE":
-                response = requests.delete(url, headers=self.headers, timeout=10)
+                response = requests.delete(url, headers=self.headers, timeout=timeout)
             else:
                 st.error(f"Unsupported HTTP method: {method}")
                 return None
@@ -212,6 +214,7 @@ class FraudDetectionAPI:
 def get_api_client():
     """
     Get a cached API client instance.
+    This function should NOT display any UI elements to avoid duplication.
     
     Returns:
         FraudDetectionAPI instance
@@ -232,25 +235,30 @@ def get_api_client():
             base_url = "http://localhost:8000"
             api_key = "development_api_key_for_testing"
         
-        # Display connection info
-        st.sidebar.markdown("### API Connection")
-        st.sidebar.markdown(f"**URL:** {base_url}")
-        st.sidebar.markdown(f"**Status:** Testing connection...")
-        
-        # Create and test the API client
+        # Create the API client (no UI display here)
         api_client = FraudDetectionAPI(base_url, api_key)
-        
-        # Test the connection
+        return api_client
+            
+    except Exception as e:
+        # Return a basic client anyway
+        return FraudDetectionAPI("http://localhost:8000", "development_api_key_for_testing")
+
+def display_api_connection_status():
+    """
+    Display the API connection status in the sidebar.
+    This should be called once in the main app.py file.
+    """
+    api_client = get_api_client()
+    
+    st.sidebar.markdown("### API Connection")
+    st.sidebar.markdown(f"**URL:** {api_client.base_url}")
+    
+    # Test the connection
+    try:
         health_check = api_client.get_health()
         if health_check:
             st.sidebar.markdown(f"**Status:** ✅ Connected")
-            return api_client
         else:
             st.sidebar.markdown(f"**Status:** ❌ Connection failed")
-            st.error("API CLIENT ERROR: Connection error: Could not connect to http://localhost:8000/health. Make sure the API server is running.")
-            return api_client  # Return anyway so the UI can still load
-            
-    except Exception as e:
-        st.error(f"Error creating API client: {str(e)}")
-        # Return a basic client anyway
-        return FraudDetectionAPI("http://localhost:8000", "development_api_key_for_testing")
+    except:
+        st.sidebar.markdown(f"**Status:** ❌ Connection failed")

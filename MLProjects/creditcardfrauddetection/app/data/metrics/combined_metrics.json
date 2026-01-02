@@ -1,14 +1,14 @@
 {
   "model_name": "Combined",
-  "last_trained": "2025-07-16T07:22:51.903675",
-  "last_evaluated": "2025-07-23T07:22:51.903693",
+  "last_trained": "2025-12-27T13:19:54.514794",
+  "last_evaluated": "2026-01-02T13:19:54.514807",
   "metrics": {
-    "accuracy": 0.980567,
-    "precision": 0.94404,
-    "recall": 0.941555,
-    "f1_score": 0.932911,
-    "auc": 0.981232,
-    "latency_ms": 91.630836,
-    "throughput": 78.353525
+    "accuracy": 0.97385,
+    "precision": 0.966492,
+    "recall": 0.946686,
+    "f1_score": 0.948475,
+    "auc": 0.979284,
+    "latency_ms": 91.617386,
+    "throughput": 79.766415
   }
 }

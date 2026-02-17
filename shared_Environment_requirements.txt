@@ -1,0 +1,102 @@
+# =============================================================================
+# AILearning - Consolidated Requirements for shared_Environment
+# Generated from analysis of: creditcardfrauddetection, modelcontextprotocol,
+# StockPrediction, StockPredictionModels, venAIAgent, aiModelDev, Instruction.txt
+# =============================================================================
+
+# --- Core Python & Environment ---
+python-dotenv>=1.0.0
+
+# --- API Framework ---
+fastapi>=0.104.0
+uvicorn>=0.24.0
+pydantic>=2.4.2
+pydantic-settings>=2.0.3
+python-multipart>=0.0.6
+
+# --- Security & Authentication ---
+python-jose>=3.3.0
+cryptography>=41.0.4
+
+# --- Core Data & ML ---
+numpy>=1.26.0
+pandas>=2.1.1
+scipy>=1.10.0
+scikit-learn>=1.3.1
+xgboost>=2.0.0
+joblib>=1.3.2
+
+# --- Deep Learning (PyTorch - used by creditcardfrauddetection, aiModelDev) ---
+torch>=2.0.1
+
+# --- LLM & Vector Database ---
+langchain>=0.0.310
+langchain-openai>=0.0.2
+langchain-community>=0.0.10
+langchain-huggingface>=0.0.1
+openai>=1.2.0
+tiktoken>=0.5.1
+sentence-transformers>=2.2.2
+
+# --- Vector Databases ---
+pinecone>=2.2.4
+chromadb>=0.4.15
+
+# --- Utilities ---
+tenacity>=8.2.3
+loguru>=0.7.2
+httpx>=0.25.0
+ujson>=5.8.0
+tqdm>=4.66.1
+requests>=2.31.0
+
+# --- Testing ---
+pytest>=7.4.2
+pytest-asyncio>=0.21.1
+pytest-cov>=4.1.0
+
+# --- Monitoring ---
+prometheus-client>=0.16.0
+prometheus-fastapi-instrumentator>=6.0.0
+
+# --- UI ---
+streamlit>=1.31.0
+plotly>=5.18.0
+
+# --- Data Profiling (ydata-profiling replaces deprecated pandas-profiling) ---
+ydata-profiling>=4.6.0
+
+# --- MCP (Model Context Protocol) ---
+mcp>=1.0.0
+
+# --- Data Fetching ---
+yfinance>=0.2.18
+pandas-datareader>=0.10.0
+
+# --- Async Support ---
+aiohttp>=3.8.5
+
+# --- AI Agents (phi/phidata) ---
+phidata>=2.0.0
+
+# --- Transformers (aiModelDev - GPT2) ---
+transformers>=4.35.0
+
+# --- Technical Analysis (pure Python - ta; TA-Lib needs C library, install separately) ---
+ta>=0.10.0
+
+# --- Jupyter & Notebooks ---
+jupyterlab>=4.0.0
+notebook>=7.0.0
+ipykernel>=6.25.0
+
+# --- Visualization ---
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# --- Optional Development Tools (uncomment if needed) ---
+# black>=23.9.1
+# isort>=5.12.0
+# mypy>=1.5.1
+# flake8>=6.1.0
+# pre-commit>=3.4.0

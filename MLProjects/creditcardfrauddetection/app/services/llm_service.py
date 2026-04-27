@@ -8,11 +8,10 @@ from typing import Dict, List, Any, Optional, Tuple
 import time
 from datetime import datetime
 
-from langchain.prompts import PromptTemplate
-from langchain.chains import RetrievalQA
+from langchain_core.prompts import PromptTemplate
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_openai import ChatOpenAI
-from langchain.schema import Document
+from langchain_core.documents import Document
 import torch
 
 from app.api.models import Transaction, DetailedFraudAnalysis
@@ -90,7 +89,7 @@ class LLMService:
                     
                     # Try a simple test call to verify API key works
                     try:
-                        from langchain.schema.messages import HumanMessage
+                        from langchain_core.messages import HumanMessage
                         test_response = self.llm.invoke([HumanMessage(content="Test")])
                         logger.info(f"Successfully tested LLM connection with model: {settings.LLM_MODEL}")
                     except Exception as test_error:

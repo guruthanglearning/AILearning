@@ -70,6 +70,91 @@ async def detect_fraud(
         logger.error(f"Error processing transaction: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error processing transaction: {str(e)}")
 
+@router.post("/analyze-transaction", response_model=FraudDetectionResponse, responses={
+    400: {"model": ErrorResponse, "description": "Bad request - invalid transaction data"},
+    422: {"model": ErrorResponse, "description": "Validation error"},
+    401: {"model": ErrorResponse, "description": "Unauthorized"},
+    500: {"model": ErrorResponse, "description": "Internal server error"}
+})
+async def analyze_transaction(
+    transaction: Transaction,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    fraud_service: FraudDetectionService = Depends(get_fraud_detection_service),
+    api_key: str = Depends(verify_api_key_header)
+):
+    """
+    Analyze a credit card transaction for fraud (alias for detect-fraud).
+    
+    Args:
+        transaction: The transaction to analyze
+        
+    Returns:
+        Fraud detection result
+    """
+    try:
+        # Validate transaction amount
+        if transaction.amount < 0:
+            raise HTTPException(status_code=400, detail="Transaction amount must be non-negative")
+        
+        # Get request ID for logging
+        request_id = getattr(request.state, "request_id", "unknown")
+        logger.info(f"[{request_id}] Received transaction analysis request for {transaction.transaction_id}")
+        
+        # Process the transaction
+        response = fraud_service.detect_fraud(transaction)
+        
+        # Log the result
+        fraud_status = "FRAUD" if response.is_fraud else "LEGITIMATE"
+        logger.info(
+            f"[{request_id}] Transaction {transaction.transaction_id} analyzed as {fraud_status} "
+            f"with confidence {response.confidence_score:.2f}"
+        )
+        
+        return response
+    
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        logger.error(f"Error analyzing transaction: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error analyzing transaction: {str(e)}")
+
+@router.post("/predict", response_model=FraudDetectionResponse, responses={
+    401: {"model": ErrorResponse, "description": "Unauthorized"},
+    500: {"model": ErrorResponse, "description": "Internal server error"}
+})
+async def predict(
+    transaction: Transaction,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    fraud_service: FraudDetectionService = Depends(get_fraud_detection_service),
+    api_key: str = Depends(verify_api_key_header)
+):
+    """
+    Predict fraud for a credit card transaction (alias for detect-fraud).
+
+    Args:
+        transaction: The transaction to analyze
+
+    Returns:
+        Fraud detection result
+    """
+    try:
+        request_id = getattr(request.state, "request_id", "unknown")
+        logger.info(f"[{request_id}] Received predict request for transaction {transaction.transaction_id}")
+        response = fraud_service.detect_fraud(transaction)
+        fraud_status = "FRAUD" if response.is_fraud else "LEGITIMATE"
+        logger.info(
+            f"[{request_id}] Transaction {transaction.transaction_id} predicted as {fraud_status} "
+            f"with confidence {response.confidence_score:.2f}"
+        )
+        return response
+    except Exception as e:
+        logger.error(f"Error predicting transaction: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error predicting transaction: {str(e)}")
+
+
 @router.post("/feedback", response_model=Dict[str, Any], responses={
     401: {"model": ErrorResponse, "description": "Unauthorized"},
     500: {"model": ErrorResponse, "description": "Internal server error"}
@@ -241,7 +326,7 @@ async def add_fraud_pattern(
     try:
         # Get request ID for logging
         request_id = getattr(request.state, "request_id", "unknown")
-        logger.info(f"[{request_id}] Received request to add fraud pattern: {pattern_data['name']}")
+        logger.info(f"[{request_id}] Received request to add fraud pattern: {pattern_data.get('name', 'Unknown')}")
         
         # Add ID and timestamp if not already present
         if "id" not in pattern_data:
@@ -249,16 +334,35 @@ async def add_fraud_pattern(
         if "created_at" not in pattern_data:
             pattern_data["created_at"] = datetime.datetime.now().isoformat()
         
+        # Transform pattern data from UI format to vector DB format
+        # UI sends: {name, description, pattern: {fraud_type, ...}, similarity_threshold}
+        # Vector DB expects: {case_id, fraud_type, pattern_description, method, ...}
+        pattern_details = pattern_data.get("pattern", {})
+        vector_db_format = {
+            "case_id": pattern_data["id"],
+            "detection_date": pattern_data["created_at"][:10] if pattern_data.get("created_at") else datetime.datetime.now().strftime("%Y-%m-%d"),
+            "fraud_type": pattern_details.get("fraud_type", pattern_data.get("name", "Unknown")),
+            "method": pattern_details.get("method", "User-defined pattern"),
+            "amount": pattern_details.get("amount", 0.0),
+            "currency": pattern_details.get("currency", "USD"),
+            "merchant_category": pattern_details.get("merchant_category", "unknown"),
+            "pattern_description": pattern_data.get("description", ""),
+            "indicators": pattern_details.get("indicators", []),
+            # Keep original pattern data for retrieval
+            "_original_name": pattern_data.get("name"),
+            "_original_description": pattern_data.get("description"),
+            "_similarity_threshold": pattern_data.get("similarity_threshold", 0.8)
+        }
+        
         # Save the pattern to the vector database
-        result = fraud_service.vector_db_service.add_fraud_patterns([pattern_data])
+        result = fraud_service.vector_db_service.add_fraud_patterns([vector_db_format])
         if result > 0:
             logger.info(f"[{request_id}] Successfully added fraud pattern with ID: {pattern_data['id']}")
             return pattern_data
         else:
             logger.error(f"[{request_id}] Failed to add fraud pattern")
             raise HTTPException(status_code=500, detail="Failed to add fraud pattern")
-        
-        return pattern_data
+    
     except Exception as e:        
         logger.error(f"Error adding fraud pattern: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error adding fraud pattern: {str(e)}")
@@ -310,11 +414,31 @@ async def update_fraud_pattern(
         if "created_at" not in pattern_data and "created_at" in existing_pattern:
             pattern_data["created_at"] = existing_pattern["created_at"]
         
-        # Remove the old pattern (not ideal, but a simple approach for now)
-        # In a real database we would do an update operation
+        # Transform pattern data from UI format to vector DB format (same as add_fraud_pattern)
+        pattern_details = pattern_data.get("pattern", {})
+        vector_db_format = {
+            "case_id": pattern_data["id"],
+            "detection_date": pattern_data.get("created_at", "")[:10] if pattern_data.get("created_at") else datetime.datetime.now().strftime("%Y-%m-%d"),
+            "fraud_type": pattern_details.get("fraud_type", pattern_data.get("name", "Unknown")),
+            "method": pattern_details.get("method", "User-defined pattern"),
+            "amount": pattern_details.get("amount", 0.0),
+            "currency": pattern_details.get("currency", "USD"),
+            "merchant_category": pattern_details.get("merchant_category", "unknown"),
+            "pattern_description": pattern_data.get("description", ""),
+            "indicators": pattern_details.get("indicators", []),
+            # Keep original pattern data for retrieval
+            "_original_name": pattern_data.get("name"),
+            "_original_description": pattern_data.get("description"),
+            "_similarity_threshold": pattern_data.get("similarity_threshold", 0.8)
+        }
+        
+        # Delete the old pattern first
+        deletion_success = fraud_service.vector_db_service.delete_fraud_pattern(pattern_id)
+        if not deletion_success:
+            logger.warning(f"[{request_id}] Could not delete old pattern {pattern_id}, but proceeding with update")
         
         # Add the updated pattern to the vector database
-        result = fraud_service.vector_db_service.add_fraud_patterns([pattern_data])
+        result = fraud_service.vector_db_service.add_fraud_patterns([vector_db_format])
         
         if result > 0:
             logger.info(f"[{request_id}] Successfully updated fraud pattern with ID: {pattern_id}")
@@ -487,6 +611,7 @@ async def get_transaction(
         raise HTTPException(status_code=500, detail=f"Error getting transaction: {str(e)}")
 
 @router.get("/llm-status", response_model=Dict[str, Any])
+@router.get("/llm/status", response_model=Dict[str, Any])  # Alternative path for UI compatibility
 async def get_llm_status(
     fraud_service: FraudDetectionService = Depends(get_fraud_detection_service),
     api_key: str = Depends(verify_api_key_header)
@@ -519,8 +644,9 @@ async def get_llm_status(
     }
 
 @router.post("/switch-llm-model", response_model=Dict[str, Any])
+@router.post("/llm/switch", response_model=Dict[str, Any])  # Alternative path for UI compatibility
 async def switch_llm_model(
-    model_type: Dict[str, str],
+    model_data: Dict[str, str],
     fraud_service: FraudDetectionService = Depends(get_fraud_detection_service),
     api_key: str = Depends(verify_api_key_header)
 ):
@@ -528,13 +654,14 @@ async def switch_llm_model(
     Switch the LLM model type.
     
     Args:
-        model_type: Dictionary with "type" key containing either "openai", "local", or "mock"
+        model_data: Dictionary with "type" or "model_type" key containing either "openai", "local", or "mock"
         
     Returns:
         Dictionary with result of the switch operation
     """
     llm_service = fraud_service.llm_service
-    target_type = model_type.get("type", "").lower()
+    target_type = model_data.get("type") or model_data.get("model_type", "")
+    target_type = target_type.lower()
     current_type = llm_service.llm_service_type
     
     if target_type == current_type:
@@ -548,12 +675,12 @@ async def switch_llm_model(
     if target_type == "openai":
         # Try to switch to OpenAI
         try:
-            from langchain.schema.messages import HumanMessage
+            from langchain_core.messages import HumanMessage
             from langchain_openai import ChatOpenAI
-            
+
             # Attempt to initialize OpenAI
-            api_key = settings.OPENAI_API_KEY
-            if not api_key or len(api_key) < 20:
+            openai_api_key = settings.OPENAI_API_KEY
+            if not openai_api_key or len(openai_api_key) < 20:
                 return {
                     "success": False,
                     "message": "Cannot switch to OpenAI: Invalid API key",
@@ -563,7 +690,7 @@ async def switch_llm_model(
             temp_llm = ChatOpenAI(
                 model_name=settings.LLM_MODEL,
                 temperature=0,
-                openai_api_key=api_key
+                openai_api_key=openai_api_key
             )
             
             # Test connection

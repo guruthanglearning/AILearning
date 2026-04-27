@@ -1,7 +1,10 @@
 """
 Integration test script for the ingest-patterns endpoint.
+Requires a live API server running on localhost:8000.
+Run with: python tests/test_pattern_ingestion_integration.py
 """
 
+import pytest
 import requests
 import json
 import time
@@ -10,6 +13,8 @@ import time
 BASE_URL = "http://localhost:8000"
 API_KEY = "test-api-key"  # Replace with your actual API key if different
 
+
+@pytest.mark.skip(reason="requires live API server on port 8000")
 def test_ingest_patterns_endpoint():
     """Test the ingest-patterns endpoint."""
     url = f"{BASE_URL}/api/v1/ingest-patterns"  # Fixed the endpoint URL to include /api/v1/
@@ -57,8 +62,8 @@ def test_ingest_patterns_endpoint():
     else:
         print(f"Error: {response.text}")
     print("-" * 50)
-    
-    return response.status_code == 200
+
+    assert response.status_code == 200
 
 def main():
     """Run the patterns ingestion test."""

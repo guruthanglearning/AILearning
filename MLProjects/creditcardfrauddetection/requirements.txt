@@ -20,6 +20,9 @@ joblib>=1.3.2
 
 # LLM and Vector Database
 langchain>=0.0.310
+langchain-core>=0.1.0
+langchain-text-splitters>=0.0.1
+langchain-huggingface>=0.0.1
 langchain-openai>=0.0.2
 langchain-community>=0.0.10
 openai>=1.2.0
@@ -42,6 +45,9 @@ requests>=2.31.0  # For API calls to online Ollama services
 pytest>=7.4.2
 pytest-asyncio>=0.21.1
 pytest-cov>=4.1.0
+pytest-html>=4.1.1  # HTML test reports
+playwright>=1.40.0  # End-to-end UI testing
+selenium>=4.15.0  # Alternative UI testing (backup)
 
 # Monitoring
 prometheus-client>=0.16.0

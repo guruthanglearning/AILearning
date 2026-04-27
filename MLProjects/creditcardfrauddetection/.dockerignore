@@ -1,0 +1,109 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+venAIAgent/
+shared_Environment/
+aiSimpleTransformerModel/
+aiModelDev/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# Documentation
+docs/_build/
+
+# Docker
+.dockerignore
+Dockerfile
+docker-compose*.yml
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Monitoring (will be mounted as volumes)
+monitoring/prometheus/data/
+monitoring/grafana/data/
+
+# Large files (exclude generic model files but keep trained app models)
+*.h5
+*.pth
+*.onnx
+# Exclude loose pkl/joblib files but keep the trained models the API needs
+*.pkl
+*.joblib
+!data/models/*.joblib
+!data/chroma_db/**/*.pickle
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Project specific
+notebooks/
+scripts/debug/
+scripts/tests/
+tests/
+.streamlit/secrets.toml
+Instruction.txt

@@ -11,7 +11,7 @@ import json
 import time
 
 from langchain_community.llms.fake import FakeListLLM
-from langchain.schema import Document
+from langchain_core.documents import Document
 
 from app.api.models import DetailedFraudAnalysis
 

@@ -3,7 +3,7 @@ Pydantic models for API request and response schemas.
 """
 
 from typing import Optional, Dict, Any, List, Union
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from datetime import datetime
 
 class Transaction(BaseModel):
@@ -27,23 +27,23 @@ class Transaction(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     
-    @validator('timestamp')
-    def validate_timestamp(cls, v):
+    @field_validator('timestamp')
+    @classmethod
+    def validate_timestamp(cls, v: str) -> str:
         """Validate that timestamp is in ISO format."""
         try:
-            # Try to parse the timestamp to ensure it's valid
             datetime.fromisoformat(v.replace('Z', '+00:00'))
             return v
         except ValueError:
             raise ValueError('timestamp must be in ISO format (e.g., "2025-05-07T10:23:45Z")')
     
-    class Config:
-        schema_extra = {
+    model_config = {
+        "json_schema_extra": {
             "example": {
                 "transaction_id": "tx_123456789",
                 "card_id": "card_7890123456",
                 "merchant_id": "merch_24680",
-                "timestamp": "2025-05-07T10:23:45Z", 
+                "timestamp": "2025-05-07T10:23:45Z",
                 "amount": 325.99,
                 "merchant_category": "Electronics",
                 "merchant_name": "TechWorld Store",
@@ -58,6 +58,7 @@ class Transaction(BaseModel):
                 "longitude": -122.2352
             }
         }
+    }
 
 class FraudDetectionResponse(BaseModel):
     """
@@ -86,10 +87,27 @@ class FeedbackModel(BaseModel):
     """
     Model for submitting analyst feedback on a transaction.
     Used to improve the system over time.
+    Accepts either 'actual_fraud' or 'is_fraud' field names.
     """
     transaction_id: str
-    actual_fraud: bool
+    actual_fraud: Optional[bool] = None
+    is_fraud: Optional[bool] = None  # Alternative name
     analyst_notes: Optional[str] = None
+    feedback_type: Optional[str] = None
+    confidence: Optional[float] = None
+    comments: Optional[str] = None
+    user_id: Optional[str] = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def map_fields(cls, values):
+        """Map alternative field names before validation."""
+        if isinstance(values, dict):
+            if 'is_fraud' in values and 'actual_fraud' not in values:
+                values['actual_fraud'] = values['is_fraud']
+            if 'comments' in values and 'analyst_notes' not in values:
+                values['analyst_notes'] = values['comments']
+        return values
 
 class HealthCheckResponse(BaseModel):
     """
@@ -126,14 +144,16 @@ class FraudPattern(BaseModel):
     similarity_threshold: float = Field(default=0.8, ge=0.0, le=1.0)
     created_at: Optional[str] = None
 
-    @validator('created_at', pre=True, always=True)
+    @field_validator('created_at', mode='before')
+    @classmethod
     def set_created_at(cls, v):
         """Set created_at to current time if not provided."""
         if v is None:
             return datetime.now().isoformat()
         return v
-    
-    @validator('id', pre=True, always=True)
+
+    @field_validator('id', mode='before')
+    @classmethod
     def set_id(cls, v):
         """Set ID if not provided."""
         if v is None:
@@ -141,8 +161,8 @@ class FraudPattern(BaseModel):
             return f"pattern_{str(uuid.uuid4())[:8]}"
         return v
     
-    class Config:
-        schema_extra = {
+    model_config = {
+        "json_schema_extra": {
             "example": {
                 "name": "High-value Electronics Purchase",
                 "description": "Unusually high-value purchase from electronics retailer, especially from new device or unusual location.",
@@ -154,6 +174,7 @@ class FraudPattern(BaseModel):
                 "similarity_threshold": 0.85
             }
         }
+    }
 
 class FraudPatternResponse(BaseModel):
     """

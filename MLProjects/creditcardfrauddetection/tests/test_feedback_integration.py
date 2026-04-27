@@ -1,7 +1,10 @@
 """
 Integration test script for the feedback endpoint.
+Requires a live API server running on localhost:8000.
+Run with: python tests/test_feedback_integration.py
 """
 
+import pytest
 import requests
 import json
 import time
@@ -10,8 +13,9 @@ import time
 BASE_URL = "http://localhost:8000"
 API_KEY = "test-api-key"  # Replace with your actual API key if different
 
-def test_feedback_endpoint(transaction_id, is_fraud):
-    """Test the feedback endpoint."""
+
+def run_feedback_endpoint(transaction_id, is_fraud):
+    """Submit feedback to the feedback endpoint (helper for manual/script use)."""
     url = f"{BASE_URL}/api/v1/feedback"  # Fixed the endpoint URL to include /api/v1/
     headers = {
         "X-API-Key": API_KEY,
@@ -49,11 +53,11 @@ def main():
     
     # Test feedback for a legitimate transaction
     print("\nSubmitting feedback for legitimate transaction:")
-    test_feedback_endpoint(transaction_id_legitimate, False)
-    
+    run_feedback_endpoint(transaction_id_legitimate, False)
+
     # Test feedback for a fraudulent transaction
     print("\nSubmitting feedback for fraudulent transaction:")
-    test_feedback_endpoint(transaction_id_fraudulent, True)
+    run_feedback_endpoint(transaction_id_fraudulent, True)
     
     print("\n=== Test completed ===")
 

@@ -8,8 +8,8 @@ import os
 from typing import Dict, List, Any, Optional
 import time
 
-from langchain.schema import Document
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_core.documents import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import HuggingFaceEmbeddings
 import torch
 
@@ -61,7 +61,7 @@ class VectorDBService:
                 logger.info(f"Embedding model initialized on {'GPU' if torch.cuda.is_available() else 'CPU'}")
             
             # Initialize vector store based on what's available
-            if USING_PINECONE and settings.PINECONE_API_KEY:
+            if settings.USE_PINECONE and USING_PINECONE and settings.PINECONE_API_KEY:
                 self._initialize_pinecone()
             elif USING_CHROMA:
                 self._initialize_chroma()
@@ -144,17 +144,33 @@ class VectorDBService:
             # Create detailed text description of the fraud case
             fraud_text = self._create_fraud_pattern_text(fraud_case)
             
-            # Create document with metadata
+            # Create document with metadata - include ALL fields from fraud_case
+            metadata = {
+                "case_id": fraud_case.get("case_id", "unknown"),
+                "fraud_type": fraud_case.get("fraud_type", "unknown"),
+                "amount": fraud_case.get("amount", 0.0),
+                "detection_date": fraud_case.get("detection_date", ""),
+                "merchant_category": fraud_case.get("merchant_category", ""),
+                "method": fraud_case.get("method", ""),
+                "currency": fraud_case.get("currency", "USD"),
+                "source": "historical_fraud_database"
+            }
+            
+            # Preserve original UI fields if present (for user-added patterns)
+            if "_original_name" in fraud_case:
+                metadata["_original_name"] = fraud_case["_original_name"]
+            if "_original_description" in fraud_case:
+                metadata["_original_description"] = fraud_case["_original_description"]
+            if "_similarity_threshold" in fraud_case:
+                metadata["_similarity_threshold"] = fraud_case["_similarity_threshold"]
+            
+            # Store indicators as a JSON string (metadata must be simple types)
+            if "indicators" in fraud_case and isinstance(fraud_case["indicators"], list):
+                metadata["indicators"] = ",".join(fraud_case["indicators"])
+            
             doc = Document(
                 page_content=fraud_text,
-                metadata={
-                    "case_id": fraud_case.get("case_id", "unknown"),
-                    "fraud_type": fraud_case.get("fraud_type", "unknown"),
-                    "amount": fraud_case.get("amount", 0.0),
-                    "detection_date": fraud_case.get("detection_date", ""),
-                    "merchant_category": fraud_case.get("merchant_category", ""),
-                    "source": "historical_fraud_database"
-                }
+                metadata=metadata
             )
             documents.append(doc)
         
@@ -349,17 +365,28 @@ class VectorDBService:
                     metadata = results["metadatas"][i] if results["metadatas"] else {}
                     content = results["documents"][i] if results["documents"] else ""
                     
+                    # Check if this is a user-added pattern (has original name/description)
+                    pattern_name = metadata.get("_original_name") or metadata.get("fraud_type", "Unknown Pattern")
+                    pattern_description = metadata.get("_original_description") or (content[:200] + "..." if len(content) > 200 else content)
+                    
+                    # Parse indicators from comma-separated string back to list
+                    indicators_str = metadata.get("indicators", "")
+                    indicators = indicators_str.split(",") if indicators_str and isinstance(indicators_str, str) else []
+                    
                     pattern = {
                         "id": metadata.get("case_id", doc_id),
-                        "name": metadata.get("fraud_type", "Unknown Pattern"),
-                        "description": content[:200] + "..." if len(content) > 200 else content,
+                        "name": pattern_name,
+                        "description": pattern_description,
                         "pattern": {
                             "fraud_type": metadata.get("fraud_type", "unknown"),
                             "merchant_category": metadata.get("merchant_category", "unknown"),
                             "amount": metadata.get("amount", 0.0),
-                            "detection_date": metadata.get("detection_date", "")
+                            "detection_date": metadata.get("detection_date", ""),
+                            "method": metadata.get("method", ""),
+                            "currency": metadata.get("currency", "USD"),
+                            "indicators": indicators
                         },
-                        "similarity_threshold": 0.8,  # Default threshold
+                        "similarity_threshold": metadata.get("_similarity_threshold", 0.8),
                         "created_at": metadata.get("detection_date", "")
                     }
                     patterns.append(pattern)

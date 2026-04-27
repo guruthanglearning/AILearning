@@ -243,13 +243,35 @@ def show_dashboard():
     # Recent activity
     st.markdown("### Recent Activity")
     
-    # Get recent transactions from the API
+    # Get recent transactions from the API - fetch more to compute statistics
     with st.spinner("Fetching recent transactions..."):
-        transactions_data = api_client.get_transaction_history() if api_available else None
+        # Get more transactions for statistical analysis (100 instead of 10)
+        all_transactions_data = api_client.get_transaction_history(limit=100) if api_available else None
         
-        if transactions_data and isinstance(transactions_data, list):
-            # Convert API response to DataFrame
-            recent_transactions = pd.DataFrame(transactions_data)
+        if all_transactions_data and isinstance(all_transactions_data, list):
+            # Convert API response to DataFrame for analysis
+            all_transactions = pd.DataFrame(all_transactions_data)
+            
+            # Compute fraud by category from transaction data
+            if 'merchant_category' in all_transactions.columns and 'is_fraud' in all_transactions.columns:
+                fraud_by_cat = all_transactions[all_transactions['is_fraud'] == True].groupby('merchant_category').size()
+                metrics_data['fraud_by_category'] = [
+                    {'category': cat, 'count': int(count)} 
+                    for cat, count in fraud_by_cat.items()
+                ]
+            
+            # Compute fraud by hour from transaction data
+            if 'timestamp' in all_transactions.columns and 'is_fraud' in all_transactions.columns:
+                # Extract hour from timestamp
+                all_transactions['hour'] = pd.to_datetime(all_transactions['timestamp']).dt.hour
+                fraud_by_hr = all_transactions[all_transactions['is_fraud'] == True].groupby('hour').size()
+                metrics_data['fraud_by_hour'] = [
+                    {'hour': int(hour), 'count': int(count)} 
+                    for hour, count in fraud_by_hr.items()
+                ]
+            
+            # Use the first 10 for display in recent activity
+            recent_transactions = all_transactions.head(10)
         else:
             # Use development data for demonstration
             if not api_available:

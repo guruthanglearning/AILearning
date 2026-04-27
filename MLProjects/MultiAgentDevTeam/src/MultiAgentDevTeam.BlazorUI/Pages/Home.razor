@@ -30,6 +30,7 @@
         <div class="form-group">
             <label for="maxLoops">Max Review Loops</label>
             <InputNumber id="maxLoops" @bind-Value="_form.MaxReviewLoops" class="form-control" />
+            <small style="color:#888">How many times the Developer Agent can revise code based on Reviewer feedback before the pipeline moves on. Default is 3.</small>
             <ValidationMessage For="() => _form.MaxReviewLoops" />
         </div>
 

@@ -9,6 +9,7 @@ An AI-powered software engineering team built in **C# .NET 10**, orchestrated vi
 - [Purpose](#purpose)
 - [Architecture](#architecture)
 - [Agent Roles](#agent-roles)
+- [Orchestration Patterns](#orchestration-patterns)
 - [Prerequisites](#prerequisites)
 - [Configuration](#configuration)
 - [How to Run](#how-to-run)
@@ -18,12 +19,15 @@ An AI-powered software engineering team built in **C# .NET 10**, orchestrated vi
 - [API Reference](#api-reference)
 - [Running Tests](#running-tests)
 - [Project Structure](#project-structure)
+- [Limitations & Guardrails](#limitations--guardrails)
 
 ---
 
 ## Purpose
 
 This project demonstrates a **multi-agent system** where each AI agent owns one phase of the Software Development Lifecycle (SDLC). A central **Orchestrator** coordinates the agents, passes artifacts between them, and enforces quality gates (review feedback loops, test pass gates).
+
+The Anthropic Claude API natively supports multi-agent orchestration via the tool-use pattern. A central Orchestrator delegates tasks to specialised subagents, each scoped to one engineering discipline. Claude's large context window allows agents to share rich context without losing track across phases.
 
 **Use cases:**
 - Rapidly prototype a working codebase from a plain English description
@@ -101,6 +105,50 @@ Shared Artifact Store (in-memory per request session):
 | **Security Engineer** | 4 (parallel) | Security report | OWASP Top 10 audit, CVE scan, secrets detection |
 | **DevOps Engineer** | 5 | Deployment config | Dockerfile, docker-compose, K8s manifests, GitHub Actions |
 | **Technical Writer** | 6 | Documentation | README, API reference, architecture doc |
+
+---
+
+## Orchestration Patterns
+
+### Pattern 1 — Sequential Pipeline
+Each agent completes before the next starts. Output of agent N becomes the input of agent N+1.
+
+```
+PM → Architect → Developer → Reviewer → QA → DevOps → Security → Docs
+```
+
+Best for: greenfield projects with well-defined requirements.
+
+---
+
+### Pattern 2 — Parallel Execution
+Agents that don't depend on each other run concurrently (QA and Security in Phase 4).
+
+```
+Developer ──► Reviewer ──► [APPROVED]
+                                │
+                    ┌───────────┴───────────┐
+                 QA Agent           Security Agent   ← run in parallel
+                    └───────────┬───────────┘
+                            DevOps + Docs
+```
+
+Best for: large tasks where time efficiency matters.
+
+---
+
+### Pattern 3 — Feedback Loop
+The Reviewer can reject code and send it back to the Developer, up to `MaxReviewLoops` times.
+
+```
+Developer ──► Reviewer ──► [APPROVED] ──► QA
+                  │
+             [REJECTED]
+                  │
+            Developer (revision)
+```
+
+Best for: production-grade output with strict quality gates. This is the default behaviour in this project.
 
 ---
 
@@ -358,6 +406,28 @@ MultiAgentDevTeam/
 
 ---
 
+## Limitations & Guardrails
+
+### Known Limitations
+
+| Limitation | Mitigation |
+|------------|------------|
+| Agents can hallucinate file paths | Validate paths before writing |
+| Generated code may not execute without a real runtime | Run in a sandbox (Docker container) |
+| Context grows large in long sessions | Summarise artifacts before passing to next agent |
+| Circular loops if reviewer always rejects | `MaxReviewLoops` cap enforced by Orchestrator |
+| Agents may duplicate work | Orchestrator deduplicates artifact keys via `ArtifactStore` |
+
+### Guardrails to Consider When Extending
+
+- **Sandboxed execution** — run all shell commands inside Docker, never on the host machine
+- **Token budget** — cap each agent's response to avoid runaway API costs
+- **Human-in-the-loop** — pause before DevOps agent pushes to real infrastructure
+- **Output validation** — parse and validate structured agent outputs before passing downstream
+- **Secret scanning** — scan generated files for hardcoded API keys before storing
+
+---
+
 ## NuGet Package Cache
 
 All NuGet packages are stored in the shared environment to avoid duplication:
@@ -369,4 +439,4 @@ This is configured in `NuGet.Config` at the solution root.
 
 ---
 
-*Last Updated: March 2026*
+*Last Updated: April 2026*

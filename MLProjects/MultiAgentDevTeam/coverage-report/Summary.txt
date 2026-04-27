@@ -1,0 +1,61 @@
+Summary
+  Generated on: 3/17/2026 - 4:18:14 PM
+  Coverage date: 3/17/2026 - 2:53:08 PM - 3/17/2026 - 2:58:41 PM
+  Parser: MultiReport (2x Cobertura)
+  Assemblies: 10
+  Classes: 21
+  Files: 17
+  Line coverage: 98.8%
+  Covered lines: 672
+  Uncovered lines: 8
+  Coverable lines: 680
+  Total lines: 1136
+  Branch coverage: 90.5% (67 of 74)
+  Covered branches: 67
+  Total branches: 74
+  Method coverage: 100% (116 of 116)
+  Full method coverage: 99.1% (115 of 116)
+  Covered methods: 116
+  Fully covered methods: 115
+  Total methods: 116
+
+MultiAgentDevTeam.ArchitectAgent                                   100%
+  MultiAgentDevTeam.ArchitectAgent.ArchitectAgent                  100%
+
+MultiAgentDevTeam.DeveloperAgent                                   100%
+  MultiAgentDevTeam.DeveloperAgent.DeveloperAgent                  100%
+
+MultiAgentDevTeam.DevOpsAgent                                      100%
+  MultiAgentDevTeam.DevOpsAgent.DevOpsAgent                        100%
+
+MultiAgentDevTeam.DocsAgent                                        100%
+  MultiAgentDevTeam.DocsAgent.DocsAgent                            100%
+
+MultiAgentDevTeam.Orchestrator                                    97.8%
+  MultiAgentDevTeam.Orchestrator.Services.FileSessionRepository    100%
+  MultiAgentDevTeam.Orchestrator.Services.OrchestratorService      100%
+  Program                                                         93.8%
+
+MultiAgentDevTeam.PMAgent                                          100%
+  MultiAgentDevTeam.PMAgent.PMAgent                                100%
+
+MultiAgentDevTeam.QAAgent                                          100%
+  MultiAgentDevTeam.QAAgent.QAAgent                                100%
+
+MultiAgentDevTeam.ReviewerAgent                                    100%
+  MultiAgentDevTeam.ReviewerAgent.ReviewerAgent                    100%
+
+MultiAgentDevTeam.SecurityAgent                                    100%
+  MultiAgentDevTeam.SecurityAgent.SecurityAgent                    100%
+
+MultiAgentDevTeam.Shared                                           100%
+  MultiAgentDevTeam.Shared.Agents.BaseAgent                        100%
+  MultiAgentDevTeam.Shared.Configuration.AgentConfiguration        100%
+  MultiAgentDevTeam.Shared.Interfaces.SessionRecord                100%
+  MultiAgentDevTeam.Shared.Interfaces.SessionSummary               100%
+  MultiAgentDevTeam.Shared.Models.AgentRequest                     100%
+  MultiAgentDevTeam.Shared.Models.AgentResponse                    100%
+  MultiAgentDevTeam.Shared.Models.Artifact                         100%
+  MultiAgentDevTeam.Shared.Models.ArtifactStore                    100%
+  MultiAgentDevTeam.Shared.Models.OrchestratorRequest              100%
+  MultiAgentDevTeam.Shared.Models.OrchestratorResponse             100%

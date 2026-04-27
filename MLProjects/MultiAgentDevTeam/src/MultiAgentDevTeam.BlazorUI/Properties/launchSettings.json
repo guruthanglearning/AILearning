@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "MultiAgentDevTeam.BlazorUI": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:59257;http://localhost:59258"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+# Secrets - never commit
+**/appsettings.secrets.json
+**/*.secrets.json
+.env
+.env.local
+
+# Build outputs
+**/bin/
+**/obj/
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.user
+
+# NuGet
+*.nupkg
+
+# OS
+.DS_Store
+Thumbs.db

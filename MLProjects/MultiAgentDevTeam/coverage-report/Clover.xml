@@ -1,0 +1,833 @@
+<?xml version="1.0" encoding="utf-8"?>
+<coverage generated="1773789636" clover="4.3.1">
+  <project timestamp="1773789636">
+    <metrics complexity="0" elements="680" coveredelements="672" conditionals="74" coveredconditionals="67" statements="680" coveredstatements="672" coveredmethods="116" methods="116" classes="21" loc="1136" ncloc="680" files="17" packages="10" />
+    <package name="MultiAgentDevTeam.ArchitectAgent">
+      <metrics complexity="0" elements="20" coveredelements="20" conditionals="0" coveredconditionals="0" statements="20" coveredstatements="20" coveredmethods="4" methods="4" classes="1" loc="32" ncloc="20" files="1" />
+      <file path="D:\Study\AILearning\MLProjects\MultiAgentDevTeam\src\Agents\MultiAgentDevTeam.ArchitectAgent\ArchitectAgent.cs" name="ArchitectAgent.cs">
+        <metrics complexity="0" elements="20" coveredelements="20" conditionals="0" coveredconditionals="0" statements="20" coveredstatements="20" coveredmethods="4" methods="4" classes="1" loc="32" ncloc="20" />
+        <class name="MultiAgentDevTeam.ArchitectAgent.ArchitectAgent">
+          <metrics complexity="0" elements="20" coveredelements="20" conditionals="0" coveredconditionals="0" statements="20" coveredstatements="20" coveredmethods="4" methods="4" />
+        </class>
+        <line complexity="1" signature=".ctor(Anthropic.SDK.AnthropicClient,Microsoft.Extensions.Logging.ILogger`1&lt;MultiAgentDevTeam.ArchitectAgent.ArchitectAgent&gt;)" num="10" count="10" type="method" />
+        <line complexity="1" signature="get_Name()" num="12" count="8" type="method" />
+        <line complexity="1" signature="get_OutputType()" num="13" count="2" type="method" />
+        <line complexity="1" signature="get_SystemPrompt()" num="15" count="2" type="method" />
+        <line num="16" count="2" type="stmt" />
+        <line num="17" count="2" type="stmt" />
+        <line num="18" count="2" type="stmt" />
+        <line num="19" count="2" type="stmt" />
+        <line num="20" count="2" type="stmt" />
+        <line num="21" count="2" type="stmt" />
+        <line num="22" count="2" type="stmt" />
+        <line num="23" count="2" type="stmt" />
+        <line num="24" count="2" type="stmt" />
+        <line num="25" count="2" type="stmt" />
+        <line num="26" count="2" type="stmt" />
+        <line num="27" count="2" type="stmt" />
+        <line num="28" count="2" type="stmt" />
+        <line num="29" count="2" type="stmt" />
+        <line num="30" count="2" type="stmt" />
+        <line num="31" count="2" type="stmt" />
+      </file>
+    </package>
+    <package name="MultiAgentDevTeam.DeveloperAgent">
+      <metrics complexity="0" elements="30" coveredelements="30" conditionals="0" coveredconditionals="0" statements="30" coveredstatements="30" coveredmethods="4" methods="4" classes="1" loc="42" ncloc="30" files="1" />
+      <file path="D:\Study\AILearning\MLProjects\MultiAgentDevTeam\src\Agents\MultiAgentDevTeam.DeveloperAgent\DeveloperAgent.cs" name="DeveloperAgent.cs">
+        <metrics complexity="0" elements="30" coveredelements="30" conditionals="0" coveredconditionals="0" statements="30" coveredstatements="30" coveredmethods="4" methods="4" classes="1" loc="42" ncloc="30" />
+        <class name="MultiAgentDevTeam.DeveloperAgent.DeveloperAgent">
+          <metrics complexity="0" elements="30" coveredelements="30" conditionals="0" coveredconditionals="0" statements="30" coveredstatements="30" coveredmethods="4" methods="4" />
+        </class>
+        <line complexity="1" signature=".ctor(Anthropic.SDK.AnthropicClient,Microsoft.Extensions.Logging.ILogger`1&lt;MultiAgentDevTeam.DeveloperAgent.DeveloperAgent&gt;)" num="10" count="16" type="method" />
+        <line complexity="1" signature="get_Name()" num="12" count="18" type="method" />
+        <line complexity="1" signature="get_OutputType()" num="13" count="2" type="method" />
+        <line complexity="1" signature="get_SystemPrompt()" num="15" count="5" type="method" />
+        <line num="16" count="5" type="stmt" />
+        <line num="17" count="5" type="stmt" />
+        <line num="18" count="5" type="stmt" />
+        <line num="19" count="5" type="stmt" />
+        <line num="20" count="5" type="stmt" />
+        <line num="21" count="5" type="stmt" />
+        <line num="22" count="5" type="stmt" />
+        <line num="23" count="5" type="stmt" />
+        <line num="24" count="5" type="stmt" />
+        <line num="25" count="5" type="stmt" />
+        <line num="26" count="5" type="stmt" />
+        <line num="27" count="5" type="stmt" />
+        <line num="28" count="5" type="stmt" />
+        <line num="29" count="5" type="stmt" />
+        <line num="30" count="5" type="stmt" />
+        <line num="31" count="5" type="stmt" />
+        <line num="32" count="5" type="stmt" />
+        <line num="33" count="5" type="stmt" />
+        <line num="34" count="5" type="stmt" />
+        <line num="35" count="5" type="stmt" />
+        <line num="36" count="5" type="stmt" />
+        <line num="37" count="5" type="stmt" />
+        <line num="38" count="5" type="stmt" />
+        <line num="39" count="5" type="stmt" />
+        <line num="40" count="5" type="stmt" />
+        <line num="41" count="5" type="stmt" />
+      </file>
+    </package>
+    <package name="MultiAgentDevTeam.DevOpsAgent">
+      <metrics complexity="0" elements="25" coveredelements="25" conditionals="0" coveredconditionals="0" statements="25" coveredstatements="25" coveredmethods="4" methods="4" classes="1" loc="37" ncloc="25" files="1" />
+      <file path="D:\Study\AILearning\MLProjects\MultiAgentDevTeam\src\Agents\MultiAgentDevTeam.DevOpsAgent\DevOpsAgent.cs" name="DevOpsAgent.cs">
+        <metrics complexity="0" elements="25" coveredelements="25" conditionals="0" coveredconditionals="0" statements="25" coveredstatements="25" coveredmethods="4" methods="4" classes="1" loc="37" ncloc="25" />
+        <class name="MultiAgentDevTeam.DevOpsAgent.DevOpsAgent">
+          <metrics complexity="0" elements="25" coveredelements="25" conditionals="0" coveredconditionals="0" statements="25" coveredstatements="25" coveredmethods="4" methods="4" />
+        </class>
+        <line complexity="1" signature=".ctor(Anthropic.SDK.AnthropicClient,Microsoft.Extensions.Logging.ILogger`1&lt;MultiAgentDevTeam.DevOpsAgent.DevOpsAgent&gt;)" num="10" count="10" type="method" />
+        <line complexity="1" signature="get_Name()" num="12" count="8" type="method" />
+        <line complexity="1" signature="get_OutputType()" num="13" count="2" type="method" />
+        <line complexity="1" signature="get_SystemPrompt()" num="15" count="2" type="method" />
+        <line num="16" count="2" type="stmt" />
+        <line num="17" count="2" type="stmt" />
+        <line num="18" count="2" type="stmt" />
+        <line num="19" count="2" type="stmt" />
+        <line num="20" count="2" type="stmt" />
+        <line num="21" count="2" type="stmt" />
+        <line num="22" count="2" type="stmt" />
+        <line num="23" count="2" type="stmt" />
+        <line num="24" count="2" type="stmt" />
+        <line num="25" count="2" type="stmt" />
+        <line num="26" count="2" type="stmt" />
+        <line num="27" count="2" type="stmt" />
+        <line num="28" count="2" type="stmt" />
+        <line num="29" count="2" type="stmt" />
+        <line num="30" count="2" type="stmt" />
+        <line num="31" count="2" type="stmt" />
+        <line num="32" count="2" type="stmt" />
+        <line num="33" count="2" type="stmt" />
+        <line num="34" count="2" type="stmt" />
+        <line num="35" count="2" type="stmt" />
+        <line num="36" count="2" type="stmt" />
+      </file>
+    </package>
+    <package name="MultiAgentDevTeam.DocsAgent">
+      <metrics complexity="0" elements="34" coveredelements="34" conditionals="0" coveredconditionals="0" statements="34" coveredstatements="34" coveredmethods="4" methods="4" classes="1" loc="46" ncloc="34" files="1" />
+      <file path="D:\Study\AILearning\MLProjects\MultiAgentDevTeam\src\Agents\MultiAgentDevTeam.DocsAgent\DocsAgent.cs" name="DocsAgent.cs">
+        <metrics complexity="0" elements="34" coveredelements="34" conditionals="0" coveredconditionals="0" statements="34" coveredstatements="34" coveredmethods="4" methods="4" classes="1" loc="46" ncloc="34" />
+        <class name="MultiAgentDevTeam.DocsAgent.DocsAgent">
+          <metrics complexity="0" elements="34" coveredelements="34" conditionals="0" coveredconditionals="0" statements="34" coveredstatements="34" coveredmethods="4" methods="4" />
+        </class>
+        <line complexity="1" signature=".ctor(Anthropic.SDK.AnthropicClient,Microsoft.Extensions.Logging.ILogger`1&lt;MultiAgentDevTeam.DocsAgent.DocsAgent&gt;)" num="10" count="10" type="method" />
+        <line complexity="1" signature="get_Name()" num="12" count="8" type="method" />
+        <line complexity="1" signature="get_OutputType()" num="13" count="2" type="method" />
+        <line complexity="1" signature="get_SystemPrompt()" num="15" count="2" type="method" />
+        <line num="16" count="2" type="stmt" />
+        <line num="17" count="2" type="stmt" />
+        <line num="18" count="2" type="stmt" />
+        <line num="19" count="2" type="stmt" />
+        <line num="20" count="2" type="stmt" />
+        <line num="21" count="2" type="stmt" />
+        <line num="22" count="2" type="stmt" />
+        <line num="23" count="2" type="stmt" />
+        <line num="24" count="2" type="stmt" />
+        <line num="25" count="2" type="stmt" />
+        <line num="26" count="2" type="stmt" />
+        <line num="27" count="2" type="stmt" />
+        <line num="28" count="2" type="stmt" />
+        <line num="29" count="2" type="stmt" />
+        <line num="30" count="2" type="stmt" />
+        <line num="31" count="2" type="stmt" />
+        <line num="32" count="2" type="stmt" />
+        <line num="33" count="2" type="stmt" />
+        <line num="34" count="2" type="stmt" />
+        <line num="35" count="2" type="stmt" />
+        <line num="36" count="2" type="stmt" />
+        <line num="37" count="2" type="stmt" />
+        <line num="38" count="2" type="stmt" />
+        <line num="39" count="2" type="stmt" />
+        <line num="40" count="2" type="stmt" />
+        <line num="41" count="2" type="stmt" />
+        <line num="42" count="2" type="stmt" />
+        <line num="43" count="2" type="stmt" />
+        <line num="44" count="2" type="stmt" />
+        <line num="45" count="2" type="stmt" />
+      </file>
+    </package>
+    <package name="MultiAgentDevTeam.Orchestrator">
+      <metrics complexity="0" elements="367" coveredelements="359" conditionals="58" coveredconditionals="51" statements="367" coveredstatements="359" coveredmethods="16" methods="16" classes="3" loc="602" ncloc="367" files="3" />
+      <file path="D:\Study\AILearning\MLProjects\MultiAgentDevTeam\src\MultiAgentDevTeam.Orchestrator\Services\FileSessionRepository.cs" name="FileSessionRepository.cs">
+        <metrics complexity="0" elements="46" coveredelements="46" conditionals="10" coveredconditionals="9" statements="46" coveredstatements="46" coveredmethods="5" methods="5" classes="1" loc="81" ncloc="46" />
+        <class name="MultiAgentDevTeam.Orchestrator.Services.FileSessionRepository">
+          <metrics complexity="0" elements="46" coveredelements="46" conditionals="10" coveredconditionals="9" statements="46" coveredstatements="46" coveredmethods="5" methods="5" />
+        </class>
+        <line complexity="1" signature=".cctor()" num="14" count="2" type="method" />
+        <line complexity="2" signature=".ctor(Microsoft.Extensions.Options.IOptions`1&lt;MultiAgentDevTeam.Shared.Configuration.AgentConfiguration&gt;,Microsoft.Extensions.Logging.ILogger`1&lt;MultiAgentDevTeam.Orchestrator.Services.FileSessionRepository&gt;)" num="16" count="23" type="method" />
+        <line falsecount="0" truecount="2" num="18" type="cond" />
+        <line num="19" count="23" type="stmt" />
+        <line num="20" count="23" type="stmt" />
+        <line num="22" count="23" type="stmt" />
+        <line num="23" count="23" type="stmt" />
+        <line num="24" count="23" type="stmt" />
+        <line num="25" count="23" type="stmt" />
+        <line complexity="1" signature="SaveAsync()" num="29" count="24" type="method" />
+        <line num="30" count="24" type="stmt" />
+        <line num="31" count="24" type="stmt" />
+        <line num="32" count="24" type="stmt" />
+        <line num="33" count="24" type="stmt" />
+        <line complexity="2" signature="GetAsync()" num="37" count="6" type="method" />
+        <line falsecount="0" truecount="2" num="38" type="cond" />
+        <line num="40" count="4" type="stmt" />
+        <line num="41" count="4" type="stmt" />
+        <line num="42" count="5" type="stmt" />
+        <line complexity="6" signature="ListAsync()" num="46" count="34" type="method" />
+        <line num="47" count="7" type="stmt" />
+        <line num="48" count="7" type="stmt" />
+        <line num="50" count="7" type="stmt" />
+        <line falsecount="0" truecount="2" num="52" type="cond" />
+        <line num="56" count="10" type="stmt" />
+        <line num="57" count="10" type="stmt" />
+        <line falsecount="1" truecount="1" num="58" type="cond" />
+        <line falsecount="0" truecount="2" num="60" type="cond" />
+        <line num="61" count="9" type="stmt" />
+        <line num="62" count="9" type="stmt" />
+        <line num="63" count="9" type="stmt" />
+        <line num="64" count="9" type="stmt" />
+        <line num="65" count="9" type="stmt" />
+        <line num="66" count="9" type="stmt" />
+        <line num="67" count="9" type="stmt" />
+        <line num="68" count="9" type="stmt" />
+        <line num="69" count="9" type="stmt" />
+        <line num="70" count="9" type="stmt" />
+        <line num="71" count="9" type="stmt" />
+        <line num="72" count="9" type="stmt" />
+        <line num="73" count="1" type="stmt" />
+        <line num="75" count="1" type="stmt" />
+        <line num="76" count="1" type="stmt" />
+        <line num="77" count="10" type="stmt" />
+        <line num="79" count="7" type="stmt" />
+        <line num="80" count="7" type="stmt" />
+      </file>
+      <file path="D:\Study\AILearning\MLProjects\MultiAgentDevTeam\src\MultiAgentDevTeam.Orchestrator\Services\OrchestratorService.cs" name="OrchestratorService.cs">
+        <metrics complexity="0" elements="190" coveredelements="190" conditionals="38" coveredconditionals="36" statements="190" coveredstatements="190" coveredmethods="10" methods="10" classes="1" loc="333" ncloc="190" />
+        <class name="MultiAgentDevTeam.Orchestrator.Services.OrchestratorService">
+          <metrics complexity="0" elements="190" coveredelements="190" conditionals="38" coveredconditionals="36" statements="190" coveredstatements="190" coveredmethods="10" methods="10" />
+        </class>
+        <line complexity="1" signature=".ctor(System.Collections.Generic.IEnumerable`1&lt;MultiAgentDevTeam.Shared.Interfaces.IAgent&gt;,Microsoft.Extensions.Options.IOptions`1&lt;MultiAgentDevTeam.Shared.Configuration.AgentConfiguration&gt;,MultiAgentDevTeam.Shared.Interfaces.ISessionRepository,Microsoft.Extensions.Logging.ILogger`1&lt;MultiAgentDevTeam.Orchestrator.Services.OrchestratorService&gt;)" num="32" count="28" type="method" />
+        <line num="33" count="28" type="stmt" />
+        <line num="34" count="28" type="stmt" />
+        <line num="35" count="28" type="stmt" />
+        <line num="36" count="28" type="stmt" />
+        <line num="38" count="28" type="stmt" />
+        <line num="39" count="28" type="stmt" />
+        <line num="40" count="28" type="stmt" />
+        <line num="41" count="27" type="stmt" />
+        <line num="42" count="27" type="stmt" />
+        <line num="43" count="27" type="stmt" />
+        <line num="44" count="27" type="stmt" />
+        <line num="45" count="27" type="stmt" />
+        <line num="46" count="27" type="stmt" />
+        <line num="47" count="27" type="stmt" />
+        <line num="48" count="27" type="stmt" />
+        <line num="49" count="27" type="stmt" />
+        <line num="50" count="27" type="stmt" />
+        <line complexity="2" signature="GetAgent(System.Collections.Generic.List`1&lt;MultiAgentDevTeam.Shared.Interfaces.IAgent&gt;,MultiAgentDevTeam.Shared.Models.ArtifactType)" num="53" count="1192" type="method" />
+        <line num="54" count="218" type="stmt" />
+        <line complexity="1" signature="RunAsync()" num="60" count="670" type="method" />
+        <line num="63" count="19" type="stmt" />
+        <line num="64" count="19" type="stmt" />
+        <line num="65" count="19" type="stmt" />
+        <line complexity="6" signature="&lt;RunAsync()" num="66" count="670" type="method" />
+        <line num="67" count="19" type="stmt" />
+        <line num="69" count="19" type="stmt" />
+        <line num="70" count="38" type="stmt" />
+        <line complexity="2" signature="StreamAsync()" num="78" count="204" type="method" />
+        <line num="80" count="6" type="stmt" />
+        <line falsecount="0" truecount="2" num="82" type="cond" />
+        <line num="83" count="96" type="stmt" />
+        <line num="86" count="6" type="stmt" />
+        <line num="87" count="6" type="stmt" />
+        <line complexity="26" signature="ExecutePipelineAsync()" num="96" count="356" type="method" />
+        <line num="97" count="25" type="stmt" />
+        <line num="98" count="25" type="stmt" />
+        <line falsecount="1" truecount="1" num="99" type="cond" />
+        <line num="101" count="25" type="stmt" />
+        <line falsecount="0" truecount="2" num="108" type="cond" />
+        <line num="110" count="25" type="stmt" />
+        <line num="111" count="25" type="stmt" />
+        <line num="112" count="25" type="stmt" />
+        <line falsecount="0" truecount="2" num="116" type="cond" />
+        <line num="118" count="24" type="stmt" />
+        <line num="119" count="24" type="stmt" />
+        <line num="120" count="24" type="stmt" />
+        <line num="121" count="24" type="stmt" />
+        <line num="122" count="24" type="stmt" />
+        <line num="123" count="24" type="stmt" />
+        <line falsecount="0" truecount="2" num="127" type="cond" />
+        <line num="129" count="24" type="stmt" />
+        <line falsecount="0" truecount="2" num="131" type="cond" />
+        <line num="133" count="26" type="stmt" />
+        <line num="135" count="26" type="stmt" />
+        <line num="136" count="26" type="stmt" />
+        <line num="137" count="26" type="stmt" />
+        <line num="138" count="26" type="stmt" />
+        <line num="139" count="26" type="stmt" />
+        <line num="140" count="26" type="stmt" />
+        <line num="141" count="26" type="stmt" />
+        <line falsecount="0" truecount="2" num="143" type="cond" />
+        <line num="145" count="24" type="stmt" />
+        <line num="146" count="24" type="stmt" />
+        <line num="147" count="24" type="stmt" />
+        <line num="148" count="24" type="stmt" />
+        <line num="149" count="24" type="stmt" />
+        <line num="150" count="24" type="stmt" />
+        <line num="152" count="24" type="stmt" />
+        <line falsecount="0" truecount="2" num="153" type="cond" />
+        <line num="155" count="21" type="stmt" />
+        <line num="156" count="21" type="stmt" />
+        <line num="157" count="21" type="stmt" />
+        <line num="158" count="21" type="stmt" />
+        <line num="161" count="3" type="stmt" />
+        <line num="162" count="3" type="stmt" />
+        <line num="163" count="3" type="stmt" />
+        <line num="164" count="3" type="stmt" />
+        <line falsecount="0" truecount="2" num="166" type="cond" />
+        <line num="168" count="1" type="stmt" />
+        <line num="169" count="1" type="stmt" />
+        <line num="170" count="1" type="stmt" />
+        <line num="173" count="24" type="stmt" />
+        <line num="176" count="24" type="stmt" />
+        <line falsecount="0" truecount="2" num="178" type="cond" />
+        <line num="179" count="21" type="stmt" />
+        <line num="180" count="21" type="stmt" />
+        <line num="181" count="21" type="stmt" />
+        <line num="182" count="21" type="stmt" />
+        <line num="183" count="21" type="stmt" />
+        <line num="184" count="21" type="stmt" />
+        <line falsecount="0" truecount="2" num="186" type="cond" />
+        <line num="187" count="21" type="stmt" />
+        <line num="188" count="21" type="stmt" />
+        <line num="189" count="21" type="stmt" />
+        <line num="190" count="21" type="stmt" />
+        <line num="191" count="21" type="stmt" />
+        <line num="192" count="21" type="stmt" />
+        <line falsecount="0" truecount="2" num="194" type="cond" />
+        <line num="196" count="21" type="stmt" />
+        <line num="197" count="21" type="stmt" />
+        <line num="198" count="21" type="stmt" />
+        <line num="199" count="21" type="stmt" />
+        <line falsecount="0" truecount="2" num="203" type="cond" />
+        <line num="205" count="21" type="stmt" />
+        <line num="206" count="21" type="stmt" />
+        <line num="207" count="21" type="stmt" />
+        <line num="208" count="21" type="stmt" />
+        <line num="209" count="21" type="stmt" />
+        <line num="210" count="21" type="stmt" />
+        <line falsecount="0" truecount="2" num="214" type="cond" />
+        <line num="216" count="21" type="stmt" />
+        <line num="217" count="21" type="stmt" />
+        <line num="218" count="21" type="stmt" />
+        <line num="219" count="21" type="stmt" />
+        <line num="220" count="21" type="stmt" />
+        <line num="221" count="21" type="stmt" />
+        <line num="222" count="21" type="stmt" />
+        <line num="223" count="21" type="stmt" />
+        <line num="226" count="24" type="stmt" />
+        <line num="227" count="24" type="stmt" />
+        <line num="228" count="24" type="stmt" />
+        <line num="230" count="24" type="stmt" />
+        <line num="231" count="24" type="stmt" />
+        <line num="232" count="24" type="stmt" />
+        <line num="233" count="24" type="stmt" />
+        <line num="234" count="356" type="stmt" />
+        <line num="235" count="24" type="stmt" />
+        <line num="236" count="24" type="stmt" />
+        <line num="237" count="24" type="stmt" />
+        <line num="238" count="24" type="stmt" />
+        <line num="239" count="1" type="stmt" />
+        <line num="241" count="1" type="stmt" />
+        <line num="242" count="1" type="stmt" />
+        <line num="243" count="1" type="stmt" />
+        <line num="244" count="1" type="stmt" />
+        <line num="245" count="1" type="stmt" />
+        <line num="246" count="1" type="stmt" />
+        <line num="247" count="1" type="stmt" />
+        <line num="248" count="1" type="stmt" />
+        <line num="249" count="1" type="stmt" />
+        <line num="250" count="1" type="stmt" />
+        <line num="251" count="1" type="stmt" />
+        <line num="254" count="25" type="stmt" />
+        <line num="258" count="25" type="stmt" />
+        <line num="260" count="25" type="stmt" />
+        <line num="261" count="25" type="stmt" />
+        <line complexity="2" signature="RunAgent()" num="273" count="183" type="method" />
+        <line num="274" count="183" type="stmt" />
+        <line num="275" count="183" type="stmt" />
+        <line num="276" count="183" type="stmt" />
+        <line num="278" count="183" type="stmt" />
+        <line falsecount="0" truecount="2" num="280" type="cond" />
+        <line num="282" count="1" type="stmt" />
+        <line num="283" count="1" type="stmt" />
+        <line num="284" count="1" type="stmt" />
+        <line num="285" count="1" type="stmt" />
+        <line num="288" count="182" type="stmt" />
+        <line num="289" count="182" type="stmt" />
+        <line num="290" count="182" type="stmt" />
+        <line num="291" count="182" type="stmt" />
+        <line num="292" count="182" type="stmt" />
+        <line num="293" count="182" type="stmt" />
+        <line num="294" count="182" type="stmt" />
+        <line num="296" count="182" type="stmt" />
+        <line num="297" count="182" type="stmt" />
+        <line num="298" count="182" type="stmt" />
+        <line num="299" count="182" type="stmt" />
+        <line complexity="1" signature="PersistSessionAsync()" num="305" count="25" type="method" />
+        <line num="306" count="25" type="stmt" />
+        <line num="307" count="25" type="stmt" />
+        <line num="308" count="25" type="stmt" />
+        <line num="309" count="25" type="stmt" />
+        <line num="310" count="25" type="stmt" />
+        <line num="311" count="25" type="stmt" />
+        <line num="312" count="25" type="stmt" />
+        <line num="313" count="25" type="stmt" />
+        <line num="314" count="25" type="stmt" />
+        <line num="315" count="25" type="stmt" />
+        <line num="316" count="25" type="stmt" />
+        <line num="318" count="25" type="stmt" />
+        <line num="319" count="24" type="stmt" />
+        <line num="320" count="1" type="stmt" />
+        <line num="322" count="1" type="stmt" />
+        <line num="323" count="1" type="stmt" />
+        <line num="324" count="25" type="stmt" />
+        <line complexity="1" signature="BuildContext(MultiAgentDevTeam.Shared.Models.ArtifactStore,MultiAgentDevTeam.Shared.Models.ArtifactType[])" num="327" count="776" type="method" />
+        <line num="328" count="158" type="stmt" />
+        <line num="329" count="776" type="stmt" />
+        <line complexity="1" signature="ShouldSkip(MultiAgentDevTeam.Shared.Models.OrchestratorRequest,System.String)" num="332" count="195" type="method" />
+      </file>
+      <file path="D:\Study\AILearning\MLProjects\MultiAgentDevTeam\src\MultiAgentDevTeam.Orchestrator\Program.cs" name="Program.cs">
+        <metrics complexity="0" elements="131" coveredelements="123" conditionals="10" coveredconditionals="6" statements="131" coveredstatements="123" coveredmethods="1" methods="1" classes="1" loc="188" ncloc="131" />
+        <class name="Program">
+          <metrics complexity="0" elements="131" coveredelements="123" conditionals="10" coveredconditionals="6" statements="131" coveredstatements="123" coveredmethods="1" methods="1" />
+        </class>
+        <line complexity="10" signature="&lt;Main&gt;$(System.String[])" num="19" count="204" type="method" />
+        <line num="22" count="26" type="stmt" />
+        <line num="25" count="26" type="stmt" />
+        <line num="26" count="26" type="stmt" />
+        <line falsecount="1" truecount="1" num="28" type="cond" />
+        <line num="29" count="26" type="stmt" />
+        <line num="30" count="26" type="stmt" />
+        <line falsecount="2" truecount="2" num="33" type="cond" />
+        <line num="34" count="26" type="stmt" />
+        <line num="35" count="26" type="stmt" />
+        <line num="37" count="26" type="stmt" />
+        <line num="40" count="26" type="stmt" />
+        <line num="41" count="26" type="stmt" />
+        <line num="42" count="26" type="stmt" />
+        <line num="43" count="26" type="stmt" />
+        <line num="44" count="26" type="stmt" />
+        <line num="45" count="26" type="stmt" />
+        <line num="46" count="26" type="stmt" />
+        <line num="47" count="26" type="stmt" />
+        <line num="50" count="26" type="stmt" />
+        <line num="51" count="26" type="stmt" />
+        <line falsecount="1" truecount="1" num="54" type="cond" />
+        <line num="55" count="26" type="stmt" />
+        <line num="57" count="26" type="stmt" />
+        <line num="58" count="26" type="stmt" />
+        <line falsecount="0" truecount="2" num="59" type="cond" />
+        <line num="60" count="26" type="stmt" />
+        <line num="61" count="26" type="stmt" />
+        <line num="62" count="26" type="stmt" />
+        <line num="63" count="26" type="stmt" />
+        <line num="64" count="26" type="stmt" />
+        <line num="65" count="52" type="stmt" />
+        <line num="66" count="26" type="stmt" />
+        <line num="67" count="26" type="stmt" />
+        <line num="68" count="26" type="stmt" />
+        <line num="69" count="26" type="stmt" />
+        <line num="70" count="0" type="stmt" />
+        <line num="71" count="0" type="stmt" />
+        <line num="72" count="0" type="stmt" />
+        <line num="73" count="26" type="stmt" />
+        <line num="74" count="52" type="stmt" />
+        <line num="77" count="26" type="stmt" />
+        <line num="78" count="26" type="stmt" />
+        <line num="79" count="26" type="stmt" />
+        <line num="80" count="26" type="stmt" />
+        <line num="81" count="26" type="stmt" />
+        <line num="82" count="26" type="stmt" />
+        <line num="83" count="26" type="stmt" />
+        <line num="84" count="26" type="stmt" />
+        <line num="85" count="26" type="stmt" />
+        <line num="86" count="52" type="stmt" />
+        <line num="88" count="52" type="stmt" />
+        <line num="90" count="26" type="stmt" />
+        <line num="92" count="26" type="stmt" />
+        <line num="93" count="26" type="stmt" />
+        <line num="94" count="26" type="stmt" />
+        <line num="95" count="26" type="stmt" />
+        <line num="96" count="26" type="stmt" />
+        <line num="97" count="52" type="stmt" />
+        <line num="99" count="26" type="stmt" />
+        <line num="104" count="29" type="stmt" />
+        <line num="105" count="26" type="stmt" />
+        <line num="106" count="26" type="stmt" />
+        <line num="109" count="26" type="stmt" />
+        <line num="110" count="26" type="stmt" />
+        <line num="111" count="7" type="stmt" />
+        <line num="112" count="1" type="stmt" />
+        <line num="113" count="26" type="stmt" />
+        <line num="114" count="6" type="stmt" />
+        <line num="115" count="6" type="stmt" />
+        <line num="116" count="7" type="stmt" />
+        <line num="117" count="26" type="stmt" />
+        <line num="118" count="26" type="stmt" />
+        <line num="119" count="26" type="stmt" />
+        <line num="120" count="26" type="stmt" />
+        <line num="121" count="26" type="stmt" />
+        <line num="122" count="26" type="stmt" />
+        <line num="123" count="26" type="stmt" />
+        <line num="126" count="26" type="stmt" />
+        <line num="127" count="26" type="stmt" />
+        <line num="128" count="7" type="stmt" />
+        <line num="129" count="26" type="stmt" />
+        <line num="130" count="1" type="stmt" />
+        <line num="131" count="1" type="stmt" />
+        <line num="132" count="1" type="stmt" />
+        <line num="133" count="26" type="stmt" />
+        <line num="134" count="26" type="stmt" />
+        <line num="135" count="6" type="stmt" />
+        <line num="136" count="6" type="stmt" />
+        <line num="137" count="6" type="stmt" />
+        <line num="138" count="26" type="stmt" />
+        <line num="139" count="204" type="stmt" />
+        <line num="140" count="26" type="stmt" />
+        <line num="141" count="96" type="stmt" />
+        <line num="142" count="96" type="stmt" />
+        <line num="143" count="96" type="stmt" />
+        <line num="144" count="26" type="stmt" />
+        <line num="145" count="26" type="stmt" />
+        <line num="146" count="26" type="stmt" />
+        <line num="147" count="26" type="stmt" />
+        <line num="148" count="26" type="stmt" />
+        <line num="149" count="26" type="stmt" />
+        <line num="152" count="26" type="stmt" />
+        <line num="153" count="26" type="stmt" />
+        <line num="154" count="0" type="stmt" />
+        <line num="155" count="0" type="stmt" />
+        <line num="156" count="26" type="stmt" />
+        <line num="157" count="0" type="stmt" />
+        <line num="158" count="0" type="stmt" />
+        <line num="159" count="0" type="stmt" />
+        <line num="160" count="26" type="stmt" />
+        <line num="161" count="26" type="stmt" />
+        <line num="162" count="26" type="stmt" />
+        <line num="163" count="26" type="stmt" />
+        <line num="166" count="26" type="stmt" />
+        <line num="167" count="26" type="stmt" />
+        <line num="168" count="4" type="stmt" />
+        <line num="169" count="4" type="stmt" />
+        <line num="170" count="4" type="stmt" />
+        <line num="171" count="4" type="stmt" />
+        <line num="172" count="4" type="stmt" />
+        <line num="173" count="26" type="stmt" />
+        <line num="174" count="26" type="stmt" />
+        <line num="177" count="26" type="stmt" />
+        <line num="178" count="26" type="stmt" />
+        <line num="179" count="4" type="stmt" />
+        <line num="180" count="4" type="stmt" />
+        <line num="181" count="4" type="stmt" />
+        <line num="182" count="26" type="stmt" />
+        <line num="183" count="26" type="stmt" />
+        <line num="185" count="26" type="stmt" />
+      </file>
+    </package>
+    <package name="MultiAgentDevTeam.PMAgent">
+      <metrics complexity="0" elements="18" coveredelements="18" conditionals="0" coveredconditionals="0" statements="18" coveredstatements="18" coveredmethods="4" methods="4" classes="1" loc="30" ncloc="18" files="1" />
+      <file path="D:\Study\AILearning\MLProjects\MultiAgentDevTeam\src\Agents\MultiAgentDevTeam.PMAgent\PMAgent.cs" name="PMAgent.cs">
+        <metrics complexity="0" elements="18" coveredelements="18" conditionals="0" coveredconditionals="0" statements="18" coveredstatements="18" coveredmethods="4" methods="4" classes="1" loc="30" ncloc="18" />
+        <class name="MultiAgentDevTeam.PMAgent.PMAgent">
+          <metrics complexity="0" elements="18" coveredelements="18" conditionals="0" coveredconditionals="0" statements="18" coveredstatements="18" coveredmethods="4" methods="4" />
+        </class>
+        <line complexity="1" signature=".ctor(Anthropic.SDK.AnthropicClient,Microsoft.Extensions.Logging.ILogger`1&lt;MultiAgentDevTeam.PMAgent.PMAgent&gt;)" num="10" count="24" type="method" />
+        <line complexity="1" signature="get_Name()" num="12" count="30" type="method" />
+        <line complexity="1" signature="get_OutputType()" num="13" count="2" type="method" />
+        <line complexity="1" signature="get_SystemPrompt()" num="15" count="9" type="method" />
+        <line num="16" count="9" type="stmt" />
+        <line num="17" count="9" type="stmt" />
+        <line num="18" count="9" type="stmt" />
+        <line num="19" count="9" type="stmt" />
+        <line num="20" count="9" type="stmt" />
+        <line num="21" count="9" type="stmt" />
+        <line num="22" count="9" type="stmt" />
+        <line num="23" count="9" type="stmt" />
+        <line num="24" count="9" type="stmt" />
+        <line num="25" count="9" type="stmt" />
+        <line num="26" count="9" type="stmt" />
+        <line num="27" count="9" type="stmt" />
+        <line num="28" count="9" type="stmt" />
+        <line num="29" count="9" type="stmt" />
+      </file>
+    </package>
+    <package name="MultiAgentDevTeam.QAAgent">
+      <metrics complexity="0" elements="28" coveredelements="28" conditionals="0" coveredconditionals="0" statements="28" coveredstatements="28" coveredmethods="4" methods="4" classes="1" loc="40" ncloc="28" files="1" />
+      <file path="D:\Study\AILearning\MLProjects\MultiAgentDevTeam\src\Agents\MultiAgentDevTeam.QAAgent\QAAgent.cs" name="QAAgent.cs">
+        <metrics complexity="0" elements="28" coveredelements="28" conditionals="0" coveredconditionals="0" statements="28" coveredstatements="28" coveredmethods="4" methods="4" classes="1" loc="40" ncloc="28" />
+        <class name="MultiAgentDevTeam.QAAgent.QAAgent">
+          <metrics complexity="0" elements="28" coveredelements="28" conditionals="0" coveredconditionals="0" statements="28" coveredstatements="28" coveredmethods="4" methods="4" />
+        </class>
+        <line complexity="1" signature=".ctor(Anthropic.SDK.AnthropicClient,Microsoft.Extensions.Logging.ILogger`1&lt;MultiAgentDevTeam.QAAgent.QAAgent&gt;)" num="10" count="12" type="method" />
+        <line complexity="1" signature="get_Name()" num="12" count="11" type="method" />
+        <line complexity="1" signature="get_OutputType()" num="13" count="2" type="method" />
+        <line complexity="1" signature="get_SystemPrompt()" num="15" count="3" type="method" />
+        <line num="16" count="3" type="stmt" />
+        <line num="17" count="3" type="stmt" />
+        <line num="18" count="3" type="stmt" />
+        <line num="19" count="3" type="stmt" />
+        <line num="20" count="3" type="stmt" />
+        <line num="21" count="3" type="stmt" />
+        <line num="22" count="3" type="stmt" />
+        <line num="23" count="3" type="stmt" />
+        <line num="24" count="3" type="stmt" />
+        <line num="25" count="3" type="stmt" />
+        <line num="26" count="3" type="stmt" />
+        <line num="27" count="3" type="stmt" />
+        <line num="28" count="3" type="stmt" />
+        <line num="29" count="3" type="stmt" />
+        <line num="30" count="3" type="stmt" />
+        <line num="31" count="3" type="stmt" />
+        <line num="32" count="3" type="stmt" />
+        <line num="33" count="3" type="stmt" />
+        <line num="34" count="3" type="stmt" />
+        <line num="35" count="3" type="stmt" />
+        <line num="36" count="3" type="stmt" />
+        <line num="37" count="3" type="stmt" />
+        <line num="38" count="3" type="stmt" />
+        <line num="39" count="3" type="stmt" />
+      </file>
+    </package>
+    <package name="MultiAgentDevTeam.ReviewerAgent">
+      <metrics complexity="0" elements="28" coveredelements="28" conditionals="0" coveredconditionals="0" statements="28" coveredstatements="28" coveredmethods="4" methods="4" classes="1" loc="40" ncloc="28" files="1" />
+      <file path="D:\Study\AILearning\MLProjects\MultiAgentDevTeam\src\Agents\MultiAgentDevTeam.ReviewerAgent\ReviewerAgent.cs" name="ReviewerAgent.cs">
+        <metrics complexity="0" elements="28" coveredelements="28" conditionals="0" coveredconditionals="0" statements="28" coveredstatements="28" coveredmethods="4" methods="4" classes="1" loc="40" ncloc="28" />
+        <class name="MultiAgentDevTeam.ReviewerAgent.ReviewerAgent">
+          <metrics complexity="0" elements="28" coveredelements="28" conditionals="0" coveredconditionals="0" statements="28" coveredstatements="28" coveredmethods="4" methods="4" />
+        </class>
+        <line complexity="1" signature=".ctor(Anthropic.SDK.AnthropicClient,Microsoft.Extensions.Logging.ILogger`1&lt;MultiAgentDevTeam.ReviewerAgent.ReviewerAgent&gt;)" num="10" count="10" type="method" />
+        <line complexity="1" signature="get_Name()" num="12" count="8" type="method" />
+        <line complexity="1" signature="get_OutputType()" num="13" count="2" type="method" />
+        <line complexity="1" signature="get_SystemPrompt()" num="15" count="2" type="method" />
+        <line num="16" count="2" type="stmt" />
+        <line num="17" count="2" type="stmt" />
+        <line num="18" count="2" type="stmt" />
+        <line num="19" count="2" type="stmt" />
+        <line num="20" count="2" type="stmt" />
+        <line num="21" count="2" type="stmt" />
+        <line num="22" count="2" type="stmt" />
+        <line num="23" count="2" type="stmt" />
+        <line num="24" count="2" type="stmt" />
+        <line num="25" count="2" type="stmt" />
+        <line num="26" count="2" type="stmt" />
+        <line num="27" count="2" type="stmt" />
+        <line num="28" count="2" type="stmt" />
+        <line num="29" count="2" type="stmt" />
+        <line num="30" count="2" type="stmt" />
+        <line num="31" count="2" type="stmt" />
+        <line num="32" count="2" type="stmt" />
+        <line num="33" count="2" type="stmt" />
+        <line num="34" count="2" type="stmt" />
+        <line num="35" count="2" type="stmt" />
+        <line num="36" count="2" type="stmt" />
+        <line num="37" count="2" type="stmt" />
+        <line num="38" count="2" type="stmt" />
+        <line num="39" count="2" type="stmt" />
+      </file>
+    </package>
+    <package name="MultiAgentDevTeam.SecurityAgent">
+      <metrics complexity="0" elements="24" coveredelements="24" conditionals="0" coveredconditionals="0" statements="24" coveredstatements="24" coveredmethods="4" methods="4" classes="1" loc="36" ncloc="24" files="1" />
+      <file path="D:\Study\AILearning\MLProjects\MultiAgentDevTeam\src\Agents\MultiAgentDevTeam.SecurityAgent\SecurityAgent.cs" name="SecurityAgent.cs">
+        <metrics complexity="0" elements="24" coveredelements="24" conditionals="0" coveredconditionals="0" statements="24" coveredstatements="24" coveredmethods="4" methods="4" classes="1" loc="36" ncloc="24" />
+        <class name="MultiAgentDevTeam.SecurityAgent.SecurityAgent">
+          <metrics complexity="0" elements="24" coveredelements="24" conditionals="0" coveredconditionals="0" statements="24" coveredstatements="24" coveredmethods="4" methods="4" />
+        </class>
+        <line complexity="1" signature=".ctor(Anthropic.SDK.AnthropicClient,Microsoft.Extensions.Logging.ILogger`1&lt;MultiAgentDevTeam.SecurityAgent.SecurityAgent&gt;)" num="10" count="10" type="method" />
+        <line complexity="1" signature="get_Name()" num="12" count="8" type="method" />
+        <line complexity="1" signature="get_OutputType()" num="13" count="2" type="method" />
+        <line complexity="1" signature="get_SystemPrompt()" num="15" count="2" type="method" />
+        <line num="16" count="2" type="stmt" />
+        <line num="17" count="2" type="stmt" />
+        <line num="18" count="2" type="stmt" />
+        <line num="19" count="2" type="stmt" />
+        <line num="20" count="2" type="stmt" />
+        <line num="21" count="2" type="stmt" />
+        <line num="22" count="2" type="stmt" />
+        <line num="23" count="2" type="stmt" />
+        <line num="24" count="2" type="stmt" />
+        <line num="25" count="2" type="stmt" />
+        <line num="26" count="2" type="stmt" />
+        <line num="27" count="2" type="stmt" />
+        <line num="28" count="2" type="stmt" />
+        <line num="29" count="2" type="stmt" />
+        <line num="30" count="2" type="stmt" />
+        <line num="31" count="2" type="stmt" />
+        <line num="32" count="2" type="stmt" />
+        <line num="33" count="2" type="stmt" />
+        <line num="34" count="2" type="stmt" />
+        <line num="35" count="2" type="stmt" />
+      </file>
+    </package>
+    <package name="MultiAgentDevTeam.Shared">
+      <metrics complexity="0" elements="106" coveredelements="106" conditionals="16" coveredconditionals="16" statements="106" coveredstatements="106" coveredmethods="68" methods="68" classes="10" loc="231" ncloc="106" files="6" />
+      <file path="D:\Study\AILearning\MLProjects\MultiAgentDevTeam\src\MultiAgentDevTeam.Shared\Agents\BaseAgent.cs" name="BaseAgent.cs">
+        <metrics complexity="0" elements="39" coveredelements="39" conditionals="10" coveredconditionals="10" statements="39" coveredstatements="39" coveredmethods="5" methods="5" classes="1" loc="80" ncloc="39" />
+        <class name="MultiAgentDevTeam.Shared.Agents.BaseAgent">
+          <metrics complexity="0" elements="39" coveredelements="39" conditionals="10" coveredconditionals="10" statements="39" coveredstatements="39" coveredmethods="5" methods="5" />
+        </class>
+        <line complexity="1" signature=".ctor(Anthropic.SDK.AnthropicClient,Microsoft.Extensions.Logging.ILogger)" num="15" count="51" type="method" />
+        <line num="17" count="51" type="stmt" />
+        <line num="18" count="51" type="stmt" />
+        <line num="19" count="51" type="stmt" />
+        <line complexity="1" signature="get_Model()" num="24" count="27" type="method" />
+        <line complexity="1" signature="get_MaxTokens()" num="25" count="27" type="method" />
+        <line complexity="4" signature="RunAsync()" num="29" count="27" type="method" />
+        <line num="30" count="27" type="stmt" />
+        <line num="34" count="27" type="stmt" />
+        <line num="35" count="27" type="stmt" />
+        <line num="36" count="27" type="stmt" />
+        <line num="37" count="27" type="stmt" />
+        <line num="38" count="27" type="stmt" />
+        <line num="40" count="27" type="stmt" />
+        <line num="41" count="27" type="stmt" />
+        <line num="42" count="27" type="stmt" />
+        <line num="43" count="27" type="stmt" />
+        <line num="44" count="27" type="stmt" />
+        <line num="45" count="27" type="stmt" />
+        <line num="46" count="27" type="stmt" />
+        <line num="47" count="27" type="stmt" />
+        <line falsecount="0" truecount="4" num="49" type="cond" />
+        <line num="50" count="26" type="stmt" />
+        <line num="52" count="26" type="stmt" />
+        <line num="53" count="26" type="stmt" />
+        <line num="55" count="1" type="stmt" />
+        <line num="57" count="1" type="stmt" />
+        <line num="58" count="1" type="stmt" />
+        <line num="59" count="1" type="stmt" />
+        <line num="61" count="27" type="stmt" />
+        <line complexity="6" signature="BuildUserContent(MultiAgentDevTeam.Shared.Models.AgentRequest)" num="65" count="27" type="method" />
+        <line falsecount="0" truecount="2" num="67" type="cond" />
+        <line num="69" count="2" type="stmt" />
+        <line falsecount="0" truecount="2" num="70" type="cond" />
+        <line num="71" count="3" type="stmt" />
+        <line falsecount="0" truecount="2" num="74" type="cond" />
+        <line num="75" count="1" type="stmt" />
+        <line num="77" count="27" type="stmt" />
+        <line num="78" count="27" type="stmt" />
+      </file>
+      <file path="D:\Study\AILearning\MLProjects\MultiAgentDevTeam\src\MultiAgentDevTeam.Shared\Configuration\AgentConfiguration.cs" name="AgentConfiguration.cs">
+        <metrics complexity="0" elements="8" coveredelements="8" conditionals="0" coveredconditionals="0" statements="8" coveredstatements="8" coveredmethods="8" methods="8" classes="1" loc="15" ncloc="8" />
+        <class name="MultiAgentDevTeam.Shared.Configuration.AgentConfiguration">
+          <metrics complexity="0" elements="8" coveredelements="8" conditionals="0" coveredconditionals="0" statements="8" coveredstatements="8" coveredmethods="8" methods="8" />
+        </class>
+        <line complexity="1" signature="get_AnthropicApiKey()" num="7" count="111" type="method" />
+        <line complexity="1" signature="get_DefaultModel()" num="8" count="111" type="method" />
+        <line complexity="1" signature="get_FastModel()" num="9" count="111" type="method" />
+        <line complexity="1" signature="get_MaxReviewLoops()" num="10" count="125" type="method" />
+        <line complexity="1" signature="get_MaxTokens()" num="11" count="111" type="method" />
+        <line complexity="1" signature="get_TimeoutSeconds()" num="12" count="111" type="method" />
+        <line complexity="1" signature="get_SessionStoragePath()" num="13" count="174" type="method" />
+        <line complexity="1" signature="get_RateLimitRequestsPerMinute()" num="14" count="163" type="method" />
+      </file>
+      <file path="D:\Study\AILearning\MLProjects\MultiAgentDevTeam\src\MultiAgentDevTeam.Shared\Interfaces\ISessionRepository.cs" name="ISessionRepository.cs">
+        <metrics complexity="0" elements="16" coveredelements="16" conditionals="0" coveredconditionals="0" statements="16" coveredstatements="16" coveredmethods="16" methods="16" classes="2" loc="34" ncloc="16" />
+        <class name="MultiAgentDevTeam.Shared.Interfaces.SessionSummary">
+          <metrics complexity="0" elements="7" coveredelements="7" conditionals="0" coveredconditionals="0" statements="7" coveredstatements="7" coveredmethods="7" methods="7" />
+        </class>
+        <class name="MultiAgentDevTeam.Shared.Interfaces.SessionRecord">
+          <metrics complexity="0" elements="9" coveredelements="9" conditionals="0" coveredconditionals="0" statements="9" coveredstatements="9" coveredmethods="9" methods="9" />
+        </class>
+        <line complexity="1" signature="get_SessionId()" num="14" count="158" type="method" />
+        <line complexity="1" signature="get_Requirement()" num="15" count="171" type="method" />
+        <line complexity="1" signature="get_StartedAt()" num="16" count="98" type="method" />
+        <line complexity="1" signature="get_CompletedAt()" num="17" count="98" type="method" />
+        <line complexity="1" signature="get_Success()" num="18" count="101" type="method" />
+        <line complexity="1" signature="get_Artifacts()" num="19" count="171" type="method" />
+        <line complexity="1" signature="get_AgentLog()" num="20" count="155" type="method" />
+        <line complexity="1" signature="get_TotalDuration()" num="21" count="160" type="method" />
+        <line complexity="1" signature="get_ErrorMessage()" num="22" count="87" type="method" />
+        <line complexity="1" signature="get_SessionId()" num="27" count="16" type="method" />
+        <line complexity="1" signature="get_Requirement()" num="28" count="32" type="method" />
+        <line complexity="1" signature="get_StartedAt()" num="29" count="13" type="method" />
+        <line complexity="1" signature="get_CompletedAt()" num="30" count="13" type="method" />
+        <line complexity="1" signature="get_Success()" num="31" count="15" type="method" />
+        <line complexity="1" signature="get_TotalDuration()" num="32" count="26" type="method" />
+        <line complexity="1" signature="get_ArtifactCount()" num="33" count="16" type="method" />
+      </file>
+      <file path="D:\Study\AILearning\MLProjects\MultiAgentDevTeam\src\MultiAgentDevTeam.Shared\Models\AgentRequest.cs" name="AgentRequest.cs">
+        <metrics complexity="0" elements="20" coveredelements="20" conditionals="0" coveredconditionals="0" statements="20" coveredstatements="20" coveredmethods="20" methods="20" classes="4" loc="41" ncloc="20" />
+        <class name="MultiAgentDevTeam.Shared.Models.OrchestratorResponse">
+          <metrics complexity="0" elements="6" coveredelements="6" conditionals="0" coveredconditionals="0" statements="6" coveredstatements="6" coveredmethods="6" methods="6" />
+        </class>
+        <class name="MultiAgentDevTeam.Shared.Models.OrchestratorRequest">
+          <metrics complexity="0" elements="4" coveredelements="4" conditionals="0" coveredconditionals="0" statements="4" coveredstatements="4" coveredmethods="4" methods="4" />
+        </class>
+        <class name="MultiAgentDevTeam.Shared.Models.AgentResponse">
+          <metrics complexity="0" elements="7" coveredelements="7" conditionals="0" coveredconditionals="0" statements="7" coveredstatements="7" coveredmethods="7" methods="7" />
+        </class>
+        <class name="MultiAgentDevTeam.Shared.Models.AgentRequest">
+          <metrics complexity="0" elements="3" coveredelements="3" conditionals="0" coveredconditionals="0" statements="3" coveredstatements="3" coveredmethods="3" methods="3" />
+        </class>
+        <line complexity="1" signature="get_Task()" num="5" count="503" type="method" />
+        <line complexity="1" signature="get_Context()" num="6" count="401" type="method" />
+        <line complexity="1" signature="get_PreviousFeedback()" num="7" count="56" type="method" />
+        <line complexity="1" signature="get_Success()" num="12" count="554" type="method" />
+        <line complexity="1" signature="get_Content()" num="13" count="908" type="method" />
+        <line complexity="1" signature="get_AgentName()" num="14" count="730" type="method" />
+        <line complexity="1" signature="get_ErrorMessage()" num="15" count="16" type="method" />
+        <line complexity="1" signature="get_Duration()" num="16" count="541" type="method" />
+        <line complexity="1" signature="Ok(System.String,System.String,System.TimeSpan)" num="19" count="356" type="method" />
+        <line complexity="1" signature="Fail(System.String,System.String)" num="22" count="3" type="method" />
+        <line complexity="1" signature="get_Requirement()" num="27" count="164" type="method" />
+        <line complexity="1" signature="get_SkipAgents()" num="28" count="271" type="method" />
+        <line complexity="1" signature="get_StartFromAgent()" num="29" count="28" type="method" />
+        <line complexity="1" signature="get_MaxReviewLoops()" num="30" count="125" type="method" />
+        <line complexity="1" signature="get_Success()" num="35" count="77" type="method" />
+        <line complexity="1" signature="get_SessionId()" num="36" count="65" type="method" />
+        <line complexity="1" signature="get_Artifacts()" num="37" count="101" type="method" />
+        <line complexity="1" signature="get_AgentLog()" num="38" count="96" type="method" />
+        <line complexity="1" signature="get_ErrorMessage()" num="39" count="38" type="method" />
+        <line complexity="1" signature="get_TotalDuration()" num="40" count="62" type="method" />
+      </file>
+      <file path="D:\Study\AILearning\MLProjects\MultiAgentDevTeam\src\MultiAgentDevTeam.Shared\Models\Artifact.cs" name="Artifact.cs">
+        <metrics complexity="0" elements="9" coveredelements="9" conditionals="0" coveredconditionals="0" statements="9" coveredstatements="9" coveredmethods="9" methods="9" classes="1" loc="28" ncloc="9" />
+        <class name="MultiAgentDevTeam.Shared.Models.Artifact">
+          <metrics complexity="0" elements="9" coveredelements="9" conditionals="0" coveredconditionals="0" statements="9" coveredstatements="9" coveredmethods="9" methods="9" />
+        </class>
+        <line complexity="1" signature="get_Id()" num="19" count="205" type="method" />
+        <line complexity="1" signature="get_Type()" num="20" count="400" type="method" />
+        <line complexity="1" signature="get_Content()" num="21" count="905" type="method" />
+        <line complexity="1" signature="get_Author()" num="22" count="406" type="method" />
+        <line complexity="1" signature="get_Status()" num="23" count="186" type="method" />
+        <line complexity="1" signature="get_Feedback()" num="24" count="2" type="method" />
+        <line complexity="1" signature="get_Revision()" num="25" count="205" type="method" />
+        <line complexity="1" signature="get_CreatedAt()" num="26" count="203" type="method" />
+        <line complexity="1" signature="get_UpdatedAt()" num="27" count="393" type="method" />
+      </file>
+      <file path="D:\Study\AILearning\MLProjects\MultiAgentDevTeam\src\MultiAgentDevTeam.Shared\Models\ArtifactStore.cs" name="ArtifactStore.cs">
+        <metrics complexity="0" elements="14" coveredelements="14" conditionals="6" coveredconditionals="6" statements="14" coveredstatements="14" coveredmethods="10" methods="10" classes="1" loc="33" ncloc="14" />
+        <class name="MultiAgentDevTeam.Shared.Models.ArtifactStore">
+          <metrics complexity="0" elements="14" coveredelements="14" conditionals="6" coveredconditionals="6" statements="14" coveredstatements="14" coveredmethods="10" methods="10" />
+        </class>
+        <line complexity="1" signature="get_SessionId()" num="5" count="112" type="method" />
+        <line complexity="1" signature="get_OriginalRequirement()" num="6" count="85" type="method" />
+        <line complexity="1" signature="get_StartedAt()" num="7" count="60" type="method" />
+        <line complexity="1" signature=".ctor()" num="9" count="35" type="method" />
+        <line complexity="1" signature="Set(MultiAgentDevTeam.Shared.Models.Artifact)" num="13" count="189" type="method" />
+        <line num="14" count="189" type="stmt" />
+        <line num="15" count="189" type="stmt" />
+        <line complexity="2" signature="Get(MultiAgentDevTeam.Shared.Models.ArtifactType)" num="18" count="337" type="method" />
+        <line complexity="4" signature="GetContent(MultiAgentDevTeam.Shared.Models.ArtifactType)" num="21" count="336" type="method" />
+        <line complexity="1" signature="Has(MultiAgentDevTeam.Shared.Models.ArtifactType)" num="23" count="312" type="method" />
+        <line complexity="1" signature="get_All()" num="25" count="25" type="method" />
+        <line complexity="1" signature="Summary()" num="29" count="2" type="method" />
+        <line num="30" count="2" type="stmt" />
+        <line num="31" count="1" type="stmt" />
+      </file>
+    </package>
+  </project>
+  <testproject timestamp="1773789636">
+    <metrics complexity="0" elements="0" coveredelements="0" conditionals="0" coveredconditionals="0" statements="0" coveredstatements="0" coveredmethods="0" methods="0" classes="0" loc="0" ncloc="0" files="0" packages="0" />
+  </testproject>
+</coverage>

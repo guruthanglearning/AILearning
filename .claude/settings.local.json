@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet:*)",
+      "Bash(kubectl version:*)",
+      "Bash(kubectl cluster-info:*)",
+      "Bash(docker info:*)",
+      "Bash(kubectl config:*)",
+      "Bash(powershell:*)",
+      "Bash(docker build:*)",
+      "Bash(kubectl apply:*)",
+      "Bash(python:*)",
+      "Bash(\"D:\\\\Study\\\\AILearning\\\\shared_Environment\\\\Scripts\\\\python.exe\":*)",
+      "Bash(docker compose:*)",
+      "Bash(docker:*)",
+      "Bash(pkill:*)",
+      "Bash(taskkill:*)",
+      "Bash(echo \"Orchestrator starting in background \\(PID: $!\\)\")"
+    ]
+  }
+}

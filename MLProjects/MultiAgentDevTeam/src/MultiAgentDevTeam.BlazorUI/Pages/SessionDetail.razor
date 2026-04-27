@@ -1,0 +1,49 @@
+@page "/sessions/{SessionId:guid}"
+@rendermode InteractiveServer
+@inject ISessionApiClient SessionClient
+
+<PageTitle>Session @SessionId</PageTitle>
+
+@if (_loading)
+{
+    <p>Loading session...</p>
+}
+else if (_session is null)
+{
+    <div class="alert alert-danger">Session @SessionId not found.</div>
+    <a href="/sessions">Back to sessions</a>
+}
+else
+{
+    <h1>Session Detail</h1>
+    <p><strong>Session ID:</strong> @_session.SessionId</p>
+    <p><strong>Requirement:</strong> @_session.Requirement</p>
+    <p><strong>Status:</strong> <span class="badge @(_session.Success ? "badge-success" : "badge-danger")">@(_session.Success ? "✅ Success" : "❌ Failed")</span></p>
+    <p><strong>Duration:</strong> @_session.TotalDuration</p>
+
+    @if (!string.IsNullOrEmpty(_session.ErrorMessage))
+    {
+        <div class="alert alert-danger">@_session.ErrorMessage</div>
+    }
+
+    <h2>Agent Log</h2>
+    <div class="progress-log" id="agent-log">
+        @foreach (var entry in _session.AgentLog)
+        {
+            <div class="log-entry">@entry</div>
+        }
+    </div>
+
+    <div class="artifacts" id="artifacts-section">
+        <h2>Artifacts (@_session.Artifacts.Count)</h2>
+        @foreach (var (name, content) in _session.Artifacts)
+        {
+            <details>
+                <summary>📄 @name</summary>
+                <pre>@content</pre>
+            </details>
+        }
+    </div>
+
+    <a href="/sessions">← Back to sessions</a>
+}

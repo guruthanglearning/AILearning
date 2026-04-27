@@ -1,0 +1,76 @@
+@page "/"
+@rendermode InteractiveServer
+@inject IPipelineClient PipelineClient
+@implements IDisposable
+
+<PageTitle>MultiAgent Dev Team — New Pipeline</PageTitle>
+
+<h1>New Pipeline</h1>
+<p>Submit a plain-English requirement and the AI team will build a complete software package.</p>
+
+@if (_state == PageState.Idle)
+{
+    <EditForm Model="_form" OnValidSubmit="HandleSubmitAsync" id="pipeline-form">
+        <DataAnnotationsValidator />
+
+        <div class="form-group">
+            <label for="requirement">Requirement <span style="color:red">*</span></label>
+            <InputTextArea id="requirement" @bind-Value="_form.Requirement" rows="6" class="form-control"
+                placeholder="e.g. Build a REST API for managing a TODO list with JWT authentication..." />
+            <ValidationMessage For="() => _form.Requirement" />
+        </div>
+
+        <div class="form-group">
+            <label for="skipAgents">Skip Agents <span style="color:#888;font-weight:normal">(optional, comma-separated)</span></label>
+            <InputText id="skipAgents" @bind-Value="_form.SkipAgents" class="form-control"
+                placeholder="e.g. devops,docs" />
+            <small style="color:#888">Available: pm, architect, developer, reviewer, qa, security, devops, docs</small>
+        </div>
+
+        <div class="form-group">
+            <label for="maxLoops">Max Review Loops</label>
+            <InputNumber id="maxLoops" @bind-Value="_form.MaxReviewLoops" class="form-control" />
+            <ValidationMessage For="() => _form.MaxReviewLoops" />
+        </div>
+
+        <button type="submit" class="btn btn-primary" id="submit-btn">Submit to AI Team</button>
+    </EditForm>
+}
+
+@if (_state == PageState.Streaming || _state == PageState.Completed)
+{
+    <h2>Pipeline Progress</h2>
+    <div class="progress-log" id="progress-log">
+        @foreach (var msg in _progressMessages)
+        {
+            <div class="log-entry">@msg</div>
+        }
+        @if (_state == PageState.Streaming)
+        {
+            <div class="spinner" id="spinner">⏳ Pipeline running...</div>
+        }
+    </div>
+}
+
+@if (_state == PageState.Completed)
+{
+    <div class="artifacts" id="artifacts-section">
+        <h2>Generated Artifacts (@_artifacts.Count)</h2>
+        @foreach (var (name, content) in _artifacts)
+        {
+            <details>
+                <summary>📄 @name</summary>
+                <pre>@content</pre>
+            </details>
+        }
+    </div>
+    <button class="btn btn-secondary" @onclick="Reset" id="new-pipeline-btn">Start New Pipeline</button>
+}
+
+@if (_state == PageState.Error)
+{
+    <div class="alert alert-danger" id="error-message">
+        <strong>Pipeline failed:</strong> @_errorMessage
+    </div>
+    <button class="btn btn-secondary" @onclick="Reset" id="try-again-btn">Try Again</button>
+}

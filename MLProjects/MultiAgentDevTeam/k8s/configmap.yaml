@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-config
+  namespace: multi-agent-dev-team
+data:
+  AgentConfiguration__DefaultModel: "claude-opus-4-6"
+  AgentConfiguration__FastModel: "claude-haiku-4-5-20251001"
+  AgentConfiguration__MaxReviewLoops: "3"
+  AgentConfiguration__MaxTokens: "8192"
+  AgentConfiguration__TimeoutSeconds: "300"
+  ASPNETCORE_ENVIRONMENT: "Production"
+  ASPNETCORE_URLS: "http://+:5000"

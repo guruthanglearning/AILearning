@@ -1,0 +1,45 @@
+services:
+  orchestrator:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: multi-agent-dev-team:latest
+    container_name: orchestrator
+    ports:
+      - "5000:5000"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - AgentConfiguration__MaxReviewLoops=3
+      - AgentConfiguration__DefaultModel=claude-opus-4-6
+      - ASPNETCORE_ENVIRONMENT=Development
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - agent-network
+
+  ui:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.ui
+    image: multi-agent-dev-team-ui:latest
+    container_name: ui
+    ports:
+      - "3000:80"
+    environment:
+      - API_HOST=orchestrator
+      - API_PORT=5000
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - agent-network
+
+networks:
+  agent-network:
+    driver: bridge

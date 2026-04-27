@@ -1,0 +1,12 @@
+**/.git
+**/.vs
+**/bin
+**/obj
+**/node_modules
+**/*.user
+**/*.suo
+.env
+*.md
+tests/
+scripts/
+k8s/

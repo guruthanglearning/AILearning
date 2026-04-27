@@ -1,0 +1,23 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MultiAgentDevTeam.Orchestrator/MultiAgentDevTeam.Orchestrator.csproj" />
+    <Project Path="src/MultiAgentDevTeam.Shared/MultiAgentDevTeam.Shared.csproj" />
+    <Project Path="src/MultiAgentDevTeam.BlazorUI/MultiAgentDevTeam.BlazorUI.csproj" />
+  </Folder>
+  <Folder Name="/src/Agents/">
+    <Project Path="src/Agents/MultiAgentDevTeam.ArchitectAgent/MultiAgentDevTeam.ArchitectAgent.csproj" />
+    <Project Path="src/Agents/MultiAgentDevTeam.DeveloperAgent/MultiAgentDevTeam.DeveloperAgent.csproj" />
+    <Project Path="src/Agents/MultiAgentDevTeam.DevOpsAgent/MultiAgentDevTeam.DevOpsAgent.csproj" />
+    <Project Path="src/Agents/MultiAgentDevTeam.DocsAgent/MultiAgentDevTeam.DocsAgent.csproj" />
+    <Project Path="src/Agents/MultiAgentDevTeam.PMAgent/MultiAgentDevTeam.PMAgent.csproj" />
+    <Project Path="src/Agents/MultiAgentDevTeam.QAAgent/MultiAgentDevTeam.QAAgent.csproj" />
+    <Project Path="src/Agents/MultiAgentDevTeam.ReviewerAgent/MultiAgentDevTeam.ReviewerAgent.csproj" />
+    <Project Path="src/Agents/MultiAgentDevTeam.SecurityAgent/MultiAgentDevTeam.SecurityAgent.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MultiAgentDevTeam.IntegrationTests/MultiAgentDevTeam.IntegrationTests.csproj" />
+    <Project Path="tests/MultiAgentDevTeam.UnitTests/MultiAgentDevTeam.UnitTests.csproj" />
+    <Project Path="tests/MultiAgentDevTeam.BlazorUI.UnitTests/MultiAgentDevTeam.BlazorUI.UnitTests.csproj" />
+    <Project Path="tests/MultiAgentDevTeam.BlazorUI.E2ETests/MultiAgentDevTeam.BlazorUI.E2ETests.csproj" />
+  </Folder>
+</Solution>

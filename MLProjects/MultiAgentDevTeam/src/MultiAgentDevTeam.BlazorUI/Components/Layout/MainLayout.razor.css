@@ -1,0 +1,8 @@
+.page { display: flex; flex-direction: column; min-height: 100vh; }
+.navbar { display: flex; align-items: center; padding: 0.75rem 1.5rem; background: #1a1a2e; color: white; gap: 2rem; }
+.navbar-brand { font-size: 1.25rem; font-weight: bold; color: white; text-decoration: none; }
+.nav-links { display: flex; gap: 1.5rem; }
+.nav-links a { color: #ccc; text-decoration: none; }
+.nav-links a:hover { color: white; }
+main { flex: 1; padding: 2rem; }
+.content { max-width: 900px; margin: 0 auto; }

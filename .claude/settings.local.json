@@ -15,7 +15,8 @@
       "Bash(docker:*)",
       "Bash(pkill:*)",
       "Bash(taskkill:*)",
-      "Bash(echo \"Orchestrator starting in background \\(PID: $!\\)\")"
+      "Bash(echo \"Orchestrator starting in background \\(PID: $!\\)\")",
+      "Bash(Get-Content D:\\\\Study\\\\AILearning\\\\MLProjects\\\\MultiAgentDevTeam\\\\docker\\\\Dockerfile *)"
     ]
   }
 }

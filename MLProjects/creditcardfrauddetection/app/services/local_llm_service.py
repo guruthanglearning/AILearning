@@ -16,7 +16,7 @@ from pathlib import Path
 
 from app.api.models import DetailedFraudAnalysis
 from app.core.config import settings
-from langchain.schema import Document
+from langchain_core.documents import Document
 
 logger = logging.getLogger(__name__)
 
@@ -346,7 +346,7 @@ Then add a brief reason for your decision.
                     capture_output=True,
                     text=True,
                     encoding='utf-8',  # Explicitly use UTF-8 encoding
-                    timeout=30  # 30 second timeout for CLI
+                    timeout=5  # 5 second timeout for CLI
                 )
                 
                 # Clean up the temp file
@@ -510,7 +510,7 @@ Unable to complete full analysis due to time constraints. Please review this tra
                     capture_output=True,
                     text=True,
                     encoding='utf-8',  # Explicitly use UTF-8 encoding
-                    timeout=30  # 30 second timeout for CLI
+                    timeout=5  # 5 second timeout for CLI
                 )
                 
                 # Clean up the temp file

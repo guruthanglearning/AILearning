@@ -33,23 +33,23 @@ def test_system_components():
     
     # Check environment variables
     logger.info("\n[1/5] Checking environment variables...")
-    env_ok = test_environment()
-    
+    env_ok = check_environment()
+
     # Test vector database
     logger.info("\n[2/5] Testing vector database...")
-    vector_db_ok = test_vector_db()
-    
+    vector_db_ok = check_vector_db()
+
     # Test LLM service
     logger.info("\n[3/5] Testing LLM service...")
-    llm_ok = test_llm_service()
-    
+    llm_ok = check_llm_service()
+
     # Test fraud detection service
     logger.info("\n[4/5] Testing fraud detection service...")
-    fraud_service_ok = test_fraud_detection()
-    
+    fraud_service_ok = check_fraud_detection()
+
     # Test full pipeline with a sample transaction
     logger.info("\n[5/5] Testing full pipeline with sample transaction...")
-    pipeline_ok = test_full_pipeline()
+    pipeline_ok = check_full_pipeline()
     
     # Report results
     logger.info("\n"+"="*50)
@@ -67,7 +67,7 @@ def test_system_components():
     else:
         logger.info("❌ SOME TESTS FAILED - See details above")
 
-def test_environment():
+def check_environment():
     """Test environment variables and configuration."""
     try:
         # Check OpenAI API key
@@ -97,7 +97,7 @@ def test_environment():
         logger.error(f"Error checking environment: {str(e)}")
         return False
 
-def test_vector_db():
+def check_vector_db():
     """Test vector database service."""
     try:
         vector_db = VectorDBService()
@@ -116,7 +116,7 @@ def test_vector_db():
         logger.error(f"Error testing vector DB: {str(e)}")
         return False
 
-def test_llm_service():
+def check_llm_service():
     """Test LLM service."""
     try:
         llm_service = LLMService()
@@ -151,7 +151,7 @@ def test_llm_service():
         logger.error(f"Error testing LLM service: {str(e)}")
         return False
 
-def test_fraud_detection():
+def check_fraud_detection():
     """Test fraud detection service."""
     try:
         fraud_service = FraudDetectionService()
@@ -162,7 +162,7 @@ def test_fraud_detection():
         logger.error(f"Error testing fraud detection service: {str(e)}")
         return False
 
-def test_full_pipeline():
+def check_full_pipeline():
     """Test the full fraud detection pipeline."""
     try:
         # Initialize the fraud detection service

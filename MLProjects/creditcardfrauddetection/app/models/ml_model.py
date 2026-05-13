@@ -166,7 +166,13 @@ class MLModel:
             (features['txn_count_24h'] > 15) or
             (features.get('distance_from_last_txn', 0) > 1000 and features['is_online'] == 0) or
             (features['hour_of_day'] in [1, 2, 3, 4] and features['amount'] > 200) or
-            (features.get('behavior_anomaly_score', 0) > 0.9)
+            (features.get('behavior_anomaly_score', 0) > 0.9) or
+            (features.get('data_quality_risk_score', 0) > 0.7) or  # Data quality issues
+            (features.get('country_risk_score', 0) > 0.8) or  # NEW: High-risk country
+            (features.get('category_risk_score', 0) > 0.7) or  # NEW: High-risk category
+            # CRITICAL: Large online purchase from high-risk country + risky category
+            (features['amount'] > 2000 and features['is_online'] == 1 and 
+             features.get('country_risk_score', 0) > 0.7 and features.get('category_risk_score', 0) > 0.7)
         )
         
         # If we have an actual trained model, use it
@@ -202,10 +208,16 @@ class MLModel:
             features['txn_count_24h'] > 10,
             features['merchant_risk_score'] > 0.7,
             features.get('location_risk_score', 0) > 0.8,
+            features.get('country_risk_score', 0) > 0.7,  # NEW: High-risk country
+            features.get('category_risk_score', 0) > 0.7,  # NEW: High-risk category
             features.get('distance_from_last_txn', 0) > 1000,
             features['hour_of_day'] < 5,  # Late night transaction
             features.get('behavior_anomaly_score', 0) > 0.7,
-            features.get('amount_velocity_24h', 0) > 3.0  # Sudden increase in spending
+            features.get('amount_velocity_24h', 0) > 3.0,  # Sudden increase in spending
+            features.get('data_quality_risk_score', 0) > 0.6,  # Data quality issues
+            # COMBINED RISK: High amount + Online + High-risk country/category
+            (features['amount'] > 2000 and features['is_online'] == 1 and 
+             (features.get('country_risk_score', 0) > 0.7 or features.get('category_risk_score', 0) > 0.7))
         ]
         
         # Count risk factors

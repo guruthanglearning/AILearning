@@ -72,6 +72,39 @@ class FraudDetectionService:
             features = engineer_features(transaction)
             logger.info(f"Extracted {len(features)} features for transaction {transaction_id}")
             
+            # Step 1.5: Check for sanctions and critical risk factors (HARD BLOCKS)
+            if features.get("is_sanctioned_country", False):
+                logger.warning(f"Transaction {transaction_id} BLOCKED: Sanctioned country {transaction.merchant_country}")
+                processing_time = (time.time() - start_time) * 1000
+                return FraudDetectionResponse(
+                    transaction_id=transaction_id,
+                    is_fraud=True,
+                    confidence_score=0.99,
+                    decision_reason=f"Transaction blocked: Merchant in sanctioned country ({transaction.merchant_country}). "
+                                   f"Transactions with sanctioned countries are prohibited by compliance regulations.",
+                    requires_review=False,  # Auto-deny, no review needed
+                    processing_time_ms=processing_time
+                )
+            
+            # Check for category mismatch combined with high-risk factors
+            category_mismatch = features.get("category_mismatch", 0)
+            country_risk = features.get("country_risk_score", 0)
+            
+            if category_mismatch > 0.8 and country_risk > 0.7:
+                logger.warning(f"Transaction {transaction_id} HIGH RISK: Category mismatch + high-risk country")
+                processing_time = (time.time() - start_time) * 1000
+                return FraudDetectionResponse(
+                    transaction_id=transaction_id,
+                    is_fraud=True,
+                    confidence_score=0.95,
+                    decision_reason=f"High fraud risk detected: Merchant name '{transaction.merchant_name}' "
+                                   f"does not match category '{transaction.merchant_category}' and transaction "
+                                   f"originates from high-risk country '{transaction.merchant_country}'. "
+                                   f"This pattern is commonly associated with fraudulent transactions.",
+                    requires_review=True,  # Require manual review for such cases
+                    processing_time_ms=processing_time
+                )
+            
             # Step 2: Initial ML screening
             ml_features = select_features_for_ml(features)
             fraud_probability, ml_confidence = self.ml_model.predict(ml_features)

@@ -1,12 +1,14 @@
 """
 Test runner script for the Credit Card Fraud Detection system.
 Runs all integration tests sequentially.
+Supports both local and Docker deployment modes.
 """
 
 import os
 import time
 import importlib
 import sys
+import argparse
 
 def run_test_module(module_name):
     """Import and run a test module."""
@@ -42,6 +44,23 @@ def run_test_module(module_name):
 
 def main():
     """Run all integration tests."""
+    parser = argparse.ArgumentParser(description='Run integration tests for Credit Card Fraud Detection')
+    parser.add_argument('--mode', choices=['local', 'docker'], default='local',
+                      help='Deployment mode: local (localhost) or docker (containers)')
+    args = parser.parse_args()
+    
+    # Set API URL based on mode
+    if args.mode == 'docker':
+        api_url = "http://localhost:8000"  # Access from host machine
+        print(f"\n🐋 Testing DOCKER deployment (API: {api_url})")
+    else:
+        api_url = "http://localhost:8000"
+        print(f"\n💻 Testing LOCAL deployment (API: {api_url})")
+    
+    # Set environment variable for tests to use
+    os.environ['API_URL'] = api_url
+    os.environ['DEPLOYMENT_MODE'] = args.mode
+    
     # Add tests directory to the path
     current_dir = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0, current_dir)

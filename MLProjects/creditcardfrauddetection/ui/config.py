@@ -5,8 +5,15 @@ Configuration settings for the Streamlit UI.
 import os
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Load environment variables from ui/.env.local (UI-specific config)
+ui_env_path = os.path.join(os.path.dirname(__file__), '.env.local')
+if os.path.exists(ui_env_path):
+    load_dotenv(dotenv_path=ui_env_path, override=True)
+else:
+    # Fallback to ui/.env
+    ui_env_fallback = os.path.join(os.path.dirname(__file__), '.env')
+    if os.path.exists(ui_env_fallback):
+        load_dotenv(dotenv_path=ui_env_fallback, override=True)
 
 # API settings
 API_URL = os.getenv("API_URL", "http://localhost:8000")

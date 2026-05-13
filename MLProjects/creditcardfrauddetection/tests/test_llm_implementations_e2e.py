@@ -75,10 +75,10 @@ def create_test_transaction(risk_level="low"):
     return transaction
 
 
-def test_with_config(config_name, env_vars=None):
+def run_with_config(config_name, env_vars=None):
     """
-    Test the system with a specific configuration.
-    
+    Run the system with a specific configuration (helper for manual/script use).
+
     Args:
         config_name: Name of the configuration for logging
         env_vars: Dictionary of environment variables to set
@@ -136,16 +136,15 @@ def test_with_config(config_name, env_vars=None):
                 os.environ.pop(key, None)
 
 
-def test_api_endpoint_with_config(config_name, env_vars=None):
+def run_api_endpoint_with_config(config_name, env_vars=None):
     """
-    Test the API endpoint with a specific configuration.
-    
+    Test the API endpoint with a specific configuration (helper for manual/script use).
+
     Args:
         config_name: Name of the configuration for logging
         env_vars: Dictionary of environment variables to set
     """
     # This would need to be run with the API server running with the specified config
-    # For now, we'll just add a placeholder
     logger.info(f"API endpoint testing with {config_name} configuration would be done here.")
     logger.info("For actual API testing, the server needs to be running with the specified configuration.")
 
@@ -203,9 +202,9 @@ def main():
     for config in configs:
         try:
             if args.api_test:
-                test_api_endpoint_with_config(config["name"], config["env"])
+                run_api_endpoint_with_config(config["name"], config["env"])
             else:
-                test_with_config(config["name"], config["env"])
+                run_with_config(config["name"], config["env"])
         except Exception as e:
             logger.error(f"Error testing with {config['name']}: {str(e)}")
     

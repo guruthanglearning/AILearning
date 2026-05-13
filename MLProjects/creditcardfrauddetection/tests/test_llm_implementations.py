@@ -80,7 +80,7 @@ def create_test_data():
     
     return transaction_text, similar_patterns
 
-def test_openai_llm():
+def check_openai_llm():
     """Test OpenAI LLM implementation"""
     print_header("TESTING OPENAI LLM")
     
@@ -131,7 +131,7 @@ def test_openai_llm():
         os.environ['USE_LOCAL_LLM'] = orig_use_local
         os.environ['FORCE_LOCAL_LLM'] = orig_force_local
 
-def test_local_llm():
+def check_local_llm():
     """Test Local LLM implementation"""
     print_header("TESTING LOCAL LLM")
     
@@ -183,7 +183,7 @@ def test_local_llm():
         os.environ['USE_LOCAL_LLM'] = orig_use_local
         os.environ['FORCE_LOCAL_LLM'] = orig_force_local
 
-def test_mock_llm():
+def check_mock_llm():
     """Test Enhanced Mock LLM implementation"""
     print_header("TESTING ENHANCED MOCK LLM")
     
@@ -230,7 +230,7 @@ def test_mock_llm():
         os.environ['FORCE_LOCAL_LLM'] = orig_force_local
         os.environ['OPENAI_API_KEY'] = orig_openai_key
 
-def test_fallback_mechanism():
+def check_fallback_mechanism():
     """Test the fallback mechanism chain"""
     print_header("TESTING FALLBACK MECHANISM")
     
@@ -274,10 +274,10 @@ def main():
         results = {}
         
         # Test each implementation
-        results["OpenAI LLM"] = test_openai_llm()
-        results["Local LLM"] = test_local_llm()
-        results["Mock LLM"] = test_mock_llm()
-        results["Fallback Mechanism"] = test_fallback_mechanism()
+        results["OpenAI LLM"] = check_openai_llm()
+        results["Local LLM"] = check_local_llm()
+        results["Mock LLM"] = check_mock_llm()
+        results["Fallback Mechanism"] = check_fallback_mechanism()
         
         # Print summary
         print_header("TEST RESULTS SUMMARY")

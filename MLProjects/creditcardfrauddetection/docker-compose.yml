@@ -4,7 +4,7 @@ services:
   fraud-detection-api:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.api
     container_name: fraud-detection-api
     restart: unless-stopped
     ports:
@@ -13,10 +13,13 @@ services:
       - APP_ENV=production
       - DEBUG=False
       - LOG_LEVEL=INFO
+      - AUTH_REQUIRED=${AUTH_REQUIRED:-False}
+      - API_KEY=${API_KEY:-development_api_key_for_testing}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - PINECONE_API_KEY=${PINECONE_API_KEY}
       - PINECONE_ENVIRONMENT=${PINECONE_ENVIRONMENT:-us-west1-gcp}
       - SECRET_KEY=${SECRET_KEY}
+      - USE_PINECONE=False
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
@@ -26,6 +29,34 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    networks:
+      - fraud-detection-network
+
+  fraud-detection-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    container_name: fraud-detection-ui
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://fraud-detection-api:8000
+      - API_BASE_URL=http://fraud-detection-api:8000
+      - API_KEY=${API_KEY:-development_api_key_for_testing}
+    volumes:
+      - ./ui/.streamlit:/app/.streamlit
+    depends_on:
+      fraud-detection-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - fraud-detection-network
 
   # Optional monitoring service
   prometheus:
@@ -44,6 +75,8 @@ services:
       - "--web.console.templates=/usr/share/prometheus/consoles"
     depends_on:
       - fraud-detection-api
+    networks:
+      - fraud-detection-network
 
   # Optional monitoring dashboard
   grafana:
@@ -61,6 +94,12 @@ services:
       - GF_USERS_ALLOW_SIGN_UP=false
     depends_on:
       - prometheus
+    networks:
+      - fraud-detection-network
+
+networks:
+  fraud-detection-network:
+    driver: bridge
 
 volumes:
   prometheus_data:

@@ -122,12 +122,13 @@ class FraudDetectionAPI:
         url = f"{self.base_url}/health"
         return self._make_request("GET", url)
     
-    def get_transaction_history(self, transaction_id=None):
+    def get_transaction_history(self, transaction_id=None, limit=10):
         """
         Get transaction history.
         
         Args:
             transaction_id: Optional transaction ID to filter by
+            limit: Maximum number of transactions to return (default: 10)
             
         Returns:
             The API response as a dict, or None if there was an error
@@ -135,7 +136,7 @@ class FraudDetectionAPI:
         if transaction_id:
             url = f"{self.base_url}/api/v1/transactions/{transaction_id}"
         else:
-            url = f"{self.base_url}/api/v1/transactions"
+            url = f"{self.base_url}/api/v1/transactions?limit={limit}"
         return self._make_request("GET", url)
     
     def get_llm_status(self):
@@ -210,38 +211,42 @@ class FraudDetectionAPI:
             st.error(f"Traceback: {traceback.format_exc()}")
             return None
 
-@st.cache_resource
 def get_api_client():
     """
-    Get a cached API client instance.
+    Get an API client instance.
+    CACHE REMOVED: Creating fresh client each time to avoid stale cached connections.
     This function should NOT display any UI elements to avoid duplication.
     
     Returns:
         FraudDetectionAPI instance
     """
+    import os
     try:
         # Check if we're running in Streamlit
         if hasattr(st, 'session_state'):
             # Try to get config from Streamlit secrets first
             if hasattr(st, 'secrets') and 'api' in st.secrets:
-                base_url = st.secrets.api.get("base_url", "http://localhost:8000")
-                api_key = st.secrets.api.get("api_key", "development_api_key_for_testing")
+                # secrets.toml has 'url' and 'key', not 'base_url' and 'api_key'
+                base_url = st.secrets.api.get("url", st.secrets.api.get("base_url", os.getenv("API_URL", "http://localhost:8000")))
+                api_key = st.secrets.api.get("key", st.secrets.api.get("api_key", os.getenv("API_KEY", "development_api_key_for_testing")))
             else:
-                # Fall back to default values
-                base_url = "http://localhost:8000"
-                api_key = "development_api_key_for_testing"
+                # Fall back to environment variables, then defaults
+                base_url = os.getenv("API_URL", os.getenv("API_BASE_URL", "http://localhost:8000"))
+                api_key = os.getenv("API_KEY", "development_api_key_for_testing")
         else:
-            # Not in Streamlit context, use defaults
-            base_url = "http://localhost:8000"
-            api_key = "development_api_key_for_testing"
+            # Not in Streamlit context, use environment variables or defaults
+            base_url = os.getenv("API_URL", os.getenv("API_BASE_URL", "http://localhost:8000"))
+            api_key = os.getenv("API_KEY", "development_api_key_for_testing")
         
         # Create the API client (no UI display here)
         api_client = FraudDetectionAPI(base_url, api_key)
         return api_client
             
     except Exception as e:
-        # Return a basic client anyway
-        return FraudDetectionAPI("http://localhost:8000", "development_api_key_for_testing")
+        # Return a basic client with environment variables or defaults
+        base_url = os.getenv("API_URL", os.getenv("API_BASE_URL", "http://localhost:8000"))
+        api_key = os.getenv("API_KEY", "development_api_key_for_testing")
+        return FraudDetectionAPI(base_url, api_key)
 
 def display_api_connection_status():
     """

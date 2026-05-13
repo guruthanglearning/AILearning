@@ -22,12 +22,40 @@ from pages.dashboard import show_dashboard
 from pages.transaction_analysis import show_transaction_analysis
 from api_client import display_api_connection_status
 
-# Load environment variables
-load_dotenv()
+# Load environment variables - UI-SPECIFIC ONLY
+# CRITICAL: Load ONLY from ui/ directory, never from parent directory
+# This prevents Docker configs from being loaded in local deployment
+import sys
+ui_dir = os.path.dirname(os.path.abspath(__file__))
 
-# Constants
+# FORCE: Clear any existing API_URL environment variable first
+if 'API_URL' in os.environ:
+    del os.environ['API_URL']
+    print(f"[UI CONFIG] Cleared existing API_URL env var", file=sys.stderr)
+
+# Load ui/.env.local FIRST (highest priority)
+ui_env_local = os.path.join(ui_dir, '.env.local')
+if os.path.exists(ui_env_local):
+    load_dotenv(dotenv_path=ui_env_local, override=True)
+    print(f"[UI CONFIG] Loaded: {ui_env_local}", file=sys.stderr)
+else:
+    # Fallback to ui/.env
+    ui_env = os.path.join(ui_dir, '.env')
+    if os.path.exists(ui_env):
+        load_dotenv(dotenv_path=ui_env, override=True)
+        print(f"[UI CONFIG] Loaded: {ui_env}", file=sys.stderr)
+
+# Constants - Get API URL from environment
+# FORCE LOCAL API if not explicitly set to Docker
 API_URL = os.getenv("API_URL", "http://localhost:8000")
+if "fraud-detection-api" in API_URL:
+    print(f"[UI CONFIG] WARNING: Docker API URL detected, forcing local", file=sys.stderr)
+    API_URL = "http://localhost:8000"
 API_KEY = os.getenv("API_KEY", "development_api_key_for_testing")
+
+# Debug output - verify configuration
+print(f"[UI CONFIG] API_URL = {API_URL}", file=sys.stderr)
+print(f"[UI CONFIG] Working from: {ui_dir}", file=sys.stderr)
 
 # Set page configuration
 st.set_page_config(
@@ -117,45 +145,6 @@ def call_api(endpoint, data, method="POST"):
         st.error(f"Error calling API: {str(e)}")
         return None
 
-# All page functionalities have been moved to their respective modules
-    st.markdown("### Add New Fraud Pattern")
-    with st.form(key="add_pattern_form"):
-        pattern_name = st.text_input("Pattern Name")
-        pattern_description = st.text_area("Pattern Description")
-        
-        pattern_details = st.text_area(
-            "Pattern Details (JSON format)",
-            value='{\n  "merchant_category": "Electronics",\n  "transaction_type": "online",\n  "indicators": ["high_amount", "new_device"]\n}',
-            height=150
-        )
-        
-        similarity_threshold = st.slider(
-            "Similarity Threshold",
-            min_value=0.0,
-            max_value=1.0,
-            value=0.75,
-            step=0.05
-        )
-        
-        submit_button = st.form_submit_button(label="Add Pattern")
-        
-        if submit_button:
-            try:
-                # Validate JSON
-                pattern_json = json.loads(pattern_details)
-                
-                pattern_data = {
-                    "name": pattern_name,
-                    "description": pattern_description,
-                    "pattern": pattern_json,
-                    "similarity_threshold": similarity_threshold
-                }
-                
-                response = call_api("/api/v1/fraud-patterns", pattern_data)
-                if response:
-                    st.success("Fraud pattern added successfully!")
-            except json.JSONDecodeError:
-                st.error("Invalid JSON format in pattern details.")
 
 def main():
     """Main function to build the Streamlit UI."""

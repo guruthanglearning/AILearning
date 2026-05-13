@@ -6,6 +6,7 @@
 **/*.user
 **/*.suo
 .env
+**/appsettings.secrets*.json
 *.md
 tests/
 scripts/

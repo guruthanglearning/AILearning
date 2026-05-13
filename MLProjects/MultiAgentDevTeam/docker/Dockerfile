@@ -16,6 +16,9 @@ COPY src/Agents/MultiAgentDevTeam.SecurityAgent/ src/Agents/MultiAgentDevTeam.Se
 COPY src/Agents/MultiAgentDevTeam.DevOpsAgent/ src/Agents/MultiAgentDevTeam.DevOpsAgent/
 COPY src/Agents/MultiAgentDevTeam.DocsAgent/ src/Agents/MultiAgentDevTeam.DocsAgent/
 
+# Override the Windows-specific globalPackagesFolder from NuGet.Config — that path is invalid inside Linux containers.
+ENV NUGET_PACKAGES=/tmp/nuget-packages
+
 RUN dotnet restore src/MultiAgentDevTeam.Orchestrator/MultiAgentDevTeam.Orchestrator.csproj
 
 RUN dotnet publish src/MultiAgentDevTeam.Orchestrator/MultiAgentDevTeam.Orchestrator.csproj \

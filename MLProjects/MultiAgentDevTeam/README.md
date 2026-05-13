@@ -16,6 +16,9 @@ An AI-powered software engineering team built in **C# .NET 10**, orchestrated vi
   - [Local (dotnet run)](#option-1--local-dotnet-run)
   - [Docker](#option-2--docker)
   - [Kubernetes](#option-3--kubernetes-docker-desktop)
+- [Debugging](#debugging)
+  - [Visual Studio 2022](#visual-studio-2022)
+  - [VS Code](#vs-code)
 - [API Reference](#api-reference)
 - [Running Tests](#running-tests)
 - [Project Structure](#project-structure)
@@ -204,10 +207,10 @@ Access:
 ### Option 2 — Docker
 
 ```powershell
-# Build image and start container
+# Build images and start containers
 .\scripts\deploy-docker.ps1 -ApiKey "sk-ant-xxxx"
 
-# Stop and remove container
+# Stop and remove containers
 .\scripts\deploy-docker.ps1 -Down
 ```
 
@@ -218,6 +221,7 @@ docker compose -f docker/docker-compose.yml up -d
 ```
 
 Access:
+- UI: http://localhost:3000
 - Swagger UI: http://localhost:5000
 - Logs: `docker logs -f orchestrator`
 
@@ -251,6 +255,107 @@ kubectl logs -f deployment/orchestrator -n multi-agent-dev-team
 # Scale replicas
 kubectl scale deployment/orchestrator --replicas=2 -n multi-agent-dev-team
 ```
+
+---
+
+## Debugging
+
+The application must be running (via Docker or locally) before attaching a debugger.
+
+> **Note on symbols:** The production `Dockerfile` builds in **Release** mode, which strips debug symbols (PDB files). You will be able to attach and pause execution, but breakpoints on your source lines will not bind. For full source-level debugging, see the [Debug build note](#debug-build-note) below.
+
+---
+
+### Visual Studio 2022
+
+1. Start the application in Docker:
+   ```powershell
+   .\scripts\deploy-docker.ps1 -ApiKey "sk-ant-xxxx"
+   ```
+
+2. In Visual Studio, open the solution (`MultiAgentDevTeam.slnx`).
+
+3. Go to **Debug → Attach to Process** (or press `Ctrl+Alt+P`).
+
+4. In the **Connection type** dropdown, select **Docker (Linux Container)**.
+
+5. Click **Find** and select the `orchestrator` container.
+
+6. In the process list, select the `dotnet` process.
+
+7. Ensure **Code type** is set to **Managed (.NET Core)** and click **Attach**.
+
+Visual Studio automatically installs `vsdbg` (the .NET debugger) into the container on the first attach — no manual setup required.
+
+---
+
+### VS Code
+
+**Prerequisites:** Install these extensions:
+- [Docker](https://marketplace.visualstudio.com/items?itemName=ms-azuretools.vscode-docker)
+- [C# Dev Kit](https://marketplace.visualstudio.com/items?itemName=ms-dotnettools.csdevkit)
+
+**Steps:**
+
+1. Start the application in Docker:
+   ```powershell
+   .\scripts\deploy-docker.ps1 -ApiKey "sk-ant-xxxx"
+   ```
+
+2. Open the **Docker** panel in the VS Code sidebar (whale icon).
+
+3. Expand **Containers** and find the `orchestrator` container.
+
+4. Right-click the container → **Attach Visual Studio Code**.
+   A new VS Code window opens connected to the container's file system.
+
+5. In that remote window, open the **Run and Debug** panel (`Ctrl+Shift+D`).
+
+6. Add the following configuration to `.vscode/launch.json` in the project root:
+
+   ```json
+   {
+     "version": "0.2.0",
+     "configurations": [
+       {
+         "name": "Attach to Docker (orchestrator)",
+         "type": "coreclr",
+         "request": "attach",
+         "processId": "${command:pickProcess}",
+         "justMyCode": true
+       }
+     ]
+   }
+   ```
+
+7. Press **F5**, select the `dotnet` process from the picker, and the debugger attaches.
+
+---
+
+### Debug Build Note
+
+To enable full source-level breakpoints, build the container in Debug configuration.
+Add a `docker/docker-compose.debug.yml` override:
+
+```yaml
+services:
+  orchestrator:
+    build:
+      args:
+        - BUILD_CONFIGURATION=Debug
+    environment:
+      - DOTNET_USE_POLLING_FILE_WATCHER=1
+    ports:
+      - "4024:4024"   # vsdbg remote debugger port
+```
+
+Start with the override:
+```powershell
+$env:ANTHROPIC_API_KEY = "sk-ant-xxxx"
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.debug.yml up -d
+```
+
+Then attach from VS 2022 or VS Code as described above — breakpoints in your source files will now bind correctly.
 
 ---
 

@@ -16,7 +16,20 @@
       "Bash(pkill:*)",
       "Bash(taskkill:*)",
       "Bash(echo \"Orchestrator starting in background \\(PID: $!\\)\")",
-      "Bash(Get-Content D:\\\\Study\\\\AILearning\\\\MLProjects\\\\MultiAgentDevTeam\\\\docker\\\\Dockerfile *)"
+      "Bash(Get-Content D:\\\\Study\\\\AILearning\\\\MLProjects\\\\MultiAgentDevTeam\\\\docker\\\\Dockerfile *)",
+      "Bash(Get-ChildItem \"D:\\\\Study\\\\AILearning\\\\MLProjects\\\\MultiAgentDevTeam\")",
+      "Bash(Select-Object Name, PSIsContainer)",
+      "Bash(dir D:\\\\Study\\\\AILearning\\\\MLProjects\\\\MultiAgentDevTeam *)",
+      "Bash(wsl *)",
+      "Bash(dir \"D:\\\\Study\\\\AILearning\\\\MLProjects\\\\MultiAgentDevTeam\" /b /s \"*.dcproj\")",
+      "Bash(dir \"D:\\\\Study\\\\AILearning\\\\MLProjects\\\\MultiAgentDevTeam\" /b \"docker-compose*.yml\")",
+      "Bash(docker compose *)",
+      "Bash(curl -s http://localhost:5000/health)",
+      "Skill(update-config)",
+      "Bash(curl -s -o /dev/null -w \"UI HTTP status: %{http_code}\" http://localhost:3000)",
+      "Bash(citool.exe *)",
+      "Bash(Get-Content *)",
+      "Bash(Remove-Item *)"
     ]
   }
 }

@@ -28,6 +28,9 @@ RUN dotnet publish src/MultiAgentDevTeam.Orchestrator/MultiAgentDevTeam.Orchestr
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
+# Install curl for healthcheck, then drop to non-root user
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
 # Run as non-root user for security (Debian-based image uses groupadd/useradd)
 RUN groupadd --system appgroup && useradd --system --gid appgroup --no-create-home appuser
 USER appuser

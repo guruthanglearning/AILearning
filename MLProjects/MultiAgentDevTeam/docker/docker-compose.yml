@@ -13,7 +13,7 @@ services:
       - AgentConfiguration__DefaultModel=claude-opus-4-6
       - ASPNETCORE_ENVIRONMENT=Development
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:5000/health || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:5000/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 from enum import Enum
 from typing import Any
@@ -175,3 +176,4 @@ class AnalysisRunRequest(BaseModel):
         le=10.0,
         description="Optional; used for position-sizing hints only",
     )
+    batch_job_id: uuid.UUID | None = None

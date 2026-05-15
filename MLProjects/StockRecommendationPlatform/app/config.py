@@ -16,5 +16,8 @@ class Settings(BaseSettings):
     # Phase 0b — Polygon (absent → yfinance fallback)
     polygon_api_key: str | None = None
 
+    # Phase 2 — batch concurrency
+    batch_concurrency: int = 5
+
 
 settings = Settings()

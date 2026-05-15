@@ -57,6 +57,7 @@ class Supervisor:
                     status="running",
                     portfolio_value_usd=req.portfolio_value_usd,
                     max_risk_per_trade_pct=req.max_risk_per_trade_pct,
+                    batch_job_id=req.batch_job_id,
                 )
                 session.add(run_row)
                 await session.commit()

@@ -3,14 +3,21 @@
 from __future__ import annotations
 
 import math
+from datetime import date
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+import pandas as pd
 
 from app.schemas.agents import (
+    AgentStatus,
     DecisionAids,
     DecisionChecklistItem,
     InstrumentPlayRow,
+    OptionLeg,
+    OptionLegType,
+    OptionRight,
+    OptionsMetricRow,
     OptionsOutput,
     PositionSizingHint,
     RiskProOutput,
@@ -33,6 +40,223 @@ async def _hv_20d(symbol: str, provider: MarketDataProvider) -> float | None:
         return float(lr.std() * math.sqrt(252))
     except Exception:
         return None
+
+
+# ---------------------------------------------------------------------------
+# Options metrics table helpers (§6)
+# ---------------------------------------------------------------------------
+
+
+def _calc_dte(expiry: str) -> int:
+    try:
+        return max(0, (date.fromisoformat(expiry) - date.today()).days)
+    except Exception:
+        return 0
+
+
+def _degraded_row(template_id: str, strategy_label: str, spot: float | None, reasons: list[str]) -> OptionsMetricRow:
+    return OptionsMetricRow(
+        template_id=template_id,
+        strategy_label=strategy_label,
+        underlying_at_analysis=spot,
+        row_data_quality="degraded",
+        degraded_reasons=reasons,
+    )
+
+
+def _debit_call_spread_row(
+    expiry: str,
+    dte: int,
+    spot: float,
+    long_strike: float,
+    long_ask: float,
+    short_strike: float,
+    short_bid: float,
+    trend: str | None,
+    liq_hint: str | None,
+    imp_move_pct: float | None,
+) -> OptionsMetricRow:
+    width = round(short_strike - long_strike, 2)
+    net_debit = round(long_ask - short_bid, 2)
+    if net_debit <= 0 or net_debit >= width or width <= 0:
+        return _degraded_row("bull_call_spread", "Bull Call Spread (Debit Vertical)", spot, ["degenerate_spread_prices"])
+    return OptionsMetricRow(
+        template_id="bull_call_spread",
+        strategy_label="Bull Call Spread (Debit Vertical)",
+        expiration=expiry,
+        dte_at_analysis=dte,
+        legs=[
+            OptionLeg(right=OptionRight.call, strike=long_strike, quantity_signed=1, leg_type=OptionLegType.long),
+            OptionLeg(right=OptionRight.call, strike=short_strike, quantity_signed=-1, leg_type=OptionLegType.short),
+        ],
+        net_debit_credit=-net_debit,
+        max_profit=round(width - net_debit, 2),
+        max_loss=round(net_debit, 2),
+        breakeven_prices=[round(long_strike + net_debit, 2)],
+        underlying_at_analysis=spot,
+        row_data_quality="full",
+        trend_alignment="aligned" if (trend or "") == "bullish" else "neutral",
+        liquidity=liq_hint or "unknown",
+        risk_profile=f"Max loss ${net_debit:.2f} (net debit) per contract × 100",
+        expected_move=f"±{imp_move_pct:.1f}% (1d straddle)" if imp_move_pct else None,
+        management_rules="Close at +50% max profit or −100% max loss; no roll unless thesis intact",
+    )
+
+
+def _credit_put_spread_row(
+    expiry: str,
+    dte: int,
+    spot: float,
+    short_strike: float,
+    short_bid: float,
+    long_strike: float,
+    long_ask: float,
+    trend: str | None,
+    liq_hint: str | None,
+    imp_move_pct: float | None,
+) -> OptionsMetricRow:
+    width = round(short_strike - long_strike, 2)
+    net_credit = round(short_bid - long_ask, 2)
+    if net_credit <= 0 or net_credit >= width or width <= 0:
+        return _degraded_row("short_put_spread", "Short Put Spread (Credit Vertical)", spot, ["degenerate_spread_prices"])
+    return OptionsMetricRow(
+        template_id="short_put_spread",
+        strategy_label="Short Put Spread (Credit Vertical)",
+        expiration=expiry,
+        dte_at_analysis=dte,
+        legs=[
+            OptionLeg(right=OptionRight.put, strike=short_strike, quantity_signed=-1, leg_type=OptionLegType.short),
+            OptionLeg(right=OptionRight.put, strike=long_strike, quantity_signed=1, leg_type=OptionLegType.long),
+        ],
+        net_debit_credit=net_credit,
+        max_profit=round(net_credit, 2),
+        max_loss=round(width - net_credit, 2),
+        breakeven_prices=[round(short_strike - net_credit, 2)],
+        underlying_at_analysis=spot,
+        row_data_quality="full",
+        trend_alignment="aligned" if (trend or "") in ("bullish", "mixed") else "counter",
+        liquidity=liq_hint or "unknown",
+        risk_profile=f"Max loss ${width - net_credit:.2f} per contract × 100",
+        expected_move=f"±{imp_move_pct:.1f}% (1d straddle)" if imp_move_pct else None,
+        management_rules="Close at +50% of max credit; defend at −200% of credit received",
+    )
+
+
+def _leg_mid(row: pd.Series) -> tuple[float, float]:
+    """Return (bid, ask) for a chain row; 0.0 when missing."""
+    bid = float(row["bid"]) if "bid" in row.index and pd.notna(row["bid"]) else 0.0
+    ask = float(row["ask"]) if "ask" in row.index and pd.notna(row["ask"]) else 0.0
+    return bid, ask
+
+
+def _build_bull_call_spread(
+    calls: pd.DataFrame | None,
+    spot: float,
+    expiry: str,
+    dte: int,
+    trend: str | None,
+    liq: str | None,
+    imp_move: float | None,
+) -> OptionsMetricRow:
+    if calls is None or calls.empty:
+        return _degraded_row("bull_call_spread", "Bull Call Spread (Debit Vertical)", spot, ["no_call_chain"])
+    try:
+        df = calls.copy()
+        df["dist"] = (df["strike"] - spot).abs()
+        atm = df.loc[df["dist"].idxmin()]
+        atm_strike = float(atm["strike"])
+        otm_candidates = df[df["strike"] > atm_strike + 0.5].sort_values("strike")
+        if otm_candidates.empty:
+            return _degraded_row("bull_call_spread", "Bull Call Spread (Debit Vertical)", spot, ["no_otm_call_strike"])
+        otm = otm_candidates.iloc[0]
+        otm_strike = float(otm["strike"])
+        atm_bid, atm_ask = _leg_mid(atm)
+        otm_bid, otm_ask = _leg_mid(otm)
+        quality = "full" if atm_ask > 0 and otm_bid > 0 else "partial"
+        row = _debit_call_spread_row(expiry, dte, spot, atm_strike, atm_ask, otm_strike, otm_bid, trend, liq, imp_move)
+        if quality == "partial" and row.row_data_quality == "full":
+            row = row.model_copy(update={"row_data_quality": "partial", "degraded_reasons": ["zero_bid_ask_on_leg"]})
+        return row
+    except Exception as exc:
+        return _degraded_row("bull_call_spread", "Bull Call Spread (Debit Vertical)", spot, [str(exc)])
+
+
+def _build_short_put_spread(
+    puts: pd.DataFrame | None,
+    spot: float,
+    expiry: str,
+    dte: int,
+    trend: str | None,
+    liq: str | None,
+    imp_move: float | None,
+) -> OptionsMetricRow:
+    if puts is None or puts.empty:
+        return _degraded_row("short_put_spread", "Short Put Spread (Credit Vertical)", spot, ["no_put_chain"])
+    try:
+        df = puts.copy()
+        df["dist"] = (df["strike"] - spot).abs()
+        atm = df.loc[df["dist"].idxmin()]
+        atm_strike = float(atm["strike"])
+        otm_candidates = df[df["strike"] < atm_strike - 0.5].sort_values("strike", ascending=False)
+        if otm_candidates.empty:
+            return _degraded_row("short_put_spread", "Short Put Spread (Credit Vertical)", spot, ["no_otm_put_strike"])
+        otm = otm_candidates.iloc[0]
+        otm_strike = float(otm["strike"])
+        atm_bid, atm_ask = _leg_mid(atm)
+        otm_bid, otm_ask = _leg_mid(otm)
+        quality = "full" if atm_bid > 0 and otm_ask > 0 else "partial"
+        row = _credit_put_spread_row(expiry, dte, spot, atm_strike, atm_bid, otm_strike, otm_ask, trend, liq, imp_move)
+        if quality == "partial" and row.row_data_quality == "full":
+            row = row.model_copy(update={"row_data_quality": "partial", "degraded_reasons": ["zero_bid_ask_on_leg"]})
+        return row
+    except Exception as exc:
+        return _degraded_row("short_put_spread", "Short Put Spread (Credit Vertical)", spot, [str(exc)])
+
+
+async def _build_options_metrics_table(
+    symbol: str,
+    spot: float | None,
+    opt: OptionsOutput,
+    tech: TechnicalsOutput,
+    provider: MarketDataProvider,
+) -> list[OptionsMetricRow]:
+    summary = OptionsMetricRow(
+        template_id="underlying_summary",
+        strategy_label="Underlying Summary",
+        underlying_at_analysis=spot,
+        row_data_quality="full" if spot else "degraded",
+        expiration=opt.nearest_expiry,
+        expected_move=(f"±{opt.implied_move_1d_pct:.1f}% (1d)" if opt.implied_move_1d_pct else None),
+        liquidity=opt.chain_liquidity_hint,
+    )
+
+    if spot is None or opt.status == AgentStatus.failed or not opt.nearest_expiry:
+        return [
+            summary,
+            _degraded_row("bull_call_spread", "Bull Call Spread (Debit Vertical)", spot, ["options_data_unavailable"]),
+            _degraded_row("short_put_spread", "Short Put Spread (Credit Vertical)", spot, ["options_data_unavailable"]),
+        ]
+
+    try:
+        chain_data = await provider.get_option_chain(symbol)
+        calls: pd.DataFrame | None = chain_data.get("calls")
+        puts: pd.DataFrame | None = chain_data.get("puts")
+        expiry: str = chain_data.get("chosen_expiry") or opt.nearest_expiry
+    except Exception as exc:
+        return [
+            summary,
+            _degraded_row("bull_call_spread", "Bull Call Spread (Debit Vertical)", spot, [f"chain_fetch_failed: {exc}"]),
+            _degraded_row("short_put_spread", "Short Put Spread (Credit Vertical)", spot, [f"chain_fetch_failed: {exc}"]),
+        ]
+
+    dte = _calc_dte(expiry)
+    trend = tech.trend_hint
+    liq = opt.chain_liquidity_hint
+    imp_move = opt.implied_move_1d_pct
+
+    row_b = _build_bull_call_spread(calls, spot, expiry, dte, trend, liq, imp_move)
+    row_c = _build_short_put_spread(puts, spot, expiry, dte, trend, liq, imp_move)
+    return [summary, row_b, row_c]
 
 
 async def build_decision_aids(
@@ -286,6 +510,8 @@ async def build_decision_aids(
         else "Balanced — compare long stock vs debit spread vs long option using max loss and breakeven."
     )
 
+    opts_table = await _build_options_metrics_table(symbol, last_price, opt, tech, provider)
+
     return DecisionAids(
         summary_headline=headline,
         stock_vs_options_score=round(score, 3),
@@ -295,4 +521,5 @@ async def build_decision_aids(
         position_sizing=sizing,
         comparison_matrix=matrix,
         user_questions=questions,
+        options_metrics_table=opts_table,
     )

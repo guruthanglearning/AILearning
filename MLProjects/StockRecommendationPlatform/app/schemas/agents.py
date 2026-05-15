@@ -64,6 +64,45 @@ class OptionsOutput(AgentResultBase):
     implied_move_1d_pct: float | None = None
 
 
+class OptionRight(str, Enum):
+    call = "call"
+    put = "put"
+
+
+class OptionLegType(str, Enum):
+    long = "long"
+    short = "short"
+
+
+class OptionLeg(BaseModel):
+    right: OptionRight
+    strike: float
+    quantity_signed: int
+    leg_type: OptionLegType
+
+
+class OptionsMetricRow(BaseModel):
+    template_id: str
+    strategy_label: str
+    expiration: str | None = None
+    dte_at_analysis: int | None = None
+    legs: list[OptionLeg] = Field(default_factory=list)
+    net_debit_credit: float | None = None
+    max_profit: float | None = None
+    max_loss: float | None = None
+    breakeven_prices: list[float] = Field(default_factory=list)
+    underlying_at_analysis: float | None = None
+    row_data_quality: str = "degraded"
+    degraded_reasons: list[str] = Field(default_factory=list)
+    disclaimer: str = "Hypothetical scenarios only; not investment advice."
+    trend_alignment: str | None = None
+    liquidity: str | None = None
+    execution_quality: str | None = None
+    risk_profile: str | None = None
+    expected_move: str | None = None
+    management_rules: str | None = None
+
+
 class SentimentMLOutput(AgentResultBase):
     sentiment_score: float | None = None
     forecast_signal: str | None = None
@@ -156,6 +195,7 @@ class DecisionAids(BaseModel):
         default_factory=list,
         description="Prompts the trader should answer before sizing a trade",
     )
+    options_metrics_table: list[OptionsMetricRow] = Field(default_factory=list)
 
 
 class SupervisorVerdict(BaseModel):

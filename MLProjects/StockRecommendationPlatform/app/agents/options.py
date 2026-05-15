@@ -20,6 +20,7 @@ def _mid(row: pd.Series) -> float:
 
 class OptionsAgent(BaseAgent[OptionsOutput]):
     name = "OptionsAgent"
+    output_model = OptionsOutput
 
     async def run(self, ctx: AgentContext) -> OptionsOutput:
         t0 = time.perf_counter()

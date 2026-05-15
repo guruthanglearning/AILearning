@@ -25,6 +25,7 @@ def _rsi(series: pd.Series, period: int = 14) -> float | None:
 
 class TechnicalsAgent(BaseAgent[TechnicalsOutput]):
     name = "TechnicalsAgent"
+    output_model = TechnicalsOutput
 
     async def run(self, ctx: AgentContext) -> TechnicalsOutput:
         t0 = time.perf_counter()

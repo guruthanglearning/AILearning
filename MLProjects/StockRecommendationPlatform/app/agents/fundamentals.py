@@ -8,6 +8,7 @@ from app.schemas.agents import AgentStatus, FundamentalsOutput
 
 class FundamentalsAgent(BaseAgent[FundamentalsOutput]):
     name = "FundamentalsAgent"
+    output_model = FundamentalsOutput
 
     async def run(self, ctx: AgentContext) -> FundamentalsOutput:
         t0 = time.perf_counter()

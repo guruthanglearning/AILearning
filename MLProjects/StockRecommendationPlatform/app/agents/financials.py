@@ -8,6 +8,7 @@ from app.schemas.agents import AgentStatus, FinancialsOutput
 
 class FinancialsAgent(BaseAgent[FinancialsOutput]):
     name = "FinancialsAgent"
+    output_model = FinancialsOutput
 
     async def run(self, ctx: AgentContext) -> FinancialsOutput:
         t0 = time.perf_counter()

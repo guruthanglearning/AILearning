@@ -11,6 +11,7 @@ from app.schemas.agents import AgentStatus, SentimentMLOutput
 
 class SentimentMLAgent(BaseAgent[SentimentMLOutput]):
     name = "SentimentMLAgent"
+    output_model = SentimentMLOutput
 
     async def run(self, ctx: AgentContext) -> SentimentMLOutput:
         t0 = time.perf_counter()

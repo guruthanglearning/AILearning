@@ -10,6 +10,7 @@ from app.schemas.agents import AgentStatus, RiskProOutput
 
 class RiskProWorkflowAgent(BaseAgent[RiskProOutput]):
     name = "RiskProWorkflowAgent"
+    output_model = RiskProOutput
 
     async def run(self, ctx: AgentContext) -> RiskProOutput:
         t0 = time.perf_counter()

@@ -8,6 +8,7 @@ from app.schemas.agents import AgentStatus, MarketDataOutput
 
 class MarketDataAgent(BaseAgent[MarketDataOutput]):
     name = "MarketDataAgent"
+    output_model = MarketDataOutput
 
     async def run(self, ctx: AgentContext) -> MarketDataOutput:
         t0 = time.perf_counter()

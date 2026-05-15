@@ -66,13 +66,13 @@ class Supervisor:
         ctx = AgentContext(symbol, timeout_s=settings.agent_timeout_seconds, provider=provider)
 
         m, f, tech, fin, opt, risk, sent = await asyncio.gather(
-            self.market.run(ctx),
-            self.fundamentals.run(ctx),
-            self.technicals.run(ctx),
-            self.financials.run(ctx),
-            self.options.run(ctx),
-            self.risk.run(ctx),
-            self.sentiment.run(ctx),
+            self.market.safe_run(ctx),
+            self.fundamentals.safe_run(ctx),
+            self.technicals.safe_run(ctx),
+            self.financials.safe_run(ctx),
+            self.options.safe_run(ctx),
+            self.risk.safe_run(ctx),
+            self.sentiment.safe_run(ctx),
         )
 
         # --- DB hook 2: persist agent artifacts (best-effort) ---

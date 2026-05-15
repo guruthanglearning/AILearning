@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest -q)",
+      "Bash(\"D:/Study/AILearning/shared_Environment/Scripts/pip.exe\" install *)",
+      "Bash(\"D:/Study/AILearning/shared_Environment/Scripts/python.exe\" -m pytest -q)",
+      "Bash(git *)"
+    ]
+  }
+}

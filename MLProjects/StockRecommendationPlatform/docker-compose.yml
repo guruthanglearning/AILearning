@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: rec
+      POSTGRES_PASSWORD: rec
+      POSTGRES_DB: recommendation
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rec -d recommendation"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8010:8010"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://rec:rec@postgres:5432/recommendation
+      REDIS_URL: redis://redis:6379/0
+      USE_REDIS: "true"
+      POLYGON_API_KEY: "${POLYGON_API_KEY:-}"
+      AGENT_TIMEOUT_SECONDS: "45"
+      QUOTE_STALE_SECONDS: "120"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8010"
+
+volumes:
+  pgdata:
+  redisdata:

@@ -9,8 +9,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 
 from app.batch import run_batch_job
+from app.config import settings
 from app.db.models import BatchJob
 from app.db.session import get_session, init_engine
+from app.middleware import CorrelationIdMiddleware
+from app.observability import configure_logging, configure_otel, create_instrumentator, get_correlation_id
 from app.routers import auth as auth_router
 from app.routers import alerts as alerts_router
 from app.routers import watchlists as watchlists_router
@@ -22,7 +25,13 @@ from app.universe import COMPOSITION_AS_OF, TOP_10, TOP_100, get_sp500
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    configure_logging()
+    configure_otel()
     init_engine()
+    if settings.otel_enabled:
+        from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+        from app.db.session import _engine  # type: ignore[attr-defined]
+        SQLAlchemyInstrumentor().instrument(engine=_engine)
     yield
 
 
@@ -38,6 +47,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Registered last → executes first (Starlette LIFO middleware order)
+app.add_middleware(CorrelationIdMiddleware)
+
+if settings.metrics_enabled:
+    _instrumentator = create_instrumentator()
+    _instrumentator.instrument(app)
+    _instrumentator.expose(app, endpoint="/metrics", include_in_schema=False)
+    if settings.otel_enabled:
+        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+        FastAPIInstrumentor.instrument_app(app)
 
 app.include_router(auth_router.router, prefix="/v1/auth/keys", tags=["auth"])
 app.include_router(watchlists_router.router, prefix="/v1/watchlists", tags=["watchlists"])
@@ -136,6 +155,7 @@ async def start_batch(req: BatchJobRequest, background_tasks: BackgroundTasks) -
         symbols,
         req.portfolio_value_usd,
         req.max_risk_per_trade_pct,
+        get_correlation_id(),
     )
 
     return BatchJobResponse(

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import time
 import uuid
 from datetime import datetime, timezone
 
+import structlog
+
 from app.agents.base import AgentContext
+from app.observability import agent_latency_histogram, get_correlation_id, get_tracer
 from app.agents.financials import FinancialsAgent
 from app.agents.fundamentals import FundamentalsAgent
 from app.agents.market_data import MarketDataAgent
@@ -29,7 +31,8 @@ from app.schemas.agents import (
     SupervisorVerdict,
 )
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
+_tracer = get_tracer("app.supervisor")
 
 
 class Supervisor:
@@ -48,53 +51,66 @@ class Supervisor:
         run_id = uuid.uuid4()
         provider = build_provider()
 
-        # --- DB hook 1: open run record (best-effort; never blocks analysis) ---
-        try:
-            async for session in get_session():
-                run_row = AnalysisRun(
-                    id=run_id,
-                    symbol=symbol,
-                    status="running",
-                    portfolio_value_usd=req.portfolio_value_usd,
-                    max_risk_per_trade_pct=req.max_risk_per_trade_pct,
-                    batch_job_id=req.batch_job_id,
-                    last_price=None,
+        with _tracer.start_as_current_span(
+            "supervisor.run_analysis",
+            attributes={"symbol": symbol, "correlation_id": get_correlation_id()},
+        ):
+            # --- DB hook 1: open run record (best-effort; never blocks analysis) ---
+            try:
+                async for session in get_session():
+                    run_row = AnalysisRun(
+                        id=run_id,
+                        symbol=symbol,
+                        status="running",
+                        portfolio_value_usd=req.portfolio_value_usd,
+                        max_risk_per_trade_pct=req.max_risk_per_trade_pct,
+                        batch_job_id=req.batch_job_id,
+                        last_price=None,
+                    )
+                    session.add(run_row)
+                    await session.commit()
+            except Exception as exc:
+                log.warning("db_open_run_failed", run_id=str(run_id), error=str(exc))
+
+            ctx = AgentContext(symbol, timeout_s=settings.agent_timeout_seconds, provider=provider)
+
+            with _tracer.start_as_current_span("supervisor.gather_agents"):
+                m, f, tech, fin, opt, risk, sent = await asyncio.gather(
+                    self.market.safe_run(ctx),
+                    self.fundamentals.safe_run(ctx),
+                    self.technicals.safe_run(ctx),
+                    self.financials.safe_run(ctx),
+                    self.options.safe_run(ctx),
+                    self.risk.safe_run(ctx),
+                    self.sentiment.safe_run(ctx),
                 )
-                session.add(run_row)
-                await session.commit()
-        except Exception as exc:
-            log.warning("DB: failed to create analysis_run row run_id=%s: %s", run_id, exc)
 
-        ctx = AgentContext(symbol, timeout_s=settings.agent_timeout_seconds, provider=provider)
-
-        m, f, tech, fin, opt, risk, sent = await asyncio.gather(
-            self.market.safe_run(ctx),
-            self.fundamentals.safe_run(ctx),
-            self.technicals.safe_run(ctx),
-            self.financials.safe_run(ctx),
-            self.options.safe_run(ctx),
-            self.risk.safe_run(ctx),
-            self.sentiment.safe_run(ctx),
-        )
-
-        # --- DB hook 2: persist agent artifacts (best-effort) ---
-        try:
-            async for session in get_session():
-                for agent_result in (m, f, tech, fin, opt, risk, sent):
-                    artifact = AgentArtifact(
-                        run_id=run_id,
+            # Emit per-agent latency histogram
+            for agent_result in (m, f, tech, fin, opt, risk, sent):
+                if agent_result.provenance and agent_result.provenance.latency_ms is not None:
+                    agent_latency_histogram.labels(
                         agent_name=agent_result.agent_name,
                         status=agent_result.status.value,
-                        latency_ms=agent_result.provenance.latency_ms
-                        if agent_result.provenance
-                        else None,
-                        error_message=agent_result.error_message,
-                        payload_json=agent_result.model_dump(mode="json"),
-                    )
-                    session.add(artifact)
-                await session.commit()
-        except Exception as exc:
-            log.warning("DB: failed to persist agent artifacts run_id=%s: %s", run_id, exc)
+                    ).observe(agent_result.provenance.latency_ms / 1000.0)
+
+            # --- DB hook 2: persist agent artifacts (best-effort) ---
+            try:
+                async for session in get_session():
+                    for agent_result in (m, f, tech, fin, opt, risk, sent):
+                        artifact = AgentArtifact(
+                            run_id=run_id,
+                            agent_name=agent_result.agent_name,
+                            status=agent_result.status.value,
+                            latency_ms=agent_result.provenance.latency_ms
+                            if agent_result.provenance
+                            else None,
+                            error_message=agent_result.error_message,
+                            payload_json=agent_result.model_dump(mode="json"),
+                        )
+                        session.add(artifact)
+                    await session.commit()
+            except Exception as exc:
+                log.warning("db_persist_artifacts_failed", run_id=str(run_id), error=str(exc))
 
         contributions: list[AgentContribution] = []
         for a in (m, f, tech, fin, opt, risk, sent):
@@ -147,7 +163,7 @@ class Supervisor:
                     row.verdict_json = result.model_dump(mode="json")
                     await session.commit()
         except Exception as exc:
-            log.warning("DB: failed to finalise analysis_run run_id=%s: %s", run_id, exc)
+            log.warning("db_finalise_run_failed", run_id=str(run_id), error=str(exc))
 
         return result
 

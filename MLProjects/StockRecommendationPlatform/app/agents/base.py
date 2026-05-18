@@ -5,12 +5,17 @@ import time
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
 
+from opentelemetry import trace as _otrace
+
+from app.observability import get_tracer
 from app.schemas.agents import AgentResultBase, AgentStatus, DataProvenance
 
 if TYPE_CHECKING:
     from app.providers.base import MarketDataProvider
 
 T = TypeVar("T", bound=AgentResultBase)
+
+_tracer = get_tracer("app.agents.base")
 
 
 class AgentContext:
@@ -34,20 +39,27 @@ class BaseAgent(ABC, Generic[T]):
         ...
 
     async def safe_run(self, ctx: AgentContext) -> T:
-        """
-        Run with timeout enforcement via asyncio.wait_for.
-        Always returns a valid T — never raises.
-        Both TimeoutError and unexpected exceptions produce AgentStatus.failed.
-        """
-        t0 = time.perf_counter()
-        try:
-            return await asyncio.wait_for(self.run(ctx), timeout=ctx.timeout_s)
-        except asyncio.TimeoutError:
-            return self._fail(
-                self.output_model, t0, "timeout", f"Timed out after {ctx.timeout_s}s"
-            )
-        except Exception as exc:
-            return self._fail(self.output_model, t0, "error", str(exc))
+        """Run with timeout + OTel span.  Always returns a valid T — never raises."""
+        with _tracer.start_as_current_span(
+            f"agent.{self.name}",
+            attributes={"agent_name": self.name, "symbol": ctx.symbol},
+        ) as span:
+            t0 = time.perf_counter()
+            try:
+                result = await asyncio.wait_for(self.run(ctx), timeout=ctx.timeout_s)
+                span.set_attribute("agent.status", result.status.value)
+                return result
+            except asyncio.TimeoutError:
+                span.set_attribute("agent.status", "timeout")
+                span.set_status(_otrace.StatusCode.ERROR, "timeout")
+                return self._fail(
+                    self.output_model, t0, "timeout", f"Timed out after {ctx.timeout_s}s"
+                )
+            except Exception as exc:
+                span.set_attribute("agent.status", "error")
+                span.record_exception(exc)
+                span.set_status(_otrace.StatusCode.ERROR, str(exc))
+                return self._fail(self.output_model, t0, "error", str(exc))
 
     def _prov(self, source: str, t0: float) -> DataProvenance:
         return DataProvenance(source=source, latency_ms=(time.perf_counter() - t0) * 1000)

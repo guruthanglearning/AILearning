@@ -19,5 +19,11 @@ class Settings(BaseSettings):
     # Phase 2 — batch concurrency
     batch_concurrency: int = 5
 
+    # Phase 5 — Observability
+    log_level: str = "INFO"
+    otel_enabled: bool = False
+    otel_endpoint: str = ""      # e.g. "http://localhost:4317"; empty → ConsoleSpanExporter
+    metrics_enabled: bool = True
+
 
 settings = Settings()

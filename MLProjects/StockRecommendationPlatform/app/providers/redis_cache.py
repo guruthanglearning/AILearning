@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any
 
 import pandas as pd
 import redis.asyncio as aioredis
+import structlog
 
 from app.config import settings
 from app.providers.base import MarketDataProvider
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 _DF_ORIENT = "split"  # compact JSON representation for DataFrames
 
@@ -33,14 +33,14 @@ class RedisCache(MarketDataProvider):
             raw = await self._redis.get(key)
             return json.loads(raw) if raw else None
         except Exception as exc:
-            log.debug("Redis GET miss/error key=%s: %s", key, exc)
+            log.debug("redis_get_error", key=key, error=str(exc))
             return None
 
     async def _set(self, key: str, value: Any, ttl: int) -> None:
         try:
             await self._redis.setex(key, ttl, json.dumps(value, default=str))
         except Exception as exc:
-            log.debug("Redis SET error key=%s: %s", key, exc)
+            log.debug("redis_set_error", key=key, error=str(exc))
 
     # --- provider methods ---
 

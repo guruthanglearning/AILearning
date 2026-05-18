@@ -9,7 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import get_current_key
 from app.db.models import ApiKey, Watchlist, WatchlistSymbol
 from app.db.session import get_session
-from app.schemas.user import WatchlistCreate, WatchlistResponse, WatchlistSymbolAdd, WatchlistSymbolResponse
+from app.schemas.user import (
+    WatchlistCreate,
+    WatchlistResponse,
+    WatchlistSymbolAdd,
+    WatchlistSymbolResponse,
+)
 
 router = APIRouter()
 

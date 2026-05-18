@@ -4,7 +4,6 @@ from __future__ import annotations
 import pytest
 
 from app.decision_support import (
-    _calc_dte,
     _credit_put_spread_row,
     _debit_call_spread_row,
     _degraded_row,
@@ -13,7 +12,6 @@ from app.schemas.agents import (
     AgentStatus,
     DataProvenance,
     DecisionAids,
-    OptionLeg,
     OptionLegType,
     OptionRight,
     OptionsMetricRow,

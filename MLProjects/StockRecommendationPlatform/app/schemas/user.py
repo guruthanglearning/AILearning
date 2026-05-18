@@ -58,7 +58,7 @@ class AlertCreate(BaseModel):
     threshold_verdict: str | None = None
 
     @model_validator(mode="after")
-    def check_threshold(self) -> "AlertCreate":
+    def check_threshold(self) -> AlertCreate:
         if self.condition in (AlertCondition.price_above, AlertCondition.price_below):
             if self.threshold_value is None:
                 raise ValueError("threshold_value required for price conditions")

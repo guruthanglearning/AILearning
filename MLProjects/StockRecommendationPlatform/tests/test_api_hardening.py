@@ -1,7 +1,6 @@
 """Phase 6 API hardening offline tests — no DB, no Redis, no live requests."""
 from __future__ import annotations
 
-
 # ---------------------------------------------------------------------------
 # CORS origin parsing
 # ---------------------------------------------------------------------------

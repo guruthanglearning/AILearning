@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pandas as pd
 import pytest
@@ -10,7 +10,6 @@ import pytest
 from app.providers.base import MarketDataProvider
 from app.providers.factory import build_provider
 from app.providers.yfinance_provider import YFinanceProvider
-
 
 # ---------------------------------------------------------------------------
 # Factory selection

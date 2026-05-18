@@ -12,9 +12,9 @@ def build_provider() -> MarketDataProvider:
       No key               + USE_REDIS=true  → RedisCache(YFinanceProvider)
       No key               + USE_REDIS=false → YFinanceProvider  (default / dev)
     """
-    from app.providers.yfinance_provider import YFinanceProvider
     from app.providers.polygon_provider import PolygonProvider
     from app.providers.redis_cache import RedisCache
+    from app.providers.yfinance_provider import YFinanceProvider
 
     if settings.polygon_api_key:
         base: MarketDataProvider = PolygonProvider(api_key=settings.polygon_api_key)

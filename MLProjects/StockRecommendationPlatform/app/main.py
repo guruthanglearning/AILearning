@@ -17,9 +17,14 @@ from app.db.models import BatchJob
 from app.db.session import get_session, init_engine
 from app.limiter import limiter
 from app.middleware import CorrelationIdMiddleware, SecurityHeadersMiddleware
-from app.observability import configure_logging, configure_otel, create_instrumentator, get_correlation_id
-from app.routers import auth as auth_router
+from app.observability import (
+    configure_logging,
+    configure_otel,
+    create_instrumentator,
+    get_correlation_id,
+)
 from app.routers import alerts as alerts_router
+from app.routers import auth as auth_router
 from app.routers import watchlists as watchlists_router
 from app.schemas.agents import AnalysisRunRequest, SupervisorVerdict
 from app.schemas.batch import BatchJobRequest, BatchJobResponse, BatchJobStatus
@@ -40,6 +45,7 @@ async def lifespan(app: FastAPI):
     init_engine()
     if settings.otel_enabled:
         from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+
         from app.db.session import _engine  # type: ignore[attr-defined]
         SQLAlchemyInstrumentor().instrument(engine=_engine)
     yield

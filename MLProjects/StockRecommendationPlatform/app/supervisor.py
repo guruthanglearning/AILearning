@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 import structlog
 
 from app.agents.base import AgentContext
-from app.observability import agent_latency_histogram, get_correlation_id, get_tracer
 from app.agents.financials import FinancialsAgent
 from app.agents.fundamentals import FundamentalsAgent
 from app.agents.market_data import MarketDataAgent
@@ -20,6 +19,7 @@ from app.config import settings
 from app.db.models import AgentArtifact, AnalysisRun
 from app.db.session import get_session
 from app.decision_support import build_decision_aids
+from app.observability import agent_latency_histogram, get_correlation_id, get_tracer
 from app.providers.factory import build_provider
 from app.schemas.agents import (
     AgentContribution,

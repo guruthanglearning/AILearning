@@ -1,13 +1,8 @@
 """Batch-job offline tests — no DB, no network."""
 from __future__ import annotations
 
-import uuid
-
-import pytest
-
 from app.schemas.batch import BatchJobRequest, BatchJobStatus
 from app.universe import TOP_10, TOP_100, get_sp500, get_top_n
-
 
 # ---------------------------------------------------------------------------
 # Universe resolution

@@ -1,0 +1,43 @@
+name: StockRecommendationPlatform CI
+
+on:
+  push:
+    paths:
+      - "MLProjects/StockRecommendationPlatform/**"
+      - ".github/workflows/ci-stock-recommendation.yml"
+  pull_request:
+    paths:
+      - "MLProjects/StockRecommendationPlatform/**"
+      - ".github/workflows/ci-stock-recommendation.yml"
+
+jobs:
+  test:
+    name: Test & Lint (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12"]
+
+    defaults:
+      run:
+        working-directory: MLProjects/StockRecommendationPlatform
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+          cache-dependency-path: MLProjects/StockRecommendationPlatform/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Lint — ruff
+        run: ruff check app/ tests/
+
+      - name: Test — pytest with coverage
+        run: python -m pytest -q --tb=short --cov=app --cov-report=term-missing

@@ -125,7 +125,9 @@ def configure_otel(service_name: str = "stock-recommendation-platform") -> None:
     provider = TracerProvider(resource=resource)
 
     if settings.otel_endpoint:
-        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+            OTLPSpanExporter,
+        )
         exporter = OTLPSpanExporter(endpoint=settings.otel_endpoint, insecure=True)
     else:
         exporter = ConsoleSpanExporter()

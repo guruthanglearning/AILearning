@@ -1,4 +1,3 @@
-from types import SimpleNamespace
 
 from app.schemas.agents import (
     AgentStatus,

@@ -7,12 +7,9 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
-
-from app.agents.base import AgentContext, BaseAgent
+from app.agents.base import AgentContext
 from app.agents.market_data import MarketDataAgent
 from app.agents.options import OptionsAgent
-from app.agents.technicals import TechnicalsAgent
 from app.schemas.agents import (
     AgentStatus,
     DataProvenance,
@@ -20,13 +17,9 @@ from app.schemas.agents import (
     MarketDataOutput,
     OptionsOutput,
     RiskProOutput,
-    SentimentMLOutput,
     TechnicalsOutput,
-    FundamentalsOutput,
-    FinancialsOutput,
 )
 from app.supervisor import Supervisor
-
 
 # ---------------------------------------------------------------------------
 # Helpers

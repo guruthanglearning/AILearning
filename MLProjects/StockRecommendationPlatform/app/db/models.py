@@ -3,7 +3,18 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -23,8 +34,8 @@ class ApiKey(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    watchlists: Mapped[list["Watchlist"]] = relationship("Watchlist", back_populates="api_key", cascade="all, delete-orphan")
-    alerts: Mapped[list["Alert"]] = relationship("Alert", back_populates="api_key", cascade="all, delete-orphan")
+    watchlists: Mapped[list[Watchlist]] = relationship("Watchlist", back_populates="api_key", cascade="all, delete-orphan")
+    alerts: Mapped[list[Alert]] = relationship("Alert", back_populates="api_key", cascade="all, delete-orphan")
 
 
 class Watchlist(Base):
@@ -36,8 +47,8 @@ class Watchlist(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
-    api_key: Mapped["ApiKey"] = relationship("ApiKey", back_populates="watchlists")
-    symbols: Mapped[list["WatchlistSymbol"]] = relationship("WatchlistSymbol", back_populates="watchlist", cascade="all, delete-orphan")
+    api_key: Mapped[ApiKey] = relationship("ApiKey", back_populates="watchlists")
+    symbols: Mapped[list[WatchlistSymbol]] = relationship("WatchlistSymbol", back_populates="watchlist", cascade="all, delete-orphan")
 
 
 class WatchlistSymbol(Base):
@@ -49,7 +60,7 @@ class WatchlistSymbol(Base):
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
-    watchlist: Mapped["Watchlist"] = relationship("Watchlist", back_populates="symbols")
+    watchlist: Mapped[Watchlist] = relationship("Watchlist", back_populates="symbols")
 
     __table_args__ = (UniqueConstraint("watchlist_id", "symbol", name="uq_watchlist_symbol"),)
 
@@ -67,7 +78,7 @@ class Alert(Base):
     triggered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
-    api_key: Mapped["ApiKey"] = relationship("ApiKey", back_populates="alerts")
+    api_key: Mapped[ApiKey] = relationship("ApiKey", back_populates="alerts")
 
 
 class BatchJob(Base):
@@ -89,7 +100,7 @@ class BatchJob(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    runs: Mapped[list["AnalysisRun"]] = relationship("AnalysisRun", back_populates="batch_job")
+    runs: Mapped[list[AnalysisRun]] = relationship("AnalysisRun", back_populates="batch_job")
 
 
 class AnalysisRun(Base):
@@ -115,7 +126,7 @@ class AnalysisRun(Base):
     artifacts: Mapped[list[AgentArtifact]] = relationship(
         "AgentArtifact", back_populates="run", cascade="all, delete-orphan"
     )
-    batch_job: Mapped["BatchJob | None"] = relationship("BatchJob", back_populates="runs")
+    batch_job: Mapped[BatchJob | None] = relationship("BatchJob", back_populates="runs")
 
     __table_args__ = (Index("ix_analysis_run_symbol_started", "symbol", "started_at"),)
 

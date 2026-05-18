@@ -4,9 +4,6 @@ from __future__ import annotations
 import json
 import uuid
 
-import pytest
-
-
 # ---------------------------------------------------------------------------
 # Correlation ID helpers
 # ---------------------------------------------------------------------------
@@ -93,8 +90,9 @@ def test_middleware_rejects_invalid_header():
 # ---------------------------------------------------------------------------
 
 def test_structlog_emits_json_with_correlation_id(capfd, monkeypatch):
-    import app.observability as obs_mod
     import structlog.contextvars
+
+    import app.observability as obs_mod
 
     # Reset the idempotency flag so configure_logging() re-wires handlers
     monkeypatch.setattr(obs_mod, "_logging_configured", False)

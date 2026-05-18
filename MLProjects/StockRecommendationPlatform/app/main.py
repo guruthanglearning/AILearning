@@ -4,15 +4,19 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import date
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import select
 
 from app.batch import run_batch_job
 from app.config import settings
 from app.db.models import BatchJob
 from app.db.session import get_session, init_engine
-from app.middleware import CorrelationIdMiddleware
+from app.limiter import limiter
+from app.middleware import CorrelationIdMiddleware, SecurityHeadersMiddleware
 from app.observability import configure_logging, configure_otel, create_instrumentator, get_correlation_id
 from app.routers import auth as auth_router
 from app.routers import alerts as alerts_router
@@ -21,6 +25,12 @@ from app.schemas.agents import AnalysisRunRequest, SupervisorVerdict
 from app.schemas.batch import BatchJobRequest, BatchJobResponse, BatchJobStatus
 from app.supervisor import Supervisor
 from app.universe import COMPOSITION_AS_OF, TOP_10, TOP_100, get_sp500
+
+
+def _parse_cors_origins(raw: str) -> list[str]:
+    if raw.strip() == "*":
+        return ["*"]
+    return [o.strip() for o in raw.split(",") if o.strip()]
 
 
 @asynccontextmanager
@@ -38,17 +48,24 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Stock Recommendation Platform",
     description="Multi-agent research pipeline with decision aids (not investment advice).",
-    version="0.2.0",
+    version="0.3.0",
     lifespan=lifespan,
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Registered first = innermost = last to see request (Starlette LIFO)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_parse_cors_origins(settings.cors_origins),
     allow_methods=["*"],
     allow_headers=["*"],
 )
-# Registered last → executes first (Starlette LIFO middleware order)
+app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(CorrelationIdMiddleware)
+# Registered last = outermost = security headers on ALL responses including 429/404
+app.add_middleware(SecurityHeadersMiddleware)
 
 if settings.metrics_enabled:
     _instrumentator = create_instrumentator()
@@ -99,18 +116,22 @@ def healthz() -> dict[str, str]:
 
 
 @app.post("/v1/analysis/run", response_model=SupervisorVerdict)
-async def run_analysis(req: AnalysisRunRequest) -> SupervisorVerdict:
-    """Run all specialist agents + supervisor; includes decision_aids for stock vs options."""
+@limiter.limit(settings.rate_limit_analysis)
+async def run_analysis(request: Request, req: AnalysisRunRequest) -> SupervisorVerdict:
+    """Run all specialist agents + supervisor; includes decision_aids for stock vs options.
+    Hypothetical research only — not investment advice."""
     return await _supervisor.run_analysis(req)
 
 
 @app.get("/v1/analysis/run/{symbol}", response_model=SupervisorVerdict)
+@limiter.limit(settings.rate_limit_analysis)
 async def run_analysis_get(
+    request: Request,
     symbol: str,
     portfolio_value_usd: float | None = None,
     max_risk_per_trade_pct: float | None = None,
 ) -> SupervisorVerdict:
-    """GET convenience wrapper for quick testing."""
+    """GET convenience wrapper for quick testing. Hypothetical research only — not investment advice."""
     return await _supervisor.run_analysis(
         AnalysisRunRequest(
             symbol=symbol,
@@ -121,7 +142,12 @@ async def run_analysis_get(
 
 
 @app.post("/v1/analysis/batch", response_model=BatchJobResponse, status_code=202)
-async def start_batch(req: BatchJobRequest, background_tasks: BackgroundTasks) -> BatchJobResponse:
+@limiter.limit(settings.rate_limit_batch)
+async def start_batch(
+    request: Request,
+    req: BatchJobRequest,
+    background_tasks: BackgroundTasks,
+) -> BatchJobResponse:
     """Submit a batch analysis job across a universe slice. Returns immediately with job_id."""
     # Idempotency: re-submit with same batch_key returns existing non-failed job
     if req.batch_key:
@@ -170,7 +196,8 @@ async def start_batch(req: BatchJobRequest, background_tasks: BackgroundTasks) -
 
 
 @app.get("/v1/analysis/batch/{job_id}", response_model=BatchJobResponse)
-async def get_batch_status(job_id: uuid.UUID) -> BatchJobResponse:
+@limiter.limit(settings.rate_limit_default)
+async def get_batch_status(request: Request, job_id: uuid.UUID) -> BatchJobResponse:
     """Poll batch job status and counters."""
     async for session in get_session():
         row = await session.get(BatchJob, job_id)

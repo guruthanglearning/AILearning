@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     # Phase 2 — batch concurrency
     batch_concurrency: int = 5
 
+    # Phase 6 — API hardening
+    cors_origins: str = "*"                  # CORS_ORIGINS env var; "*" = dev wildcard; comma-separated for prod
+    rate_limit_default: str = "200/minute"   # global fallback for all routes
+    rate_limit_analysis: str = "30/minute"   # POST/GET /v1/analysis/run (expensive)
+    rate_limit_batch: str = "5/minute"       # POST /v1/analysis/batch (spawns background job)
+
     # Phase 5 — Observability
     log_level: str = "INFO"
     otel_enabled: bool = False

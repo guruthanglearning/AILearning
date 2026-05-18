@@ -11,6 +11,9 @@ from sqlalchemy import select
 from app.batch import run_batch_job
 from app.db.models import BatchJob
 from app.db.session import get_session, init_engine
+from app.routers import auth as auth_router
+from app.routers import alerts as alerts_router
+from app.routers import watchlists as watchlists_router
 from app.schemas.agents import AnalysisRunRequest, SupervisorVerdict
 from app.schemas.batch import BatchJobRequest, BatchJobResponse, BatchJobStatus
 from app.supervisor import Supervisor
@@ -35,6 +38,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(auth_router.router, prefix="/v1/auth/keys", tags=["auth"])
+app.include_router(watchlists_router.router, prefix="/v1/watchlists", tags=["watchlists"])
+app.include_router(alerts_router.router, prefix="/v1/alerts", tags=["alerts"])
 
 _supervisor = Supervisor()
 

@@ -58,6 +58,7 @@ class Supervisor:
                     portfolio_value_usd=req.portfolio_value_usd,
                     max_risk_per_trade_pct=req.max_risk_per_trade_pct,
                     batch_job_id=req.batch_job_id,
+                    last_price=None,
                 )
                 session.add(run_row)
                 await session.commit()
@@ -142,6 +143,7 @@ class Supervisor:
                     row.finished_at = datetime.now(tz=timezone.utc)
                     row.instrument_recommendation = verdict.value
                     row.confidence_note = note
+                    row.last_price = m.last_price
                     row.verdict_json = result.model_dump(mode="json")
                     await session.commit()
         except Exception as exc:

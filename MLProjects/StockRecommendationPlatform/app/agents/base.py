@@ -49,7 +49,7 @@ class BaseAgent(ABC, Generic[T]):
                 result = await asyncio.wait_for(self.run(ctx), timeout=ctx.timeout_s)
                 span.set_attribute("agent.status", result.status.value)
                 return result
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 span.set_attribute("agent.status", "timeout")
                 span.set_status(_otrace.StatusCode.ERROR, "timeout")
                 return self._fail(

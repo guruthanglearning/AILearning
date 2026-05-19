@@ -121,7 +121,7 @@ async def test_full_analysis_bullish_market_data(monkeypatch):
     prov = _build_mock_provider(last_price=150.0)
     monkeypatch.setattr("app.supervisor.build_provider", lambda: prov)
     monkeypatch.setattr("app.supervisor.get_session", _mock_session_factory)
-    monkeypatch.setattr("app.agents.sentiment_ml.settings.stock_prediction_api_url", None)
+    monkeypatch.setattr("app.agents.sentiment_ml.settings.news_api_key", None)
 
     verdict = await Supervisor().run_analysis(_req())
     assert verdict.instrument_recommendation in (
@@ -140,7 +140,7 @@ async def test_full_analysis_failed_market_data(monkeypatch):
     prov.get_quote = AsyncMock(side_effect=Exception("provider down"))
     monkeypatch.setattr("app.supervisor.build_provider", lambda: prov)
     monkeypatch.setattr("app.supervisor.get_session", _mock_session_factory)
-    monkeypatch.setattr("app.agents.sentiment_ml.settings.stock_prediction_api_url", None)
+    monkeypatch.setattr("app.agents.sentiment_ml.settings.news_api_key", None)
 
     verdict = await Supervisor().run_analysis(_req())
     assert verdict.instrument_recommendation == InstrumentRecommendation.insufficient_data
@@ -164,7 +164,7 @@ async def test_full_analysis_earnings_imminent(monkeypatch):
 
     monkeypatch.setattr("app.supervisor.build_provider", lambda: prov)
     monkeypatch.setattr("app.supervisor.get_session", _mock_session_factory)
-    monkeypatch.setattr("app.agents.sentiment_ml.settings.stock_prediction_api_url", None)
+    monkeypatch.setattr("app.agents.sentiment_ml.settings.news_api_key", None)
 
     verdict = await Supervisor().run_analysis(_req())
     assert verdict.instrument_recommendation == InstrumentRecommendation.options
@@ -177,7 +177,7 @@ async def test_full_analysis_high_iv(monkeypatch):
     prov = _build_mock_provider(last_price=150.0, option_df_fn=_iv_rich_option_df)
     monkeypatch.setattr("app.supervisor.build_provider", lambda: prov)
     monkeypatch.setattr("app.supervisor.get_session", _mock_session_factory)
-    monkeypatch.setattr("app.agents.sentiment_ml.settings.stock_prediction_api_url", None)
+    monkeypatch.setattr("app.agents.sentiment_ml.settings.news_api_key", None)
 
     verdict = await Supervisor().run_analysis(_req())
     assert verdict.instrument_recommendation == InstrumentRecommendation.options
@@ -197,7 +197,7 @@ async def test_full_analysis_agent_timeout_handled(monkeypatch):
     prov.get_option_chain = AsyncMock(side_effect=_slow)
     monkeypatch.setattr("app.supervisor.build_provider", lambda: prov)
     monkeypatch.setattr("app.supervisor.get_session", _mock_session_factory)
-    monkeypatch.setattr("app.agents.sentiment_ml.settings.stock_prediction_api_url", None)
+    monkeypatch.setattr("app.agents.sentiment_ml.settings.news_api_key", None)
     # Use a very short timeout so the test doesn't actually sleep 100s
     monkeypatch.setattr("app.supervisor.settings.agent_timeout_seconds", 0.05)
 

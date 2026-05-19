@@ -107,6 +107,7 @@ class SentimentMLOutput(AgentResultBase):
     sentiment_score: float | None = None
     forecast_signal: str | None = None
     confidence_note: str | None = None
+    top_headlines: list[str] = Field(default_factory=list)
 
 
 class RiskProOutput(AgentResultBase):

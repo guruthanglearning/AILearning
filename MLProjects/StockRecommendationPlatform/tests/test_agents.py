@@ -362,62 +362,125 @@ async def test_riskpro_checklist_non_empty():
 
 
 # ---------------------------------------------------------------------------
-# SentimentMLAgent
+# SentimentMLAgent  (FinBERT + NewsAPI)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_sentiment_agent_complete_via_mock_http(monkeypatch):
-    monkeypatch.setattr("app.agents.sentiment_ml.settings.stock_prediction_api_url", "http://fake-ml:8000")
-
-    mock_response = MagicMock()
-    mock_response.raise_for_status = MagicMock()
-    mock_response.json = MagicMock(
-        return_value={
-            "predcitions": {"trading_signal": "Buy", "sentiment_score": 0.75},
-            "trend": "up",
-        }
-    )
-
-    mock_client = AsyncMock()
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=None)
-    mock_client.post = AsyncMock(return_value=mock_response)
+async def test_sentiment_agent_complete_with_finbert(monkeypatch):
+    monkeypatch.setattr("app.agents.sentiment_ml.settings.news_api_key", "test-key")
+    monkeypatch.setattr("app.agents.sentiment_ml._HF_AVAILABLE", True)
 
     monkeypatch.setattr(
-        "app.agents.sentiment_ml.httpx.AsyncClient",
-        MagicMock(return_value=mock_client),
+        "app.agents.sentiment_ml._fetch_articles_sync",
+        lambda symbol, key: ["Apple beats earnings estimates", "AAPL hits all-time high"],
     )
+    monkeypatch.setattr(
+        "app.agents.sentiment_ml._score_headlines",
+        lambda pipe, headlines: (0.72, ["Apple beats earnings estimates"]),
+    )
+
+    async def _mock_pipeline():
+        return MagicMock()
+
+    monkeypatch.setattr("app.agents.sentiment_ml._get_pipeline", _mock_pipeline)
 
     result = await SentimentMLAgent().run(_ctx())
     assert result.status == AgentStatus.complete
-    assert result.sentiment_score == 0.75
-    assert result.forecast_signal == "Buy"
+    assert result.sentiment_score == pytest.approx(0.72)
+    assert result.forecast_signal == "Bullish"
+    assert len(result.top_headlines) == 1
 
 
 @pytest.mark.asyncio
-async def test_sentiment_agent_degraded_when_url_unset(monkeypatch):
-    monkeypatch.setattr("app.agents.sentiment_ml.settings.stock_prediction_api_url", None)
+async def test_sentiment_agent_degraded_when_no_api_key(monkeypatch):
+    monkeypatch.setattr("app.agents.sentiment_ml.settings.news_api_key", None)
     result = await SentimentMLAgent().run(_ctx())
     assert result.status == AgentStatus.degraded
-    assert "STOCK_PREDICTION_API_URL" in (result.confidence_note or "")
+    assert "NEWS_API_KEY" in (result.confidence_note or "")
 
 
 @pytest.mark.asyncio
-async def test_sentiment_agent_degraded_on_http_error(monkeypatch):
-    import httpx
+async def test_sentiment_agent_degraded_on_newsapi_error(monkeypatch):
+    def _raise(symbol, key):
+        raise RuntimeError("rate limited")
 
-    monkeypatch.setattr("app.agents.sentiment_ml.settings.stock_prediction_api_url", "http://fake-ml:8000")
+    monkeypatch.setattr("app.agents.sentiment_ml.settings.news_api_key", "test-key")
+    monkeypatch.setattr("app.agents.sentiment_ml._HF_AVAILABLE", True)
+    monkeypatch.setattr("app.agents.sentiment_ml._fetch_articles_sync", _raise)
 
-    mock_client = AsyncMock()
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=None)
-    mock_client.post = AsyncMock(side_effect=httpx.ConnectError("connection refused"))
+    result = await SentimentMLAgent().run(_ctx())
+    assert result.status == AgentStatus.degraded
 
+
+@pytest.mark.asyncio
+async def test_sentiment_agent_degraded_hf_unavailable(monkeypatch):
+    monkeypatch.setattr("app.agents.sentiment_ml.settings.news_api_key", "test-key")
+    monkeypatch.setattr("app.agents.sentiment_ml._HF_AVAILABLE", False)
+    result = await SentimentMLAgent().run(_ctx())
+    assert result.status == AgentStatus.degraded
+    assert "transformers" in (result.confidence_note or "").lower()
+
+
+@pytest.mark.asyncio
+async def test_sentiment_agent_degraded_no_headlines(monkeypatch):
+    monkeypatch.setattr("app.agents.sentiment_ml.settings.news_api_key", "test-key")
+    monkeypatch.setattr("app.agents.sentiment_ml._HF_AVAILABLE", True)
+    monkeypatch.setattr("app.agents.sentiment_ml._fetch_articles_sync", lambda s, k: [])
+    result = await SentimentMLAgent().run(_ctx())
+    assert result.status == AgentStatus.degraded
+    assert "No recent news" in (result.confidence_note or "")
+
+
+@pytest.mark.asyncio
+async def test_sentiment_agent_degraded_on_finbert_failure(monkeypatch):
+    monkeypatch.setattr("app.agents.sentiment_ml.settings.news_api_key", "test-key")
+    monkeypatch.setattr("app.agents.sentiment_ml._HF_AVAILABLE", True)
     monkeypatch.setattr(
-        "app.agents.sentiment_ml.httpx.AsyncClient",
-        MagicMock(return_value=mock_client),
+        "app.agents.sentiment_ml._fetch_articles_sync",
+        lambda s, k: ["Some headline"],
     )
 
+    async def _failing_pipeline():
+        raise RuntimeError("model load failed")
+
+    monkeypatch.setattr("app.agents.sentiment_ml._get_pipeline", _failing_pipeline)
     result = await SentimentMLAgent().run(_ctx())
     assert result.status == AgentStatus.degraded
+
+
+# _to_signal and _score_headlines direct unit tests
+
+def test_to_signal_bullish():
+    from app.agents.sentiment_ml import _to_signal
+    assert _to_signal(0.5) == "Bullish"
+
+
+def test_to_signal_bearish():
+    from app.agents.sentiment_ml import _to_signal
+    assert _to_signal(-0.5) == "Bearish"
+
+
+def test_to_signal_neutral():
+    from app.agents.sentiment_ml import _to_signal
+    assert _to_signal(0.0) == "Neutral"
+
+
+def test_score_headlines_aggregation():
+    from app.agents.sentiment_ml import _score_headlines
+    mock_pipe = MagicMock()
+    mock_pipe.return_value = [
+        {"label": "positive", "score": 0.8},
+        {"label": "negative", "score": 0.1},
+        {"label": "neutral", "score": 0.1},
+    ]
+    score, top = _score_headlines(mock_pipe, ["AAPL beats earnings"])
+    assert score == pytest.approx(0.7, abs=0.01)
+    assert top == ["AAPL beats earnings"]
+
+
+def test_score_headlines_empty():
+    from app.agents.sentiment_ml import _score_headlines
+    score, top = _score_headlines(MagicMock(), [])
+    assert score == 0.0
+    assert top == []

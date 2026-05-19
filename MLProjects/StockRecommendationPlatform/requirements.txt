@@ -16,10 +16,9 @@ pytest-asyncio>=0.23.0
 ruff>=0.4.0
 pytest-cov>=5.0.0
 
-# Phase 10 — FinBERT sentiment
+# Phase 10 — FinBERT sentiment (Finnhub news via httpx, already a project dep)
 transformers>=4.40.0
 torch>=2.2.0
-newsapi-python>=0.2.7
 
 # Phase 6 — API hardening
 slowapi>=0.1.9

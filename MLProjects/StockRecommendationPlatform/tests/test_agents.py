@@ -362,19 +362,19 @@ async def test_riskpro_checklist_non_empty():
 
 
 # ---------------------------------------------------------------------------
-# SentimentMLAgent  (FinBERT + NewsAPI)
+# SentimentMLAgent  (FinBERT + Finnhub News)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_sentiment_agent_complete_with_finbert(monkeypatch):
-    monkeypatch.setattr("app.agents.sentiment_ml.settings.news_api_key", "test-key")
+    monkeypatch.setattr("app.agents.sentiment_ml.settings.finnhub_api_key", "test-key")
     monkeypatch.setattr("app.agents.sentiment_ml._HF_AVAILABLE", True)
 
-    monkeypatch.setattr(
-        "app.agents.sentiment_ml._fetch_articles_sync",
-        lambda symbol, key: ["Apple beats earnings estimates", "AAPL hits all-time high"],
-    )
+    async def _mock_fetch(symbol, api_key, timeout):
+        return ["Apple beats earnings estimates", "AAPL hits all-time high"]
+
+    monkeypatch.setattr("app.agents.sentiment_ml._fetch_headlines", _mock_fetch)
     monkeypatch.setattr(
         "app.agents.sentiment_ml._score_headlines",
         lambda pipe, headlines: (0.72, ["Apple beats earnings estimates"]),
@@ -394,20 +394,20 @@ async def test_sentiment_agent_complete_with_finbert(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_sentiment_agent_degraded_when_no_api_key(monkeypatch):
-    monkeypatch.setattr("app.agents.sentiment_ml.settings.news_api_key", None)
+    monkeypatch.setattr("app.agents.sentiment_ml.settings.finnhub_api_key", None)
     result = await SentimentMLAgent().run(_ctx())
     assert result.status == AgentStatus.degraded
-    assert "NEWS_API_KEY" in (result.confidence_note or "")
+    assert "FINNHUB_API_KEY" in (result.confidence_note or "")
 
 
 @pytest.mark.asyncio
-async def test_sentiment_agent_degraded_on_newsapi_error(monkeypatch):
-    def _raise(symbol, key):
+async def test_sentiment_agent_degraded_on_finnhub_error(monkeypatch):
+    async def _raise(symbol, api_key, timeout):
         raise RuntimeError("rate limited")
 
-    monkeypatch.setattr("app.agents.sentiment_ml.settings.news_api_key", "test-key")
+    monkeypatch.setattr("app.agents.sentiment_ml.settings.finnhub_api_key", "test-key")
     monkeypatch.setattr("app.agents.sentiment_ml._HF_AVAILABLE", True)
-    monkeypatch.setattr("app.agents.sentiment_ml._fetch_articles_sync", _raise)
+    monkeypatch.setattr("app.agents.sentiment_ml._fetch_headlines", _raise)
 
     result = await SentimentMLAgent().run(_ctx())
     assert result.status == AgentStatus.degraded
@@ -415,7 +415,7 @@ async def test_sentiment_agent_degraded_on_newsapi_error(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_sentiment_agent_degraded_hf_unavailable(monkeypatch):
-    monkeypatch.setattr("app.agents.sentiment_ml.settings.news_api_key", "test-key")
+    monkeypatch.setattr("app.agents.sentiment_ml.settings.finnhub_api_key", "test-key")
     monkeypatch.setattr("app.agents.sentiment_ml._HF_AVAILABLE", False)
     result = await SentimentMLAgent().run(_ctx())
     assert result.status == AgentStatus.degraded
@@ -424,9 +424,12 @@ async def test_sentiment_agent_degraded_hf_unavailable(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_sentiment_agent_degraded_no_headlines(monkeypatch):
-    monkeypatch.setattr("app.agents.sentiment_ml.settings.news_api_key", "test-key")
+    async def _empty(symbol, api_key, timeout):
+        return []
+
+    monkeypatch.setattr("app.agents.sentiment_ml.settings.finnhub_api_key", "test-key")
     monkeypatch.setattr("app.agents.sentiment_ml._HF_AVAILABLE", True)
-    monkeypatch.setattr("app.agents.sentiment_ml._fetch_articles_sync", lambda s, k: [])
+    monkeypatch.setattr("app.agents.sentiment_ml._fetch_headlines", _empty)
     result = await SentimentMLAgent().run(_ctx())
     assert result.status == AgentStatus.degraded
     assert "No recent news" in (result.confidence_note or "")
@@ -434,12 +437,12 @@ async def test_sentiment_agent_degraded_no_headlines(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_sentiment_agent_degraded_on_finbert_failure(monkeypatch):
-    monkeypatch.setattr("app.agents.sentiment_ml.settings.news_api_key", "test-key")
+    async def _mock_fetch(symbol, api_key, timeout):
+        return ["Some headline"]
+
+    monkeypatch.setattr("app.agents.sentiment_ml.settings.finnhub_api_key", "test-key")
     monkeypatch.setattr("app.agents.sentiment_ml._HF_AVAILABLE", True)
-    monkeypatch.setattr(
-        "app.agents.sentiment_ml._fetch_articles_sync",
-        lambda s, k: ["Some headline"],
-    )
+    monkeypatch.setattr("app.agents.sentiment_ml._fetch_headlines", _mock_fetch)
 
     async def _failing_pipeline():
         raise RuntimeError("model load failed")

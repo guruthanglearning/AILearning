@@ -1,10 +1,11 @@
-"""FinBERT + NewsAPI sentiment agent — self-contained, no external service required."""
+"""FinBERT + Finnhub News sentiment agent — self-contained, no external service required."""
 from __future__ import annotations
 
 import asyncio
 import time
 from datetime import UTC, datetime, timedelta
 
+import httpx
 import structlog
 
 from app.agents.base import AgentContext, BaseAgent
@@ -12,6 +13,8 @@ from app.config import settings
 from app.schemas.agents import AgentStatus, SentimentMLOutput
 
 log = structlog.get_logger(__name__)
+
+_FINNHUB_NEWS_URL = "https://finnhub.io/api/v1/company-news"
 
 # ── FinBERT availability check (import once at module load) ───────────────────
 try:
@@ -46,20 +49,23 @@ async def _get_pipeline():
     return _finbert
 
 
-# ── NewsAPI fetch (synchronous, run in thread pool) ───────────────────────────
+# ── Finnhub news fetch (async) ────────────────────────────────────────────────
 
-def _fetch_articles_sync(symbol: str, api_key: str) -> list[str]:
-    from newsapi import NewsApiClient  # noqa: PLC0415
-    client = NewsApiClient(api_key=api_key)
-    from_date = (datetime.now(UTC) - timedelta(days=7)).strftime("%Y-%m-%d")
-    resp = client.get_everything(
-        q=f"{symbol} stock",
-        language="en",
-        sort_by="publishedAt",
-        page_size=20,
-        from_param=from_date,
-    )
-    return [a["title"] for a in resp.get("articles", []) if a.get("title")]
+async def _fetch_headlines(symbol: str, api_key: str, timeout: float) -> list[str]:
+    """Fetch last 7 days of company news headlines from Finnhub."""
+    to_date = datetime.now(UTC)
+    from_date = to_date - timedelta(days=7)
+    params = {
+        "symbol": symbol,
+        "from": from_date.strftime("%Y-%m-%d"),
+        "to": to_date.strftime("%Y-%m-%d"),
+        "token": api_key,
+    }
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        resp = await client.get(_FINNHUB_NEWS_URL, params=params)
+        resp.raise_for_status()
+        articles = resp.json()
+    return [a["headline"] for a in articles if a.get("headline")]
 
 
 # ── FinBERT scoring (synchronous, run in thread pool) ─────────────────────────
@@ -98,12 +104,12 @@ class SentimentMLAgent(BaseAgent[SentimentMLOutput]):
     async def run(self, ctx: AgentContext) -> SentimentMLOutput:
         t0 = time.perf_counter()
 
-        if not settings.news_api_key:
+        if not settings.finnhub_api_key:
             return SentimentMLOutput(
                 agent_name=self.name,
                 status=AgentStatus.degraded,
                 provenance=self._prov("none", t0),
-                confidence_note="Set NEWS_API_KEY in .env to enable FinBERT sentiment analysis.",
+                confidence_note="Set FINNHUB_API_KEY in .env to enable FinBERT sentiment analysis.",
                 raw_artifact={},
             )
 
@@ -116,20 +122,18 @@ class SentimentMLAgent(BaseAgent[SentimentMLOutput]):
                 raw_artifact={},
             )
 
-        loop = asyncio.get_running_loop()
-
         try:
-            headlines = await loop.run_in_executor(
-                None, _fetch_articles_sync, ctx.symbol, settings.news_api_key
+            headlines = await _fetch_headlines(
+                ctx.symbol, settings.finnhub_api_key, ctx.timeout_s
             )
         except Exception as exc:
-            log.warning("newsapi_fetch_failed", symbol=ctx.symbol, error=str(exc))
+            log.warning("finnhub_fetch_failed", symbol=ctx.symbol, error=str(exc))
             return SentimentMLOutput(
                 agent_name=self.name,
                 status=AgentStatus.degraded,
-                provenance=self._prov("newsapi", t0),
+                provenance=self._prov("finnhub", t0),
                 error_message=str(exc),
-                confidence_note="NewsAPI fetch failed.",
+                confidence_note="Finnhub news fetch failed.",
                 raw_artifact={},
             )
 
@@ -137,12 +141,13 @@ class SentimentMLAgent(BaseAgent[SentimentMLOutput]):
             return SentimentMLOutput(
                 agent_name=self.name,
                 status=AgentStatus.degraded,
-                provenance=self._prov("newsapi", t0),
+                provenance=self._prov("finnhub", t0),
                 confidence_note=f"No recent news found for {ctx.symbol}.",
                 raw_artifact={"headline_count": 0},
             )
 
         try:
+            loop = asyncio.get_running_loop()
             pipe = await _get_pipeline()
             score, top_headlines = await loop.run_in_executor(
                 None, _score_headlines, pipe, headlines
@@ -162,12 +167,12 @@ class SentimentMLAgent(BaseAgent[SentimentMLOutput]):
         return SentimentMLOutput(
             agent_name=self.name,
             status=AgentStatus.complete,
-            provenance=self._prov("finbert+newsapi", t0),
+            provenance=self._prov("finbert+finnhub", t0),
             sentiment_score=score,
             forecast_signal=signal,
             top_headlines=top_headlines,
             confidence_note=(
-                f"FinBERT scored {len(headlines)} headlines — {signal} ({score:+.3f})."
+                f"FinBERT scored {len(headlines)} Finnhub headlines — {signal} ({score:+.3f})."
             ),
             raw_artifact={"headline_count": len(headlines)},
         )

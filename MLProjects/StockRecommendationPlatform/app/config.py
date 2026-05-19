@@ -6,7 +6,7 @@ class Settings(BaseSettings):
 
     redis_url: str = "redis://localhost:6379/0"
     use_redis: bool = False
-    news_api_key: str | None = None
+    finnhub_api_key: str | None = None
     quote_stale_seconds: int = 120
     agent_timeout_seconds: float = 45.0
 

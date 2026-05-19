@@ -1,6 +1,7 @@
 import type {
   AlertCreate,
   AlertResponse,
+  AnalysisHistoryItem,
   AnalysisRunRequest,
   ApiKeyResponse,
   BatchJobRequest,
@@ -73,6 +74,19 @@ export async function getAnalysis(
   const res = await fetch(`${API_URL}/v1/analysis/run/${encodeURIComponent(symbol)}${qs}`, {
     headers: headers(apiKey),
   });
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function getAnalysisHistory(
+  apiKey: string,
+  symbol: string,
+  limit = 20
+): Promise<AnalysisHistoryItem[]> {
+  const res = await fetch(
+    `${API_URL}/v1/analysis/history/${encodeURIComponent(symbol)}?limit=${limit}`,
+    { headers: headers(apiKey) }
+  );
   await checkResponse(res);
   return res.json();
 }

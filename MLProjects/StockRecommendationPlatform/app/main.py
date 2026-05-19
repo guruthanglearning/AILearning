@@ -4,7 +4,7 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import date
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -13,8 +13,9 @@ from sqlalchemy import select
 
 from app.batch import run_batch_job
 from app.config import settings
-from app.db.models import BatchJob
+from app.db.models import AnalysisRun, BatchJob
 from app.db.session import get_session, init_engine
+from app.ingest import warm_cache
 from app.limiter import limiter
 from app.middleware import CorrelationIdMiddleware, SecurityHeadersMiddleware
 from app.observability import (
@@ -23,10 +24,11 @@ from app.observability import (
     create_instrumentator,
     get_correlation_id,
 )
+from app.providers.factory import build_provider
 from app.routers import alerts as alerts_router
 from app.routers import auth as auth_router
 from app.routers import watchlists as watchlists_router
-from app.schemas.agents import AnalysisRunRequest, SupervisorVerdict
+from app.schemas.agents import AnalysisHistoryItem, AnalysisRunRequest, SupervisorVerdict
 from app.schemas.batch import BatchJobRequest, BatchJobResponse, BatchJobStatus
 from app.supervisor import Supervisor
 from app.universe import COMPOSITION_AS_OF, TOP_10, TOP_100, get_sp500
@@ -210,3 +212,58 @@ async def get_batch_status(request: Request, job_id: uuid.UUID) -> BatchJobRespo
         if row is None:
             raise HTTPException(status_code=404, detail="Batch job not found")
         return _batch_row_to_response(row)
+
+
+@app.get("/v1/analysis/history/{symbol}", response_model=list[AnalysisHistoryItem])
+@limiter.limit(settings.rate_limit_default)
+async def get_analysis_history(
+    request: Request,
+    symbol: str,
+    limit: int = Query(default=20, ge=1, le=100),
+) -> list[AnalysisHistoryItem]:
+    """Return the N most recent completed analysis runs for a symbol."""
+    sym = symbol.upper().strip()
+    async for session in get_session():
+        result = await session.execute(
+            select(AnalysisRun)
+            .where(AnalysisRun.symbol == sym, AnalysisRun.status == "complete")
+            .order_by(AnalysisRun.started_at.desc())
+            .limit(limit)
+        )
+        rows = result.scalars().all()
+        items: list[AnalysisHistoryItem] = []
+        for row in rows:
+            score: float | None = None
+            if row.verdict_json:
+                try:
+                    score = row.verdict_json["decision_aids"]["stock_vs_options_score"]
+                except (KeyError, TypeError):
+                    pass
+            items.append(
+                AnalysisHistoryItem(
+                    run_id=row.id,
+                    symbol=row.symbol,
+                    started_at=row.started_at,
+                    finished_at=row.finished_at,
+                    instrument_recommendation=row.instrument_recommendation,
+                    confidence_note=row.confidence_note,
+                    last_price=row.last_price,
+                    stock_vs_options_score=score,
+                    status=row.status,
+                )
+            )
+        return items
+
+
+@app.post("/v1/ingest/warm", status_code=202)
+@limiter.limit("10/minute")
+async def trigger_ingest_warm(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    symbols: list[str],
+) -> dict[str, str]:
+    """Warm Redis cache for specified symbols. No-op when USE_REDIS=false."""
+    cleaned = [s.upper().strip() for s in symbols if s.strip()]
+    if settings.use_redis and cleaned:
+        background_tasks.add_task(warm_cache, cleaned, build_provider())
+    return {"status": "queued", "count": str(len(cleaned))}

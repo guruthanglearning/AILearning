@@ -217,3 +217,15 @@ class AnalysisRunRequest(BaseModel):
         description="Optional; used for position-sizing hints only",
     )
     batch_job_id: uuid.UUID | None = None
+
+
+class AnalysisHistoryItem(BaseModel):
+    run_id: uuid.UUID
+    symbol: str
+    started_at: datetime
+    finished_at: datetime | None = None
+    instrument_recommendation: str | None = None
+    confidence_note: str | None = None
+    last_price: float | None = None
+    stock_vs_options_score: float | None = None
+    status: str

@@ -5,6 +5,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 
 import { AgentStatusGrid } from "@/components/analysis/AgentStatusGrid";
 import { AnalysisForm } from "@/components/analysis/AnalysisForm";
+import { AnalysisHistory } from "@/components/analysis/AnalysisHistory";
 import { AnalysisLoader } from "@/components/analysis/AnalysisLoader";
 import { DecisionAidsPanel } from "@/components/analysis/DecisionAidsPanel";
 import { OptionsGuidanceCard } from "@/components/analysis/OptionsGuidanceCard";
@@ -83,6 +84,8 @@ function HomePage() {
                 />
               </div>
             )}
+
+            {req?.symbol && <AnalysisHistory symbol={req.symbol} />}
           </>
         )}
       </div>

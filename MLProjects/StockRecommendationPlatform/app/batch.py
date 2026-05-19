@@ -12,7 +12,9 @@ from sqlalchemy import text
 from app.config import settings
 from app.db.models import BatchJob
 from app.db.session import get_session
+from app.ingest import warm_cache
 from app.observability import batch_symbols_counter, correlation_id_var
+from app.providers.factory import build_provider
 from app.schemas.agents import AnalysisRunRequest
 from app.supervisor import Supervisor
 
@@ -39,6 +41,9 @@ async def run_batch_job(
                 row.status = "running"
                 row.started_at = datetime.now(tz=timezone.utc)
                 await session.commit()
+
+        if settings.use_redis:
+            asyncio.create_task(warm_cache(symbols, build_provider()))
 
         sem = asyncio.Semaphore(settings.batch_concurrency)
         tasks = [

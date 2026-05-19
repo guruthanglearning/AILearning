@@ -200,6 +200,20 @@ export interface WatchlistSymbolResponse {
   added_at: string;
 }
 
+// ─── Analysis history ─────────────────────────────────────────────────────────
+
+export interface AnalysisHistoryItem {
+  run_id: string;
+  symbol: string;
+  started_at: string;
+  finished_at: string | null;
+  instrument_recommendation: string | null;
+  confidence_note: string | null;
+  last_price: number | null;
+  stock_vs_options_score: number | null;
+  status: string;
+}
+
 // ─── Alert schemas ────────────────────────────────────────────────────────────
 
 export interface AlertCreate {

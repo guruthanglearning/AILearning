@@ -112,10 +112,9 @@ def configure_logging() -> None:
 # ---------------------------------------------------------------------------
 
 def configure_otel(service_name: str = "stock-recommendation-platform") -> None:
-    """Initialize OTel tracing.  No-op proxy installed when OTEL_ENABLED=false."""
+    """Initialize OTel tracing.  Left as default no-op when OTEL_ENABLED=false."""
     if not settings.otel_enabled:
-        trace.set_tracer_provider(trace.ProxyTracerProvider())
-        return
+        return  # default OTel provider is already a no-op; setting ProxyTracerProvider causes recursion
 
     from opentelemetry.sdk.resources import SERVICE_NAME, Resource
     from opentelemetry.sdk.trace import TracerProvider

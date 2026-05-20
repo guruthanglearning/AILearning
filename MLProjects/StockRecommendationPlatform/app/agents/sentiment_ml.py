@@ -75,6 +75,9 @@ def _score_headlines(pipe, headlines: list[str]) -> tuple[float, list[str]]:
     scored: list[tuple[float, str]] = []
     for title in headlines[:15]:  # cap to keep latency manageable
         results = pipe(title)
+        # transformers may return [[{...}]] or [{...}] depending on version
+        if results and isinstance(results[0], list):
+            results = results[0]
         label_map = {r["label"]: r["score"] for r in results}
         polarity = label_map.get("positive", 0.0) - label_map.get("negative", 0.0)
         scored.append((polarity, title))

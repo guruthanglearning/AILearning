@@ -21,8 +21,8 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
         structlog.contextvars.bind_contextvars(correlation_id=cid)
         try:
             response = await call_next(request)
-        finally:
             response.headers["X-Correlation-ID"] = cid
+        finally:
             correlation_id_var.reset(token)
             structlog.contextvars.clear_contextvars()
         return response

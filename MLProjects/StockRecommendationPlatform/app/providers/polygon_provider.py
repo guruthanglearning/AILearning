@@ -50,22 +50,27 @@ class PolygonProvider(MarketDataProvider):
 
     async def get_quote(self, symbol: str) -> dict[str, Any]:
         try:
-            last = await self._get(f"/v2/last/trade/{symbol}")
+            # /v2/aggs/ticker/{symbol}/prev works on the free Polygon plan
             prev_data = await self._get(f"/v2/aggs/ticker/{symbol}/prev")
-            last_price = last.get("results", {}).get("p")
-            prev_close = None
             results = prev_data.get("results") or []
-            if results:
-                prev_close = results[0].get("c")
+            if not results:
+                return {
+                    "last_price": None, "previous_close": None,
+                    "day_change_pct": None, "volume": None,
+                    "source": self.SOURCE,
+                }
+            r = results[0]
+            close = r.get("c")      # closing price (most recent session)
+            open_ = r.get("o")      # opening price of that session
+            volume = r.get("v")
             change = (
-                (last_price - prev_close) / prev_close * 100
-                if last_price is not None and prev_close
+                (close - open_) / open_ * 100
+                if close is not None and open_
                 else None
             )
-            volume = results[0].get("v") if results else None
             return {
-                "last_price": float(last_price) if last_price is not None else None,
-                "previous_close": float(prev_close) if prev_close is not None else None,
+                "last_price": float(close) if close is not None else None,
+                "previous_close": float(open_) if open_ is not None else None,
                 "day_change_pct": float(change) if change is not None else None,
                 "volume": int(volume) if volume is not None else None,
                 "source": self.SOURCE,

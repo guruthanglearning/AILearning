@@ -23,16 +23,104 @@ from app.observability import agent_latency_histogram, get_correlation_id, get_t
 from app.providers.factory import build_provider
 from app.schemas.agents import (
     AgentContribution,
+    AgentResultBase,
     AgentStatus,
     AnalysisRunRequest,
     DataFreshness,
+    FinancialsOutput,
+    FundamentalsOutput,
     InstrumentRecommendation,
+    MarketDataOutput,
     OptionsGuidance,
+    OptionsOutput,
+    RiskProOutput,
+    SentimentMLOutput,
     SupervisorVerdict,
+    TechnicalsOutput,
 )
 
 log = structlog.get_logger(__name__)
 _tracer = get_tracer("app.supervisor")
+
+
+def _fmt_cap(cap: float | None) -> str:
+    if cap is None:
+        return "n/a"
+    if cap >= 1e12:
+        return f"${cap/1e12:.2f}T"
+    if cap >= 1e9:
+        return f"${cap/1e9:.1f}B"
+    return f"${cap/1e6:.0f}M"
+
+
+def _agent_summary(a: AgentResultBase) -> tuple[str, str | None]:
+    """Return (headline, detail) for an agent result — called only when status=complete."""
+    if isinstance(a, MarketDataOutput):
+        price = f"${a.last_price:.2f}" if a.last_price is not None else "n/a"
+        chg = f"{a.day_change_pct:+.2f}%" if a.day_change_pct is not None else ""
+        vol = f"Vol {a.volume/1e6:.1f}M" if a.volume else ""
+        parts = [p for p in [price, chg, vol] if p]
+        return ", ".join(parts), None
+
+    if isinstance(a, FundamentalsOutput):
+        name = a.company_name or ""
+        sector = a.sector or "Unknown sector"
+        cap = _fmt_cap(a.market_cap)
+        headline = f"{name} — {sector}, Cap {cap}"
+        details = []
+        if a.pe_ratio is not None:
+            details.append(f"P/E {a.pe_ratio:.1f}")
+        if a.forward_pe is not None:
+            details.append(f"Fwd P/E {a.forward_pe:.1f}")
+        if a.revenue_growth is not None:
+            details.append(f"Rev growth {a.revenue_growth*100:.1f}%")
+        return headline, " · ".join(details) or None
+
+    if isinstance(a, TechnicalsOutput):
+        trend = (a.trend_hint or "neutral").capitalize()
+        rsi = f"RSI {a.rsi_14:.1f}" if a.rsi_14 is not None else ""
+        sma = (
+            f"SMA20 ${a.sma_20:.2f} / SMA50 ${a.sma_50:.2f}"
+            if a.sma_20 and a.sma_50
+            else ""
+        )
+        headline = f"Trend: {trend}" + (f", {rsi}" if rsi else "")
+        return headline, sma or None
+
+    if isinstance(a, FinancialsOutput):
+        if a.summary:
+            lines = a.summary.splitlines()
+            return lines[0], "\n".join(lines[1:]).strip() or None
+        return "Financials fetched", None
+
+    if isinstance(a, OptionsOutput):
+        iv = f"ATM IV {a.atm_iv*100:.1f}%" if a.atm_iv is not None else "IV n/a"
+        move = f"±{a.implied_move_1d_pct:.2f}% implied" if a.implied_move_1d_pct else ""
+        liq = a.chain_liquidity_hint or ""
+        parts = [p for p in [iv, move, liq] if p]
+        expiry = f"Nearest expiry {a.nearest_expiry}" if a.nearest_expiry else None
+        return ", ".join(parts), expiry
+
+    if isinstance(a, RiskProOutput):
+        if a.has_upcoming_earnings and a.earnings_days_away is not None:
+            headline = f"Earnings in {a.earnings_days_away}d — elevated event risk"
+        elif a.has_upcoming_earnings:
+            headline = "Upcoming earnings detected"
+        else:
+            headline = "No imminent earnings"
+        n_checks = len(a.checklist)
+        passed = sum(1 for c in a.checklist if c.get("state") == "pass")
+        detail = f"{passed}/{n_checks} risk checks passed" if n_checks else None
+        return headline, detail
+
+    if isinstance(a, SentimentMLOutput):
+        signal = a.forecast_signal or "Neutral"
+        score = f"{a.sentiment_score:+.3f}" if a.sentiment_score is not None else ""
+        headline = f"{signal} ({score})" if score else signal
+        detail = a.top_headlines[0] if a.top_headlines else a.confidence_note
+        return headline, detail
+
+    return "complete", None
 
 
 class Supervisor:
@@ -114,9 +202,13 @@ class Supervisor:
 
         contributions: list[AgentContribution] = []
         for a in (m, f, tech, fin, opt, risk, sent):
-            head = a.error_message or ("ok" if a.status == AgentStatus.complete else a.status.value)
+            if a.status == AgentStatus.complete:
+                head, det = _agent_summary(a)
+            else:
+                head = a.error_message or a.status.value
+                det = None
             contributions.append(
-                AgentContribution(agent_name=a.agent_name, status=a.status, headline=head, detail=None)
+                AgentContribution(agent_name=a.agent_name, status=a.status, headline=head, detail=det)
             )
 
         freshness = DataFreshness(

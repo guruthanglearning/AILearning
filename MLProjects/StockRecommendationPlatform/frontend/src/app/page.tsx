@@ -8,6 +8,7 @@ import { AnalysisForm } from "@/components/analysis/AnalysisForm";
 import { AnalysisHistory } from "@/components/analysis/AnalysisHistory";
 import { AnalysisLoader } from "@/components/analysis/AnalysisLoader";
 import { DecisionAidsPanel } from "@/components/analysis/DecisionAidsPanel";
+import { OptionsAnalysisPanel } from "@/components/analysis/OptionsAnalysisPanel";
 import { OptionsGuidanceCard } from "@/components/analysis/OptionsGuidanceCard";
 import { OptionsMetricsTable } from "@/components/analysis/OptionsMetricsTable";
 import { VerdictCard } from "@/components/analysis/VerdictCard";
@@ -74,6 +75,12 @@ function HomePage() {
 
             {verdict.decision_aids && (
               <DecisionAidsPanel aids={verdict.decision_aids} />
+            )}
+
+            {(verdict.decision_aids?.options_metrics_table ?? []).length > 0 && (
+              <OptionsAnalysisPanel
+                rows={verdict.decision_aids!.options_metrics_table}
+              />
             )}
 
             {(verdict.decision_aids?.options_metrics_table ?? []).length > 0 && (

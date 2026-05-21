@@ -54,6 +54,15 @@ def _calc_dte(expiry: str) -> int:
         return 0
 
 
+def _credit_quality(net_credit: float, width: float) -> str:
+    """Grade credit-to-width ratio: aim for ≥33% of spread width."""
+    if width <= 0:
+        return "unknown"
+    pct = net_credit / width * 100
+    grade = "Good" if pct >= 33 else "Fair" if pct >= 25 else "Poor"
+    return f"{grade} ({pct:.0f}% of width)"
+
+
 def _degraded_row(template_id: str, strategy_label: str, spot: float | None, reasons: list[str]) -> OptionsMetricRow:
     return OptionsMetricRow(
         template_id=template_id,
@@ -97,9 +106,15 @@ def _debit_call_spread_row(
         row_data_quality="full",
         trend_alignment="aligned" if (trend or "") == "bullish" else "neutral",
         liquidity=liq_hint or "unknown",
+        execution_quality="Use limit orders; enter at mid-price or better",
         risk_profile=f"Max loss ${net_debit:.2f} (net debit) per contract × 100",
         expected_move=f"±{imp_move_pct:.1f}% (1d straddle)" if imp_move_pct else None,
         management_rules="Close at +50% max profit or −100% max loss; no roll unless thesis intact",
+        theta_edge="Negative — time decay works against long premium",
+        gamma_risk="Positive — long gamma benefits from large directional move",
+        credit_quality="N/A — debit structure",
+        rule_30pct=f"Early exit at 30% of max profit: +${(width - net_debit) * 0.30:.2f} per contract",
+        rule_60pct=f"Standard exit at 60% of max profit: +${(width - net_debit) * 0.60:.2f} per contract",
     )
 
 
@@ -136,9 +151,15 @@ def _credit_put_spread_row(
         row_data_quality="full",
         trend_alignment="aligned" if (trend or "") in ("bullish", "mixed") else "counter",
         liquidity=liq_hint or "unknown",
+        execution_quality="Use limit orders; enter at mid-price or better",
         risk_profile=f"Max loss ${width - net_credit:.2f} per contract × 100",
         expected_move=f"±{imp_move_pct:.1f}% (1d straddle)" if imp_move_pct else None,
         management_rules="Close at +50% of max credit; defend at −200% of credit received",
+        theta_edge="Positive — time decay benefits short premium position",
+        gamma_risk=f"High near short strike ${short_strike:.0f} — rapid loss if underlying approaches",
+        credit_quality=_credit_quality(net_credit, width),
+        rule_30pct=f"Quick exit at 30% of max credit: +${net_credit * 0.30:.2f} per contract",
+        rule_60pct=f"Standard exit at 60% of max credit: +${net_credit * 0.60:.2f} per contract",
     )
 
 

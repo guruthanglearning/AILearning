@@ -37,6 +37,16 @@ const TREND_VARIANT: Record<string, "success" | "error" | "neutral"> = {
   neutral: "neutral",
 };
 
+const THETA_COLOR: Record<string, string> = {
+  positive: "text-green-400",
+  negative: "text-red-400",
+};
+
+const GAMMA_COLOR: Record<string, string> = {
+  positive: "text-green-400",
+  high: "text-amber-400",
+};
+
 const col = createColumnHelper<OptionsMetricRow>();
 
 const COLUMNS = [
@@ -136,6 +146,70 @@ const COLUMNS = [
   col.accessor("expected_move", {
     header: "Exp. Move",
     cell: ({ getValue }) => getValue() ?? "—",
+  }),
+  col.accessor("execution_quality", {
+    header: "Execution",
+    cell: ({ getValue }) => {
+      const v = getValue();
+      if (!v) return "—";
+      return <span title={v} className="text-gray-400">{v.length > 30 ? v.slice(0, 30) + "…" : v}</span>;
+    },
+  }),
+  col.accessor("risk_profile", {
+    header: "Risk Profile",
+    cell: ({ getValue }) => {
+      const v = getValue();
+      if (!v) return "—";
+      return <span title={v} className="text-red-300">{v.length > 35 ? v.slice(0, 35) + "…" : v}</span>;
+    },
+  }),
+  col.accessor("theta_edge", {
+    header: "Theta Edge",
+    cell: ({ getValue }) => {
+      const v = getValue();
+      if (!v) return "—";
+      const key = v.split(" ")[0].toLowerCase();
+      return <span className={THETA_COLOR[key] ?? "text-gray-300"} title={v}>{v.split(" ")[0]}</span>;
+    },
+  }),
+  col.accessor("gamma_risk", {
+    header: "Gamma Risk",
+    cell: ({ getValue }) => {
+      const v = getValue();
+      if (!v) return "—";
+      const key = v.split(" ")[0].toLowerCase();
+      return <span className={GAMMA_COLOR[key] ?? "text-amber-400"} title={v}>{v.split(" ")[0]}</span>;
+    },
+  }),
+  col.accessor("credit_quality", {
+    header: "Credit Quality",
+    cell: ({ getValue }) => {
+      const v = getValue();
+      if (!v || v.startsWith("N/A")) return <span className="text-gray-600">N/A</span>;
+      const isGood = v.startsWith("Good");
+      const isFair = v.startsWith("Fair");
+      return (
+        <span className={isGood ? "text-green-400" : isFair ? "text-amber-400" : "text-red-400"} title={v}>
+          {v}
+        </span>
+      );
+    },
+  }),
+  col.accessor("rule_30pct", {
+    header: "30% Rule",
+    cell: ({ getValue }) => {
+      const v = getValue();
+      if (!v) return "—";
+      return <span title={v} className="text-blue-300">{v.length > 35 ? v.slice(0, 35) + "…" : v}</span>;
+    },
+  }),
+  col.accessor("rule_60pct", {
+    header: "60% Rule",
+    cell: ({ getValue }) => {
+      const v = getValue();
+      if (!v) return "—";
+      return <span title={v} className="text-indigo-300">{v.length > 35 ? v.slice(0, 35) + "…" : v}</span>;
+    },
   }),
   col.accessor("management_rules", {
     header: "Management",

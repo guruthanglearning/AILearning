@@ -46,6 +46,11 @@ export interface OptionsMetricRow {
   risk_profile: string | null;
   expected_move: string | null;
   management_rules: string | null;
+  theta_edge: string | null;
+  gamma_risk: string | null;
+  credit_quality: string | null;
+  rule_30pct: string | null;
+  rule_60pct: string | null;
 }
 
 export interface OptionsGuidance {

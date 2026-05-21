@@ -101,6 +101,11 @@ class OptionsMetricRow(BaseModel):
     risk_profile: str | None = None
     expected_move: str | None = None
     management_rules: str | None = None
+    theta_edge: str | None = None
+    gamma_risk: str | None = None
+    credit_quality: str | None = None
+    rule_30pct: str | None = None
+    rule_60pct: str | None = None
 
 
 class SentimentMLOutput(AgentResultBase):

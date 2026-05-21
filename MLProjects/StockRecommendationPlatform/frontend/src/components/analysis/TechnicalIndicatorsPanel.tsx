@@ -69,8 +69,6 @@ function Group({ title, children }: GroupProps) {
 }
 
 export function TechnicalIndicatorsPanel({ tech }: { tech: TechnicalsSnapshot }) {
-  const spot = tech.sma_20; // proxy; we don't have a dedicated "spot" in snapshot
-
   // 52-week range position
   const w52h = tech.week_52_high;
   const w52l = tech.week_52_low;

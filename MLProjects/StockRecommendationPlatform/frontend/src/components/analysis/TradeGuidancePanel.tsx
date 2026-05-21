@@ -311,7 +311,7 @@ export function TradeGuidancePanel({ verdict }: { verdict: SupervisorVerdict }) 
   const neutralCount = signals.filter(s => s.side === "neutral").length;
   const total = signals.length;
 
-  const { verdict: verdictLabel, color, pct, rationale } = scoreToVerdict(stockCount, optionsCount, total);
+  const { verdict: verdictLabel, color, rationale } = scoreToVerdict(stockCount, optionsCount, total);
 
   // Group by category
   const seen = new Set<string>();

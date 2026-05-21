@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef } from "react";
 
 import { AgentStatusGrid } from "@/components/analysis/AgentStatusGrid";
 import { AnalysisForm } from "@/components/analysis/AnalysisForm";
@@ -14,50 +14,34 @@ import { OptionsMetricsTable } from "@/components/analysis/OptionsMetricsTable";
 import { TechnicalIndicatorsPanel } from "@/components/analysis/TechnicalIndicatorsPanel";
 import { TradeGuidancePanel } from "@/components/analysis/TradeGuidancePanel";
 import { VerdictCard } from "@/components/analysis/VerdictCard";
-import { ApiKeyGate } from "@/components/layout/ApiKeyGate";
 import { ErrorMessage } from "@/components/ui/ErrorMessage";
-import { useRunAnalysis } from "@/hooks/useAnalysis";
+import { useAnalysis } from "@/contexts/AnalysisContext";
 import type { AnalysisRunRequest } from "@/types/api";
 
 function HomePage() {
   const searchParams = useSearchParams();
   const autoSymbol = searchParams.get("symbol") ?? "";
-
-  const [req, setReq] = useState<AnalysisRunRequest | null>(
-    autoSymbol ? { symbol: autoSymbol } : null
-  );
-  const [startedAt, setStartedAt] = useState<number | null>(null);
-  const { data: verdict, isFetching, error, refetch } = useRunAnalysis(req);
+  const { req, verdict, isFetching, error, startedAt, submit } = useAnalysis();
   const autoSubmitted = useRef(false);
 
   // Auto-submit when navigated from watchlist
   useEffect(() => {
     if (autoSymbol && !autoSubmitted.current) {
       autoSubmitted.current = true;
-      setReq({ symbol: autoSymbol });
-      setStartedAt(Date.now());
-      // refetch fires after state update
+      submit({ symbol: autoSymbol });
     }
-  }, [autoSymbol]);
-
-  // Trigger fetch whenever req changes (except initial null)
-  useEffect(() => {
-    if (req) refetch();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [req]);
+  }, [autoSymbol]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleSubmit(newReq: AnalysisRunRequest) {
-    setReq(newReq);
-    setStartedAt(Date.now());
+    submit(newReq);
   }
 
   return (
-    <ApiKeyGate>
-      <div className="space-y-6">
+    <div className="space-y-6">
         <AnalysisForm
           onSubmit={handleSubmit}
           isLoading={isFetching}
-          defaultSymbol={autoSymbol}
+          defaultSymbol={autoSymbol || req?.symbol || ""}
         />
 
         {isFetching && startedAt != null && (
@@ -106,7 +90,6 @@ function HomePage() {
           </>
         )}
       </div>
-    </ApiKeyGate>
   );
 }
 

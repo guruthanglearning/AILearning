@@ -78,14 +78,16 @@ def _agent_summary(a: AgentResultBase) -> tuple[str, str | None]:
 
     if isinstance(a, TechnicalsOutput):
         trend = (a.trend_hint or "neutral").capitalize()
-        rsi = f"RSI {a.rsi_14:.1f}" if a.rsi_14 is not None else ""
-        sma = (
-            f"SMA20 ${a.sma_20:.2f} / SMA50 ${a.sma_50:.2f}"
-            if a.sma_20 and a.sma_50
-            else ""
-        )
+        rsi = f"RSI14 {a.rsi_14:.1f}" if a.rsi_14 is not None else ""
         headline = f"Trend: {trend}" + (f", {rsi}" if rsi else "")
-        return headline, sma or None
+        detail_parts = []
+        if a.sma_20 and a.sma_50:
+            detail_parts.append(f"SMA20 ${a.sma_20:.2f} / SMA50 ${a.sma_50:.2f}")
+        if a.ema_20:
+            detail_parts.append(f"EMA20 ${a.ema_20:.2f}")
+        if a.atr_pct_14:
+            detail_parts.append(f"ATR14 {a.atr_pct_14:.2f}%")
+        return headline, " · ".join(detail_parts) or None
 
     if isinstance(a, FinancialsOutput):
         if a.summary:
@@ -240,6 +242,7 @@ class Supervisor:
             agent_contributions=contributions,
             data_freshness=freshness,
             decision_aids=decision_aids,
+            technicals=tech if tech.status == AgentStatus.complete else None,
         )
 
         # --- DB hook 3: finalise run record (best-effort) ---

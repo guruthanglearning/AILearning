@@ -119,6 +119,33 @@ export interface DecisionAids {
   options_metrics_table: OptionsMetricRow[];
 }
 
+export interface TechnicalsSnapshot {
+  // Moving averages
+  sma_20: number | null;
+  sma_50: number | null;
+  sma_200: number | null;
+  ema_20: number | null;
+  ema_200: number | null;
+  // RSI
+  rsi_7: number | null;
+  rsi_14: number | null;
+  rsi_200: number | null;
+  // MACD 6/13
+  macd_6_13: number | null;
+  macd_6_13_signal: number | null;
+  macd_6_13_hist: number | null;
+  // Volume
+  obv: number | null;
+  // Volatility
+  atr_pct_14: number | null;
+  atr_pct_50: number | null;
+  // Range
+  week_52_high: number | null;
+  week_52_low: number | null;
+  // Trend
+  trend_hint: string | null;
+}
+
 export interface SupervisorVerdict {
   instrument_recommendation: InstrumentRecommendation;
   confidence_note: string;
@@ -126,6 +153,7 @@ export interface SupervisorVerdict {
   agent_contributions: AgentContribution[];
   data_freshness: DataFreshness;
   decision_aids: DecisionAids | null;
+  technicals: TechnicalsSnapshot | null;
 }
 
 export interface AnalysisRunRequest {

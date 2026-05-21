@@ -46,9 +46,29 @@ class FundamentalsOutput(AgentResultBase):
 
 
 class TechnicalsOutput(AgentResultBase):
+    # Moving averages
     sma_20: float | None = None
     sma_50: float | None = None
+    sma_200: float | None = None
+    ema_20: float | None = None
+    ema_200: float | None = None
+    # RSI
+    rsi_7: float | None = None
     rsi_14: float | None = None
+    rsi_200: float | None = None
+    # Momentum / trend
+    macd_6_13: float | None = None
+    macd_6_13_signal: float | None = None
+    macd_6_13_hist: float | None = None
+    # Volume
+    obv: float | None = None
+    # Volatility
+    atr_pct_14: float | None = None
+    atr_pct_50: float | None = None
+    # Range
+    week_52_high: float | None = None
+    week_52_low: float | None = None
+    # Trend summary
     trend_hint: str | None = None
 
 
@@ -211,6 +231,7 @@ class SupervisorVerdict(BaseModel):
     agent_contributions: list[AgentContribution] = Field(default_factory=list)
     data_freshness: DataFreshness = Field(default_factory=DataFreshness)
     decision_aids: DecisionAids | None = None
+    technicals: TechnicalsOutput | None = None
 
 
 class AnalysisRunRequest(BaseModel):

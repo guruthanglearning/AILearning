@@ -11,6 +11,7 @@ import { DecisionAidsPanel } from "@/components/analysis/DecisionAidsPanel";
 import { OptionsAnalysisPanel } from "@/components/analysis/OptionsAnalysisPanel";
 import { OptionsGuidanceCard } from "@/components/analysis/OptionsGuidanceCard";
 import { OptionsMetricsTable } from "@/components/analysis/OptionsMetricsTable";
+import { TechnicalIndicatorsPanel } from "@/components/analysis/TechnicalIndicatorsPanel";
 import { VerdictCard } from "@/components/analysis/VerdictCard";
 import { ApiKeyGate } from "@/components/layout/ApiKeyGate";
 import { ErrorMessage } from "@/components/ui/ErrorMessage";
@@ -68,6 +69,10 @@ function HomePage() {
           <>
             <VerdictCard verdict={verdict} symbol={req?.symbol ?? ""} />
             <AgentStatusGrid contributions={verdict.agent_contributions} />
+
+            {verdict.technicals && (
+              <TechnicalIndicatorsPanel tech={verdict.technicals} />
+            )}
 
             {verdict.options && (
               <OptionsGuidanceCard guidance={verdict.options} />

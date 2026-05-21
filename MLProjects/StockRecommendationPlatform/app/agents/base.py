@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, ClassVar, Generic, TypeVar
+from typing import TYPE_CHECKING, ClassVar, TypeVar
 
 from opentelemetry import trace as _otrace
 
@@ -30,7 +30,7 @@ class AgentContext:
         self.provider = provider
 
 
-class BaseAgent(ABC, Generic[T]):
+class BaseAgent[T: AgentResultBase](ABC):
     name: str
     output_model: ClassVar[type]  # concrete subclasses set this to their output type
 

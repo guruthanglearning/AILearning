@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -56,7 +56,7 @@ async def _refresh_alerts(alerts: list[Alert], session: AsyncSession) -> None:
         if not alert.is_active or alert.triggered_at is not None:
             continue
         if await _evaluate_alert(alert, session):
-            alert.triggered_at = datetime.now(tz=timezone.utc)
+            alert.triggered_at = datetime.now(tz=UTC)
     await session.commit()
 
 

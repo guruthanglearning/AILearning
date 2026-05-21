@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import structlog
 import structlog.contextvars
@@ -39,7 +39,7 @@ async def run_batch_job(
             row = await session.get(BatchJob, job_id)
             if row is not None:
                 row.status = "running"
-                row.started_at = datetime.now(tz=timezone.utc)
+                row.started_at = datetime.now(tz=UTC)
                 await session.commit()
 
         if settings.use_redis:
@@ -56,7 +56,7 @@ async def run_batch_job(
             row = await session.get(BatchJob, job_id)
             if row is not None:
                 row.status = "complete" if row.failed_symbols == 0 else "partial"
-                row.finished_at = datetime.now(tz=timezone.utc)
+                row.finished_at = datetime.now(tz=UTC)
                 await session.commit()
     finally:
         correlation_id_var.reset(token)

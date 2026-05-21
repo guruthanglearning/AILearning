@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import Depends, HTTPException, Security
 from fastapi.security import APIKeyHeader
@@ -40,6 +40,6 @@ async def get_current_key(
     ).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=401, detail="Invalid or revoked API key")
-    row.last_used_at = datetime.now(tz=timezone.utc)
+    row.last_used_at = datetime.now(tz=UTC)
     await session.commit()
     return row

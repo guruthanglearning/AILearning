@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import structlog
 
@@ -248,7 +248,7 @@ class Supervisor:
                 row = await session.get(AnalysisRun, run_id)
                 if row is not None:
                     row.status = "complete"
-                    row.finished_at = datetime.now(tz=timezone.utc)
+                    row.finished_at = datetime.now(tz=UTC)
                     row.instrument_recommendation = verdict.value
                     row.confidence_note = note
                     row.last_price = m.last_price

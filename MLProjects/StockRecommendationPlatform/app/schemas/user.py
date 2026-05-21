@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field, model_validator
 
 
-class AlertCondition(str, Enum):
+class AlertCondition(StrEnum):
     price_above = "price_above"
     price_below = "price_below"
     verdict_changes_to = "verdict_changes_to"

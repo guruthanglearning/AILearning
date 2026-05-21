@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 from app.schemas.agents import InstrumentRecommendation
 
 
-class BatchJobStatus(str, Enum):
+class BatchJobStatus(StrEnum):
     pending = "pending"
     running = "running"
     complete = "complete"

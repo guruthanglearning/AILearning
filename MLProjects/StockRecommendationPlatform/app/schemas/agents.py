@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class AgentStatus(str, Enum):
+class AgentStatus(StrEnum):
     complete = "complete"
     degraded = "degraded"
     failed = "failed"
@@ -64,12 +64,12 @@ class OptionsOutput(AgentResultBase):
     implied_move_1d_pct: float | None = None
 
 
-class OptionRight(str, Enum):
+class OptionRight(StrEnum):
     call = "call"
     put = "put"
 
 
-class OptionLegType(str, Enum):
+class OptionLegType(StrEnum):
     long = "long"
     short = "short"
 
@@ -116,7 +116,7 @@ class RiskProOutput(AgentResultBase):
     checklist: list[dict[str, Any]] = Field(default_factory=list)
 
 
-class InstrumentRecommendation(str, Enum):
+class InstrumentRecommendation(StrEnum):
     stock = "stock"
     options = "options"
     no_trade = "no_trade"

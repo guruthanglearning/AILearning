@@ -28,7 +28,7 @@ from app.providers.factory import build_provider
 from app.routers import alerts as alerts_router
 from app.routers import auth as auth_router
 from app.routers import watchlists as watchlists_router
-from app.schemas.agents import AnalysisHistoryItem, AnalysisRunRequest, SupervisorVerdict
+from app.schemas.agents import AnalysisHistoryItem, AnalysisRunRequest, LiveQuote, SupervisorVerdict
 from app.schemas.batch import BatchJobRequest, BatchJobResponse, BatchJobStatus
 from app.supervisor import Supervisor
 from app.universe import COMPOSITION_AS_OF, TOP_10, TOP_100, get_sp500
@@ -147,6 +147,42 @@ async def run_analysis_get(
             max_risk_per_trade_pct=max_risk_per_trade_pct,
         )
     )
+
+
+@app.get("/v1/quote/live/{symbol}", response_model=LiveQuote)
+@limiter.limit("30/minute")
+async def get_live_quote(request: Request, symbol: str) -> LiveQuote:
+    """Lightweight live quote: pre-market, open, current, post-market prices."""
+    import asyncio
+    from functools import partial
+    import yfinance as yf
+
+    sym = symbol.upper().strip()
+
+    def _fetch() -> dict:
+        info = yf.Ticker(sym).info or {}
+        fast = yf.Ticker(sym).fast_info or {}
+        current = info.get("regularMarketPrice") or info.get("currentPrice")
+        prev_close = info.get("regularMarketPreviousClose") or info.get("previousClose")
+        change_pct = None
+        if current and prev_close and prev_close > 0:
+            change_pct = (current - prev_close) / prev_close * 100
+        return {
+            "pre_market":     info.get("preMarketPrice"),
+            "open_price":     info.get("regularMarketOpen") or info.get("open"),
+            "current":        current,
+            "post_market":    info.get("postMarketPrice"),
+            "previous_close": prev_close,
+            "day_change_pct": change_pct,
+            "volume":         info.get("regularMarketVolume") or info.get("volume"),
+            "market_state":   info.get("marketState"),
+        }
+
+    try:
+        data = await asyncio.get_event_loop().run_in_executor(None, partial(_fetch))
+        return LiveQuote(symbol=sym, **data)
+    except Exception as exc:
+        return LiveQuote(symbol=sym)
 
 
 @app.post("/v1/analysis/batch", response_model=BatchJobResponse, status_code=202)

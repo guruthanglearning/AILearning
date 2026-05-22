@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { useApiKey } from "@/contexts/ApiKeyContext";
-import { getAnalysisHistory, runAnalysis } from "@/lib/api";
+import { getAnalysisHistory, getLiveQuote, runAnalysis } from "@/lib/api";
 import type { AnalysisRunRequest } from "@/types/api";
 
 export function useRunAnalysis(req: AnalysisRunRequest | null) {
@@ -11,6 +11,17 @@ export function useRunAnalysis(req: AnalysisRunRequest | null) {
     queryFn: () => runAnalysis(apiKey, req!),
     enabled: false,
     staleTime: Infinity,
+    retry: false,
+  });
+}
+
+export function useLiveQuote(symbol: string | null) {
+  return useQuery({
+    queryKey: ["quote", "live", symbol],
+    queryFn: () => getLiveQuote(symbol!),
+    enabled: !!symbol,
+    refetchInterval: 10_000,
+    staleTime: 9_000,
     retry: false,
   });
 }

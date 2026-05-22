@@ -156,7 +156,7 @@ class PolygonProvider(MarketDataProvider):
             )
             contracts = data.get("results") or []
             if not contracts:
-                return self._empty_chain()
+                return await self._yf_chain_fallback(symbol)
 
             expiries = sorted({c["details"]["expiration_date"] for c in contracts})
             chosen = expiries[0] if expiries else None
@@ -171,7 +171,7 @@ class PolygonProvider(MarketDataProvider):
                     continue
                 row = {
                     "strike": det.get("strike_price"),
-                    "bid": day.get("close"),   # best available; quote endpoint needed for true bid/ask
+                    "bid": day.get("close"),
                     "ask": day.get("close"),
                     "lastPrice": day.get("last_quote", {}).get("ask") or day.get("close"),
                     "impliedVolatility": greeks.get("implied_volatility"),
@@ -185,10 +185,19 @@ class PolygonProvider(MarketDataProvider):
             calls = pd.DataFrame(rows_c) if rows_c else None
             puts = pd.DataFrame(rows_p) if rows_p else None
 
+            # Polygon greeks are empty outside market hours or on certain plan tiers.
+            # Fall back to yfinance (which always computes IV from prices) in that case.
+            has_iv = (
+                calls is not None and not calls.empty
+                and calls["impliedVolatility"].notna().any()
+            )
+            if not has_iv:
+                return await self._yf_chain_fallback(symbol)
+
             return {
                 "expiries": expiries,
                 "chosen_expiry": chosen,
-                "spot": None,           # populated separately if needed
+                "spot": None,
                 "calls": calls,
                 "puts": puts,
                 "atm_iv": None,         # computed by OptionsAgent after spot is known
@@ -198,6 +207,16 @@ class PolygonProvider(MarketDataProvider):
             }
         except ProviderError:
             raise
+        except Exception:
+            return await self._yf_chain_fallback(symbol)
+
+    async def _yf_chain_fallback(self, symbol: str) -> dict[str, Any]:
+        """Use yfinance for option chain when Polygon greeks are unavailable."""
+        try:
+            from app.providers.yfinance_provider import YFinanceProvider
+            chain = await YFinanceProvider().get_option_chain(symbol)
+            chain["source"] = f"{self.SOURCE}+yfinance_chain"
+            return chain
         except Exception:
             return self._empty_chain()
 

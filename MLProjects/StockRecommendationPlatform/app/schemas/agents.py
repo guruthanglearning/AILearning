@@ -246,6 +246,19 @@ class AnalysisRunRequest(BaseModel):
     batch_job_id: uuid.UUID | None = None
 
 
+class LiveQuote(BaseModel):
+    symbol: str
+    pre_market: float | None = None
+    open_price: float | None = None
+    current: float | None = None
+    post_market: float | None = None
+    previous_close: float | None = None
+    day_change_pct: float | None = None
+    volume: int | None = None
+    market_state: str | None = None  # PRE, REGULAR, POST, CLOSED
+    fetched_at_utc: datetime = Field(default_factory=datetime.utcnow)
+
+
 class AnalysisHistoryItem(BaseModel):
     run_id: uuid.UUID
     symbol: str

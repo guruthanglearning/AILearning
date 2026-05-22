@@ -6,6 +6,7 @@ import type {
   ApiKeyResponse,
   BatchJobRequest,
   BatchJobResponse,
+  LiveQuote,
   SupervisorVerdict,
   WatchlistCreate,
   WatchlistResponse,
@@ -74,6 +75,12 @@ export async function getAnalysis(
   const res = await fetch(`${API_URL}/v1/analysis/run/${encodeURIComponent(symbol)}${qs}`, {
     headers: headers(apiKey),
   });
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function getLiveQuote(symbol: string): Promise<LiveQuote> {
+  const res = await fetch(`${API_URL}/v1/quote/live/${encodeURIComponent(symbol)}`);
   await checkResponse(res);
   return res.json();
 }

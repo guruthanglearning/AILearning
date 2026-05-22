@@ -5,6 +5,7 @@ import { Suspense, useEffect, useRef } from "react";
 
 import { AgentStatusGrid } from "@/components/analysis/AgentStatusGrid";
 import { AnalysisForm } from "@/components/analysis/AnalysisForm";
+import { LivePriceBar } from "@/components/analysis/LivePriceBar";
 import { AnalysisHistory } from "@/components/analysis/AnalysisHistory";
 import { AnalysisLoader } from "@/components/analysis/AnalysisLoader";
 import { DecisionAidsPanel } from "@/components/analysis/DecisionAidsPanel";
@@ -49,6 +50,8 @@ function HomePage() {
         )}
 
         {error && !isFetching && <ErrorMessage error={error as Error} />}
+
+        {req?.symbol && <LivePriceBar symbol={req.symbol} />}
 
         {verdict && !isFetching && (
           <>

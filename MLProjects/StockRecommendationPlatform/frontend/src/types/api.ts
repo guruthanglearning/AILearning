@@ -156,6 +156,19 @@ export interface SupervisorVerdict {
   technicals: TechnicalsSnapshot | null;
 }
 
+export interface LiveQuote {
+  symbol: string;
+  pre_market: number | null;
+  open_price: number | null;
+  current: number | null;
+  post_market: number | null;
+  previous_close: number | null;
+  day_change_pct: number | null;
+  volume: number | null;
+  market_state: string | null;
+  fetched_at_utc: string;
+}
+
 export interface AnalysisRunRequest {
   symbol: string;
   portfolio_value_usd?: number | null;

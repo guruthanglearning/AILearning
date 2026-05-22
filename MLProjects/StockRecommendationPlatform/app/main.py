@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import uuid
 from contextlib import asynccontextmanager
 from datetime import date
+from functools import partial
 
+import yfinance as yf
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
@@ -153,15 +156,10 @@ async def run_analysis_get(
 @limiter.limit("30/minute")
 async def get_live_quote(request: Request, symbol: str) -> LiveQuote:
     """Lightweight live quote: pre-market, open, current, post-market prices."""
-    import asyncio
-    from functools import partial
-    import yfinance as yf
-
     sym = symbol.upper().strip()
 
     def _fetch() -> dict:
         info = yf.Ticker(sym).info or {}
-        fast = yf.Ticker(sym).fast_info or {}
         current = info.get("regularMarketPrice") or info.get("currentPrice")
         prev_close = info.get("regularMarketPreviousClose") or info.get("previousClose")
         change_pct = None
@@ -181,7 +179,7 @@ async def get_live_quote(request: Request, symbol: str) -> LiveQuote:
     try:
         data = await asyncio.get_event_loop().run_in_executor(None, partial(_fetch))
         return LiveQuote(symbol=sym, **data)
-    except Exception as exc:
+    except Exception:
         return LiveQuote(symbol=sym)
 
 

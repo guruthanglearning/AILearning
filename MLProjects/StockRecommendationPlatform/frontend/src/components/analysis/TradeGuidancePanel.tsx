@@ -2,6 +2,177 @@
 
 import type { OptionsMetricRow, SupervisorVerdict, TechnicalsSnapshot } from "@/types/api";
 
+// ── Option Play types ─────────────────────────────────────────────────────────
+
+type OptionAction = "buy" | "sell" | "hold";
+type OptionRight  = "call" | "put" | "neutral";
+
+interface OptionPlay {
+  action:            OptionAction;
+  right:             OptionRight;
+  strategy:          string;
+  short_strike_desc: string;
+  long_strike_desc:  string | null;
+  dte_desc:          string;
+  reasons:           string[];
+  conviction:        "high" | "medium" | "low";
+  caution:           string | null;
+}
+
+// ── Option Play computation ───────────────────────────────────────────────────
+
+function roundStrike(p: number): number {
+  return Math.round(p / 2.5) * 2.5;
+}
+
+function computeOptionPlay(verdict: SupervisorVerdict): OptionPlay | null {
+  const tech = verdict.technicals;
+  if (!tech) return null;
+
+  const vol  = verdict.decision_aids?.volatility;
+  const rows = verdict.decision_aids?.options_metrics_table ?? [];
+
+  // Best spot price: underlying_at_analysis from summary row, fall back to SMA 20
+  const spot =
+    rows.find(r => r.template_id === "underlying_summary")?.underlying_at_analysis ??
+    tech.sma_20;
+  if (!spot) return null;
+
+  const atm_iv   = vol?.atm_iv;                   // decimal e.g. 0.20
+  const hv       = vol?.hv_20d_annualized;         // decimal e.g. 0.19
+  const ivRatio  = atm_iv && hv && hv > 0 ? atm_iv / hv : null;
+  const ivPctStr = atm_iv ? `${(atm_iv * 100).toFixed(0)}%` : null;
+  const hvPctStr = hv     ? `${(hv * 100).toFixed(0)}%`     : null;
+
+  const trend    = tech.trend_hint;
+  const rsi14    = tech.rsi_14;
+  const macdHist = tech.macd_6_13_hist;
+  const atr14    = tech.atr_pct_14;
+
+  let buyScore = 0, sellScore = 0, callScore = 0, putScore = 0;
+  const reasons: string[] = [];
+
+  // IV vs HV
+  if (ivRatio !== null) {
+    if (ivRatio > 1.15) {
+      sellScore += 2;
+      reasons.push(`IV ${ivPctStr} > HV ${hvPctStr} — premium elevated, favour selling`);
+    } else if (ivRatio < 0.85) {
+      buyScore += 2;
+      reasons.push(`IV ${ivPctStr} < HV ${hvPctStr} — options priced below realised vol, favour buying`);
+    } else {
+      reasons.push(`IV ${ivPctStr} ≈ HV ${hvPctStr} — fairly priced; directional signal drives choice`);
+    }
+  } else if (atm_iv) {
+    if (atm_iv > 0.35) { sellScore += 1; reasons.push(`ATM IV ${ivPctStr} elevated — premium selling viable`); }
+    else                { buyScore  += 1; reasons.push(`ATM IV ${ivPctStr} — moderate, buying viable`); }
+  }
+
+  // Trend
+  if (trend === "bullish") {
+    callScore += 2;
+    reasons.push("Bullish trend: SMA 20 > SMA 50 supports call / put spread");
+  } else if (trend === "bearish") {
+    putScore += 2;
+    reasons.push("Bearish trend: SMA 20 < SMA 50 supports put / call spread short");
+  }
+
+  // RSI 14
+  if (rsi14 != null) {
+    if (rsi14 >= 75) {
+      putScore += 1;
+      reasons.push(`RSI 14 at ${rsi14.toFixed(0)} — overbought; limit new long delta, favour put or credit call spread`);
+    } else if (rsi14 <= 30) {
+      callScore += 1;
+      reasons.push(`RSI 14 at ${rsi14.toFixed(0)} — oversold; call or bull put spread favoured`);
+    }
+  }
+
+  // MACD histogram
+  if (macdHist != null) {
+    if (macdHist > 0) callScore += 1;
+    else               putScore  += 1;
+  }
+
+  // ATR
+  if (atr14 != null) {
+    if (atr14 > 2.5) {
+      sellScore += 1;
+      reasons.push(`ATR 14 at ${atr14.toFixed(1)}% — high daily range; spreads reduce premium outlay`);
+    } else if (atr14 < 1.5) {
+      buyScore += 1;
+    }
+  }
+
+  // ── Derive action and direction ──────────────────────────────────────────────
+  const action: OptionAction =
+    buyScore > sellScore ? "buy" : sellScore > buyScore ? "sell" : "buy";
+  const right: OptionRight =
+    callScore > putScore + 1 ? "call"
+    : putScore > callScore + 1 ? "put"
+    : "neutral";
+
+  // ── Conviction ───────────────────────────────────────────────────────────────
+  const totalScore = Math.max(buyScore, sellScore) + Math.max(callScore, putScore);
+  const conviction: "high" | "medium" | "low" =
+    totalScore >= 5 ? "high" : totalScore >= 3 ? "medium" : "low";
+
+  // ── Strategy + strikes ───────────────────────────────────────────────────────
+  let strategy          = "";
+  let short_strike_desc = "";
+  let long_strike_desc: string | null = null;
+  let dte_desc          = "";
+  let caution: string | null = null;
+
+  const s = (p: number) => `$${roundStrike(p).toFixed(2)}`;
+
+  if (action === "buy" && right === "call") {
+    strategy          = "Long Call";
+    short_strike_desc = `${s(spot)} – ${s(spot * 1.025)}  (ATM to 2.5% OTM)`;
+    dte_desc          = "21 – 45 days";
+    if (rsi14 && rsi14 >= 70)
+      caution = "RSI overbought — consider a Debit Call Spread instead of naked long call to reduce premium risk";
+
+  } else if (action === "buy" && right === "put") {
+    strategy          = "Long Put";
+    short_strike_desc = `${s(spot * 0.975)} – ${s(spot)}  (2.5% OTM to ATM)`;
+    dte_desc          = "21 – 45 days";
+
+  } else if (action === "buy" && right === "neutral") {
+    strategy          = "Debit Call Spread  (wait for direction)";
+    short_strike_desc = `Long ${s(spot)}  /  Short ${s(spot * 1.03)}  (ATM / 3% OTM)`;
+    long_strike_desc  = `Or: Long Put ${s(spot)}  /  Short ${s(spot * 0.97)}`;
+    dte_desc          = "21 – 45 days";
+    caution           = "No clear directional bias — confirm trend before committing";
+
+  } else if (action === "sell" && right === "call") {
+    strategy          = "Credit Call Spread (Bear Call)";
+    short_strike_desc = `Short ${s(spot * 1.03)}  (3% OTM)`;
+    long_strike_desc  = `Long  ${s(spot * 1.055)}  (5.5% OTM) — capped loss`;
+    dte_desc          = "7 – 21 days";
+
+  } else if (action === "sell" && right === "put") {
+    strategy          = "Credit Put Spread (Bull Put)";
+    short_strike_desc = `Short ${s(spot * 0.97)}  (3% OTM)`;
+    long_strike_desc  = `Long  ${s(spot * 0.945)}  (5.5% OTM) — capped loss`;
+    dte_desc          = "7 – 21 days";
+
+  } else {
+    // sell + neutral → Iron Condor
+    strategy          = "Iron Condor";
+    short_strike_desc = `Short Put ${s(spot * 0.96)}  /  Short Call ${s(spot * 1.04)}`;
+    long_strike_desc  = `Long Put  ${s(spot * 0.94)}  /  Long Call  ${s(spot * 1.06)}`;
+    dte_desc          = "14 – 30 days";
+  }
+
+  return {
+    action, right, strategy,
+    short_strike_desc, long_strike_desc,
+    dte_desc, reasons: reasons.slice(0, 4),
+    conviction, caution,
+  };
+}
+
 // ── Signal types ──────────────────────────────────────────────────────────────
 
 type Side = "stock" | "neutral" | "options";
@@ -255,6 +426,89 @@ function scoreToVerdict(stockCount: number, optionsCount: number, total: number)
   return { verdict: "Mixed — Further Analysis Needed", color: "text-amber-400", pct: 50, rationale: "Indicators are split. Wait for a clearer signal, reduce position size, or use a smaller defined-risk options structure." };
 }
 
+// ── OptionPlayCard ────────────────────────────────────────────────────────────
+
+const ACTION_STYLE: Record<OptionAction, string> = {
+  buy:  "bg-blue-900/40 text-blue-300 border-blue-700",
+  sell: "bg-purple-900/40 text-purple-300 border-purple-700",
+  hold: "bg-gray-800 text-gray-400 border-gray-700",
+};
+const RIGHT_STYLE: Record<OptionRight, string> = {
+  call:    "bg-green-900/40 text-green-300 border-green-700",
+  put:     "bg-red-900/40 text-red-300 border-red-700",
+  neutral: "bg-amber-900/40 text-amber-300 border-amber-700",
+};
+const RIGHT_LABEL: Record<OptionRight, string> = {
+  call: "Call", put: "Put", neutral: "Call or Put",
+};
+const CONVICTION_COLOR: Record<string, string> = {
+  high: "text-green-400", medium: "text-amber-400", low: "text-gray-400",
+};
+
+function OptionPlayCard({ play }: { play: OptionPlay }) {
+  return (
+    <div className="bg-gray-900 border border-indigo-800/60 rounded-lg p-4 space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h3 className="text-xs font-semibold text-indigo-300 uppercase tracking-wider">
+          Options Play Recommendation
+        </h3>
+        <span className={`text-xs font-medium ${CONVICTION_COLOR[play.conviction]}`}>
+          Conviction: {play.conviction.charAt(0).toUpperCase() + play.conviction.slice(1)}
+        </span>
+      </div>
+
+      {/* Action + Direction badges */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <span className={`text-sm font-bold px-3 py-1 rounded border ${ACTION_STYLE[play.action]}`}>
+          {play.action === "buy" ? "BUY Premium" : play.action === "sell" ? "SELL Premium" : "HOLD"}
+        </span>
+        <span className={`text-sm font-bold px-3 py-1 rounded border ${RIGHT_STYLE[play.right]}`}>
+          {RIGHT_LABEL[play.right]}
+        </span>
+        <span className="text-sm font-semibold text-white">{play.strategy}</span>
+      </div>
+
+      {/* Strike zone + DTE */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="bg-gray-800/60 rounded-md p-3 space-y-1">
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Strike Zone</p>
+          <p className="text-sm font-mono text-white">{play.short_strike_desc}</p>
+          {play.long_strike_desc && (
+            <p className="text-sm font-mono text-gray-400">{play.long_strike_desc}</p>
+          )}
+        </div>
+        <div className="bg-gray-800/60 rounded-md p-3 space-y-1">
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Target DTE</p>
+          <p className="text-sm font-mono text-white">{play.dte_desc}</p>
+        </div>
+      </div>
+
+      {/* Rationale */}
+      <div className="space-y-1">
+        <p className="text-xs text-gray-500 uppercase tracking-wide">Why this play</p>
+        <ul className="space-y-1">
+          {play.reasons.map((r, i) => (
+            <li key={i} className="flex items-start gap-2 text-xs text-gray-300">
+              <span className="mt-0.5 text-indigo-400 shrink-0">•</span>
+              {r}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* Caution */}
+      {play.caution && (
+        <div className="flex items-start gap-2 bg-amber-900/20 border border-amber-800/40 rounded px-3 py-2">
+          <span className="text-amber-400 text-xs shrink-0 mt-0.5">⚠</span>
+          <p className="text-xs text-amber-300">{play.caution}</p>
+        </div>
+      )}
+
+      <p className="text-xs text-amber-700 italic">Hypothetical only — not investment advice. Verify strikes at your broker.</p>
+    </div>
+  );
+}
+
 // ── Render helpers ────────────────────────────────────────────────────────────
 
 const SIDE_LABEL: Record<Side, string> = { stock: "Stock", options: "Options", neutral: "Neutral" };
@@ -293,6 +547,8 @@ export function TradeGuidancePanel({ verdict }: { verdict: SupervisorVerdict }) 
   const nonSummaryRows = rows.filter(r => r.template_id !== "underlying_summary");
 
   if (!tech) return null;
+
+  const optionPlay = computeOptionPlay(verdict);
 
   // Build all signals
   const signals: IndicatorSignal[] = [
@@ -345,6 +601,9 @@ export function TradeGuidancePanel({ verdict }: { verdict: SupervisorVerdict }) 
         <p className="text-xs text-gray-400 leading-relaxed">{rationale}</p>
         <p className="text-xs text-amber-600 italic">Hypothetical analysis only — not investment advice.</p>
       </div>
+
+      {/* Options Play Recommendation */}
+      {optionPlay && <OptionPlayCard play={optionPlay} />}
 
       {/* Per-category signal tables */}
       {categories.map(cat => {

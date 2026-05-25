@@ -13,6 +13,7 @@ import { OptionsAnalysisPanel } from "@/components/analysis/OptionsAnalysisPanel
 import { OptionsGuidanceCard } from "@/components/analysis/OptionsGuidanceCard";
 import { OptionsMetricsTable } from "@/components/analysis/OptionsMetricsTable";
 import { TechnicalIndicatorsPanel } from "@/components/analysis/TechnicalIndicatorsPanel";
+import { PriceForecastPanel } from "@/components/analysis/PriceForecastPanel";
 import { TradeGuidancePanel } from "@/components/analysis/TradeGuidancePanel";
 import { VerdictCard } from "@/components/analysis/VerdictCard";
 import { ErrorMessage } from "@/components/ui/ErrorMessage";
@@ -64,6 +65,10 @@ function HomePage() {
 
             {verdict.technicals && (
               <TradeGuidancePanel verdict={verdict} />
+            )}
+
+            {verdict.technicals && (
+              <PriceForecastPanel verdict={verdict} />
             )}
 
             {verdict.options && (

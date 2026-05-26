@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 from typing import Any
 
@@ -58,7 +59,7 @@ class RedisCache(MarketDataProvider):
         cached = await self._get(key)
         if cached:
             try:
-                return pd.read_json(json.dumps(cached), orient=_DF_ORIENT)
+                return pd.read_json(io.StringIO(json.dumps(cached)), orient=_DF_ORIENT)
             except Exception:
                 pass
         df = await self._inner.get_price_history(symbol, period)
@@ -84,7 +85,7 @@ class RedisCache(MarketDataProvider):
                 v = cached.get(col)
                 if v is not None:
                     try:
-                        cached[col] = pd.read_json(json.dumps(v), orient=_DF_ORIENT)
+                        cached[col] = pd.read_json(io.StringIO(json.dumps(v)), orient=_DF_ORIENT)
                     except Exception:
                         cached[col] = None
             return cached

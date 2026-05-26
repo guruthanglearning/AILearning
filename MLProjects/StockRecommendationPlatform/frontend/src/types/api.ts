@@ -264,19 +264,19 @@ export interface AnalysisHistoryItem {
 
 export interface MarketQuoteRow {
   symbol: string;
-  pre_mkt_change_pct: number | null;
   pre_mkt_price: number | null;
+  pre_mkt_change: number | null;
   last_price: number | null;
   change: number | null;
-  post_mkt_change_pct: number | null;
   post_mkt_price: number | null;
+  post_mkt_change: number | null;
+  earnings_date: string | null;
   market_cap: number | null;
+  div_payment_date: string | null;
   exchange: string | null;
   week_52_high: number | null;
   week_52_low: number | null;
   shares_outstanding: number | null;
-  volume: number | null;
-  change_pct: number | null;
   fetched_at_utc: string;
 }
 

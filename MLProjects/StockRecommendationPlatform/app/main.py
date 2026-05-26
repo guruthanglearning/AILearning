@@ -244,26 +244,41 @@ async def get_market_quotes(
             current = info.get("regularMarketPrice") or info.get("currentPrice")
             prev_close = info.get("regularMarketPreviousClose") or info.get("previousClose")
             raw_change = info.get("regularMarketChange")
-            raw_chg_pct = info.get("regularMarketChangePercent")
             if raw_change is None and current and prev_close and prev_close > 0:
                 raw_change = current - prev_close
-            if raw_chg_pct is None and raw_change and prev_close and prev_close > 0:
-                raw_chg_pct = (raw_change / prev_close) * 100
+
+            # Earnings date — try multiple yfinance field names
+            earnings_date: str | None = None
+            for key in ("earningsTimestamp", "earningsDate"):
+                val = info.get(key)
+                if val is None:
+                    continue
+                ts = val[0] if isinstance(val, list) else val
+                if isinstance(ts, (int, float)) and ts > 0:
+                    earnings_date = datetime.fromtimestamp(ts, tz=UTC).strftime("%Y/%m/%d")
+                    break
+
+            # Dividend payment date
+            div_payment_date: str | None = None
+            dd = info.get("dividendDate")
+            if isinstance(dd, (int, float)) and dd > 0:
+                div_payment_date = datetime.fromtimestamp(dd, tz=UTC).strftime("%Y-%m-%d")
+
             return MarketQuoteRow(
                 symbol=sym,
-                pre_mkt_change_pct=info.get("preMarketChangePercent"),
                 pre_mkt_price=info.get("preMarketPrice"),
+                pre_mkt_change=info.get("preMarketChange"),
                 last_price=current,
                 change=raw_change,
-                post_mkt_change_pct=info.get("postMarketChangePercent"),
                 post_mkt_price=info.get("postMarketPrice"),
+                post_mkt_change=info.get("postMarketChange"),
+                earnings_date=earnings_date,
                 market_cap=info.get("marketCap"),
+                div_payment_date=div_payment_date,
                 exchange=info.get("exchange"),
                 week_52_high=info.get("fiftyTwoWeekHigh"),
                 week_52_low=info.get("fiftyTwoWeekLow"),
                 shares_outstanding=info.get("sharesOutstanding"),
-                volume=info.get("regularMarketVolume") or info.get("volume"),
-                change_pct=raw_chg_pct,
                 fetched_at_utc=now,
             )
         except Exception:

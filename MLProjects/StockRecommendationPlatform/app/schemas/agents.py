@@ -273,17 +273,17 @@ class AnalysisHistoryItem(BaseModel):
 
 class MarketQuoteRow(BaseModel):
     symbol: str
-    pre_mkt_change_pct: float | None = None
     pre_mkt_price: float | None = None
+    pre_mkt_change: float | None = None
     last_price: float | None = None
     change: float | None = None
-    post_mkt_change_pct: float | None = None
     post_mkt_price: float | None = None
+    post_mkt_change: float | None = None
+    earnings_date: str | None = None
     market_cap: float | None = None
+    div_payment_date: str | None = None
     exchange: str | None = None
     week_52_high: float | None = None
     week_52_low: float | None = None
     shares_outstanding: float | None = None
-    volume: float | None = None
-    change_pct: float | None = None
     fetched_at_utc: datetime = Field(default_factory=datetime.utcnow)

@@ -10,6 +10,7 @@ const NAV_LINKS = [
   { href: "/market-grid", label: "Market Grid" },
   { href: "/watchlists", label: "Watchlists" },
   { href: "/alerts", label: "Alerts" },
+  { href: "/logs", label: "Logs" },
   { href: "/keys", label: "API Keys" },
 ];
 

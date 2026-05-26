@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 
 import structlog
 
+import app.error_log as error_log
 from app.agents.base import AgentContext
 from app.agents.financials import FinancialsAgent
 from app.agents.fundamentals import FundamentalsAgent
@@ -209,6 +210,11 @@ class Supervisor:
             else:
                 head = a.error_message or a.status.value
                 det = None
+                if a.error_message:
+                    error_log.record(
+                        symbol=req.symbol, agent=a.agent_name,
+                        status=a.status.value, message=a.error_message,
+                    )
             contributions.append(
                 AgentContribution(agent_name=a.agent_name, status=a.status, headline=head, detail=det)
             )
@@ -306,6 +312,11 @@ class Supervisor:
                 else:
                     head = a.error_message or a.status.value
                     det = None
+                    if a.error_message:
+                        error_log.record(
+                            symbol=req.symbol, agent=a.agent_name,
+                            status=a.status.value, message=a.error_message,
+                        )
                 yield {"type": "agent_done", "agent": a.agent_name, "status": a.status.value, "headline": head, "detail": det}
 
         for a in results_by_name.values():

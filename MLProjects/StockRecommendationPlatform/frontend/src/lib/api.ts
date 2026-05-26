@@ -7,6 +7,7 @@ import type {
   ApiKeyResponse,
   BatchJobRequest,
   BatchJobResponse,
+  ErrorLogEntry,
   LiveQuote,
   MarketQuoteRow,
   SseEvent,
@@ -304,6 +305,19 @@ export async function removeWatchlistSymbol(
     { method: "DELETE", headers: headers(apiKey) }
   );
   await checkResponse(res);
+}
+
+// ─── Error logs ──────────────────────────────────────────────────────────────
+
+export async function getErrorLogs(limit = 200): Promise<ErrorLogEntry[]> {
+  const res = await fetch(`${API_URL}/v1/logs/errors?limit=${limit}`);
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function clearErrorLogs(): Promise<void> {
+  const res = await fetch(`${API_URL}/v1/logs/errors`, { method: "DELETE" });
+  if (!res.ok && res.status !== 204) await checkResponse(res);
 }
 
 // ─── Alerts ───────────────────────────────────────────────────────────────────

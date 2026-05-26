@@ -17,6 +17,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import select
 
+import app.error_log as error_log
 from app.batch import run_batch_job
 from app.config import settings
 from app.db.models import AnalysisRun, BatchJob
@@ -394,6 +395,23 @@ async def get_analysis_history(
                 )
             )
         return items
+
+
+@app.get("/v1/logs/errors")
+@limiter.limit(settings.rate_limit_default)
+async def get_error_logs(
+    request: Request,
+    limit: int = Query(default=200, ge=1, le=500),
+) -> list[dict]:
+    """Return recent agent error log entries (in-memory ring buffer, last 500)."""
+    return error_log.get_recent(limit)
+
+
+@app.delete("/v1/logs/errors", status_code=204)
+@limiter.limit("10/minute")
+async def clear_error_logs(request: Request) -> None:
+    """Clear the in-memory error log buffer."""
+    error_log.clear()
 
 
 @app.post("/v1/ingest/warm", status_code=202)

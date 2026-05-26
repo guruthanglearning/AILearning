@@ -280,6 +280,16 @@ export interface MarketQuoteRow {
   fetched_at_utc: string;
 }
 
+// ─── Error log ───────────────────────────────────────────────────────────────
+
+export interface ErrorLogEntry {
+  ts: string;
+  symbol: string;
+  agent: string;
+  status: string;
+  message: string;
+}
+
 // ─── SSE streaming event types ───────────────────────────────────────────────
 
 export interface SseAgentDoneEvent {

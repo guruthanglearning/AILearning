@@ -124,15 +124,23 @@ class PolygonProvider(MarketDataProvider):
                 "company_name": info.get("name"),
                 "sector": info.get("sic_description"),
                 "market_cap": float(market_cap) if market_cap is not None else None,
-                "pe_ratio": None,      # not in Polygon reference; requires financials endpoint
+                "pe_ratio": None,
                 "forward_pe": None,
                 "revenue_growth": None,
                 "avg_volume": day.get("v"),
                 "earnings_dates": None,
                 "source": self.SOURCE,
             }
-        except ProviderError:
-            raise
+        except Exception:
+            return await self._yf_fundamentals_fallback(symbol)
+
+    async def _yf_fundamentals_fallback(self, symbol: str) -> dict[str, Any]:
+        """Fall back to yfinance when Polygon fundamentals endpoint is unavailable."""
+        try:
+            from app.providers.yfinance_provider import YFinanceProvider
+            data = await YFinanceProvider().get_fundamentals(symbol)
+            data["source"] = f"{self.SOURCE}+yfinance_fundamentals"
+            return data
         except Exception:
             return {
                 "company_name": None,

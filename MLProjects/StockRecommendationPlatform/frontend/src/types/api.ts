@@ -260,6 +260,27 @@ export interface AnalysisHistoryItem {
   status: string;
 }
 
+// ─── SSE streaming event types ───────────────────────────────────────────────
+
+export interface SseAgentDoneEvent {
+  type: "agent_done";
+  agent: string;
+  status: AgentStatus;
+  headline: string;
+  detail: string | null;
+}
+
+export interface SseVerdictEvent {
+  type: "verdict";
+  data: SupervisorVerdict;
+}
+
+export type SseEvent =
+  | SseAgentDoneEvent
+  | SseVerdictEvent
+  | { type: "done" }
+  | { type: "error"; message: string };
+
 // ─── Alert schemas ────────────────────────────────────────────────────────────
 
 export interface AlertCreate {

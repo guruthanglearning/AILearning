@@ -1,4 +1,5 @@
 import type {
+  AgentContribution,
   AlertCreate,
   AlertResponse,
   AnalysisHistoryItem,
@@ -7,6 +8,7 @@ import type {
   BatchJobRequest,
   BatchJobResponse,
   LiveQuote,
+  SseEvent,
   SupervisorVerdict,
   WatchlistCreate,
   WatchlistResponse,
@@ -96,6 +98,74 @@ export async function getAnalysisHistory(
   );
   await checkResponse(res);
   return res.json();
+}
+
+export function streamAnalysis(
+  apiKey: string,
+  req: AnalysisRunRequest,
+  handlers: {
+    onAgentDone: (contribution: AgentContribution) => void;
+    onVerdict: (verdict: SupervisorVerdict) => void;
+    onError: (err: Error) => void;
+    onDone: () => void;
+  },
+  signal: AbortSignal
+): void {
+  const url = new URL(`${API_URL}/v1/analysis/stream/${encodeURIComponent(req.symbol.toUpperCase())}`);
+  if (req.portfolio_value_usd != null)
+    url.searchParams.set("portfolio_value_usd", String(req.portfolio_value_usd));
+  if (req.max_risk_per_trade_pct != null)
+    url.searchParams.set("max_risk_per_trade_pct", String(req.max_risk_per_trade_pct));
+
+  fetch(url.toString(), { headers: headers(apiKey), signal })
+    .then(async (res) => {
+      if (!res.ok) {
+        let detail = res.statusText;
+        try {
+          const body = await res.json();
+          if (body?.detail) detail = String(body.detail);
+        } catch { /* ignore */ }
+        handlers.onError(new ApiError(res.status, detail));
+        return;
+      }
+
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const evt = JSON.parse(line.slice(6)) as SseEvent;
+            if (evt.type === "agent_done") {
+              handlers.onAgentDone({
+                agent_name: evt.agent,
+                status: evt.status,
+                headline: evt.headline,
+                detail: evt.detail,
+              });
+            } else if (evt.type === "verdict") {
+              handlers.onVerdict(evt.data);
+            } else if (evt.type === "done") {
+              handlers.onDone();
+            } else if (evt.type === "error") {
+              handlers.onError(new Error(evt.message));
+            }
+          } catch { /* skip malformed lines */ }
+        }
+      }
+    })
+    .catch((err: unknown) => {
+      if (err instanceof Error && err.name === "AbortError") return;
+      handlers.onError(err instanceof Error ? err : new Error(String(err)));
+    });
 }
 
 // ─── Batch ────────────────────────────────────────────────────────────────────

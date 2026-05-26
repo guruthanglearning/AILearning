@@ -262,6 +262,138 @@ class Supervisor:
 
         return result
 
+    async def stream_analysis(self, req: AnalysisRunRequest):
+        """Async generator. Yields one dict per agent as it completes, then verdict + done."""
+        t0 = time.perf_counter()
+        symbol = req.symbol.upper().strip()
+        run_id = uuid.uuid4()
+        provider = build_provider()
+
+        try:
+            async for session in get_session():
+                run_row = AnalysisRun(
+                    id=run_id,
+                    symbol=symbol,
+                    status="running",
+                    portfolio_value_usd=req.portfolio_value_usd,
+                    max_risk_per_trade_pct=req.max_risk_per_trade_pct,
+                    batch_job_id=getattr(req, "batch_job_id", None),
+                    last_price=None,
+                )
+                session.add(run_row)
+                await session.commit()
+        except Exception as exc:
+            log.warning("db_open_run_failed", run_id=str(run_id), error=str(exc))
+
+        ctx = AgentContext(symbol, timeout_s=settings.agent_timeout_seconds, provider=provider)
+
+        pending_tasks: set[asyncio.Task] = {
+            asyncio.create_task(agent.safe_run(ctx))
+            for agent in (
+                self.market, self.fundamentals, self.technicals,
+                self.financials, self.options, self.risk, self.sentiment,
+            )
+        }
+        results_by_name: dict[str, AgentResultBase] = {}
+
+        while pending_tasks:
+            done, pending_tasks = await asyncio.wait(pending_tasks, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                a: AgentResultBase = task.result()
+                results_by_name[a.agent_name] = a
+                if a.status == AgentStatus.complete:
+                    head, det = _agent_summary(a)
+                else:
+                    head = a.error_message or a.status.value
+                    det = None
+                yield {"type": "agent_done", "agent": a.agent_name, "status": a.status.value, "headline": head, "detail": det}
+
+        for a in results_by_name.values():
+            if a.provenance and a.provenance.latency_ms is not None:
+                agent_latency_histogram.labels(agent_name=a.agent_name, status=a.status.value).observe(
+                    a.provenance.latency_ms / 1000.0
+                )
+
+        try:
+            async for session in get_session():
+                for a in results_by_name.values():
+                    session.add(AgentArtifact(
+                        run_id=run_id,
+                        agent_name=a.agent_name,
+                        status=a.status.value,
+                        latency_ms=a.provenance.latency_ms if a.provenance else None,
+                        error_message=a.error_message,
+                        payload_json=a.model_dump(mode="json"),
+                    ))
+                await session.commit()
+        except Exception as exc:
+            log.warning("db_persist_artifacts_failed", run_id=str(run_id), error=str(exc))
+
+        _ORDER = ["MarketDataAgent", "FundamentalsAgent", "TechnicalsAgent",
+                  "FinancialsAgent", "OptionsAgent", "RiskProWorkflowAgent", "SentimentMLAgent"]
+        contributions: list[AgentContribution] = []
+        for name in _ORDER:
+            a = results_by_name.get(name)
+            if a is None:
+                continue
+            if a.status == AgentStatus.complete:
+                head, det = _agent_summary(a)
+            else:
+                head = a.error_message or a.status.value
+                det = None
+            contributions.append(AgentContribution(agent_name=a.agent_name, status=a.status, headline=head, detail=det))
+
+        m    = results_by_name["MarketDataAgent"]
+        tech = results_by_name["TechnicalsAgent"]
+        opt  = results_by_name["OptionsAgent"]
+        risk = results_by_name["RiskProWorkflowAgent"]
+        sent = results_by_name["SentimentMLAgent"]
+
+        freshness = DataFreshness(
+            quote_age_ms=int((time.perf_counter() - t0) * 1000),
+            chain_age_ms=int((time.perf_counter() - t0) * 1000),
+            fundamentals_as_of_note="See provider fundamentals snapshot timing",
+        )
+
+        decision_aids = await build_decision_aids(
+            ctx.symbol,
+            m.last_price,  # type: ignore[attr-defined]
+            tech, opt, risk,
+            req.portfolio_value_usd,
+            req.max_risk_per_trade_pct,
+            provider=provider,
+            ml_forecast_signal=sent.forecast_signal,  # type: ignore[attr-defined]
+        )
+
+        verdict, options_guidance, note = self._merge(m, tech, opt, risk, decision_aids.stock_vs_options_score)
+
+        result = SupervisorVerdict(
+            instrument_recommendation=verdict,
+            confidence_note=note,
+            options=options_guidance,
+            agent_contributions=contributions,
+            data_freshness=freshness,
+            decision_aids=decision_aids,
+            technicals=tech if tech.status == AgentStatus.complete else None,
+        )
+
+        try:
+            async for session in get_session():
+                row = await session.get(AnalysisRun, run_id)
+                if row is not None:
+                    row.status = "complete"
+                    row.finished_at = datetime.now(tz=UTC)
+                    row.instrument_recommendation = verdict.value
+                    row.confidence_note = note
+                    row.last_price = m.last_price  # type: ignore[attr-defined]
+                    row.verdict_json = result.model_dump(mode="json")
+                    await session.commit()
+        except Exception as exc:
+            log.warning("db_finalise_run_failed", run_id=str(run_id), error=str(exc))
+
+        yield {"type": "verdict", "data": result.model_dump(mode="json")}
+        yield {"type": "done"}
+
     def _merge(self, m, tech, opt, risk, stock_vs_opt_score: float):
         if m.status == AgentStatus.failed or m.last_price is None:
             return (

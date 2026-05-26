@@ -9,8 +9,31 @@ function formatAgentName(name: string): string {
   return name.replace(/Agent$/, "").replace(/([A-Z])/g, " $1").trim();
 }
 
-export function AgentStatusCard({ contribution }: { contribution: AgentContribution }) {
+export function AgentStatusCard({
+  contribution,
+  agentName,
+  pending = false,
+}: {
+  contribution?: AgentContribution;
+  agentName?: string;
+  pending?: boolean;
+}) {
   const [expanded, setExpanded] = useState(false);
+
+  if (pending && !contribution) {
+    const label = agentName ? formatAgentName(agentName) : "Analyzing…";
+    return (
+      <div className="bg-gray-900 border border-gray-800 border-l-2 border-l-gray-700 rounded-lg p-3">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="inline-block w-2 h-2 rounded-full bg-indigo-500 animate-ping" />
+          <span className="text-xs font-medium text-gray-500">{label}</span>
+        </div>
+        <div className="h-2.5 bg-gray-800 rounded animate-pulse w-3/4" />
+      </div>
+    );
+  }
+
+  if (!contribution) return null;
 
   const borderColor =
     contribution.status === "complete"
@@ -20,9 +43,7 @@ export function AgentStatusCard({ contribution }: { contribution: AgentContribut
       : "border-l-red-600";
 
   return (
-    <div
-      className={`bg-gray-900 border border-gray-800 border-l-2 ${borderColor} rounded-lg p-3`}
-    >
+    <div className={`bg-gray-900 border border-gray-800 border-l-2 ${borderColor} rounded-lg p-3`}>
       <div className="flex items-center gap-2 mb-1">
         <StatusDot status={contribution.status} />
         <span className="text-xs font-medium text-gray-200">

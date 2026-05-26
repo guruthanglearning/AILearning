@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import uuid
 from contextlib import asynccontextmanager
 from datetime import date
 from functools import partial
 
+import structlog
 import yfinance as yf
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -35,6 +38,8 @@ from app.schemas.agents import AnalysisHistoryItem, AnalysisRunRequest, LiveQuot
 from app.schemas.batch import BatchJobRequest, BatchJobResponse, BatchJobStatus
 from app.supervisor import Supervisor
 from app.universe import COMPOSITION_AS_OF, TOP_10, TOP_100, get_sp500
+
+log = structlog.get_logger(__name__)
 
 
 def _parse_cors_origins(raw: str) -> list[str]:
@@ -149,6 +154,36 @@ async def run_analysis_get(
             portfolio_value_usd=portfolio_value_usd,
             max_risk_per_trade_pct=max_risk_per_trade_pct,
         )
+    )
+
+
+@app.get("/v1/analysis/stream/{symbol}")
+@limiter.limit(settings.rate_limit_analysis)
+async def stream_analysis_sse(
+    request: Request,
+    symbol: str,
+    portfolio_value_usd: float | None = None,
+    max_risk_per_trade_pct: float | None = None,
+) -> StreamingResponse:
+    """SSE stream: yields agent_done events as each agent completes, then the full verdict."""
+    req = AnalysisRunRequest(
+        symbol=symbol,
+        portfolio_value_usd=portfolio_value_usd,
+        max_risk_per_trade_pct=max_risk_per_trade_pct,
+    )
+
+    async def _generate():
+        try:
+            async for event in _supervisor.stream_analysis(req):
+                yield f"data: {json.dumps(event)}\n\n"
+        except Exception as exc:
+            log.warning("stream_analysis_error", error=str(exc))
+            yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
+
+    return StreamingResponse(
+        _generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 

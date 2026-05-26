@@ -23,7 +23,7 @@ import type { AnalysisRunRequest } from "@/types/api";
 function HomePage() {
   const searchParams = useSearchParams();
   const autoSymbol = searchParams.get("symbol") ?? "";
-  const { req, verdict, isFetching, error, startedAt, submit } = useAnalysis();
+  const { req, verdict, partialContributions, isFetching, error, startedAt, submit } = useAnalysis();
   const autoSubmitted = useRef(false);
 
   // Auto-submit when navigated from watchlist
@@ -38,66 +38,77 @@ function HomePage() {
     submit(newReq);
   }
 
+  // Which contributions to show in the agent grid
+  const gridContributions = verdict?.agent_contributions ?? partialContributions;
+  const showGrid = gridContributions.length > 0;
+
   return (
     <div className="space-y-6">
-        <AnalysisForm
-          onSubmit={handleSubmit}
-          isLoading={isFetching}
-          defaultSymbol={autoSymbol || req?.symbol || ""}
+      <AnalysisForm
+        onSubmit={handleSubmit}
+        isLoading={isFetching}
+        defaultSymbol={autoSymbol || req?.symbol || ""}
+      />
+
+      {isFetching && startedAt != null && (
+        <AnalysisLoader symbol={req?.symbol ?? ""} startedAt={startedAt} />
+      )}
+
+      {error && !isFetching && <ErrorMessage error={error as Error} />}
+
+      {req?.symbol && <LivePriceBar symbol={req.symbol} />}
+
+      {/* Live agent grid: visible as each agent reports in, pending cards fill the rest */}
+      {showGrid && (
+        <AgentStatusGrid
+          contributions={gridContributions}
+          streaming={isFetching}
         />
+      )}
 
-        {isFetching && startedAt != null && (
-          <AnalysisLoader symbol={req?.symbol ?? ""} startedAt={startedAt} />
-        )}
+      {verdict && !isFetching && (
+        <>
+          <VerdictCard verdict={verdict} symbol={req?.symbol ?? ""} />
 
-        {error && !isFetching && <ErrorMessage error={error as Error} />}
+          {verdict.technicals && (
+            <TechnicalIndicatorsPanel tech={verdict.technicals} />
+          )}
 
-        {req?.symbol && <LivePriceBar symbol={req.symbol} />}
+          {verdict.technicals && (
+            <TradeGuidancePanel verdict={verdict} />
+          )}
 
-        {verdict && !isFetching && (
-          <>
-            <VerdictCard verdict={verdict} symbol={req?.symbol ?? ""} />
-            <AgentStatusGrid contributions={verdict.agent_contributions} />
+          {verdict.technicals && (
+            <PriceForecastPanel verdict={verdict} />
+          )}
 
-            {verdict.technicals && (
-              <TechnicalIndicatorsPanel tech={verdict.technicals} />
-            )}
+          {verdict.options && (
+            <OptionsGuidanceCard guidance={verdict.options} />
+          )}
 
-            {verdict.technicals && (
-              <TradeGuidancePanel verdict={verdict} />
-            )}
+          {verdict.decision_aids && (
+            <DecisionAidsPanel aids={verdict.decision_aids} />
+          )}
 
-            {verdict.technicals && (
-              <PriceForecastPanel verdict={verdict} />
-            )}
+          {(verdict.decision_aids?.options_metrics_table ?? []).length > 0 && (
+            <OptionsAnalysisPanel
+              rows={verdict.decision_aids!.options_metrics_table}
+            />
+          )}
 
-            {verdict.options && (
-              <OptionsGuidanceCard guidance={verdict.options} />
-            )}
-
-            {verdict.decision_aids && (
-              <DecisionAidsPanel aids={verdict.decision_aids} />
-            )}
-
-            {(verdict.decision_aids?.options_metrics_table ?? []).length > 0 && (
-              <OptionsAnalysisPanel
+          {(verdict.decision_aids?.options_metrics_table ?? []).length > 0 && (
+            <div className="space-y-2">
+              <h2 className="text-sm font-medium text-gray-400">Options Metrics Table</h2>
+              <OptionsMetricsTable
                 rows={verdict.decision_aids!.options_metrics_table}
               />
-            )}
+            </div>
+          )}
 
-            {(verdict.decision_aids?.options_metrics_table ?? []).length > 0 && (
-              <div className="space-y-2">
-                <h2 className="text-sm font-medium text-gray-400">Options Metrics Table</h2>
-                <OptionsMetricsTable
-                  rows={verdict.decision_aids!.options_metrics_table}
-                />
-              </div>
-            )}
-
-            {req?.symbol && <AnalysisHistory symbol={req.symbol} />}
-          </>
-        )}
-      </div>
+          {req?.symbol && <AnalysisHistory symbol={req.symbol} />}
+        </>
+      )}
+    </div>
   );
 }
 

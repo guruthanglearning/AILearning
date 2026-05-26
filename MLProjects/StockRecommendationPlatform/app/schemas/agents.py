@@ -269,3 +269,21 @@ class AnalysisHistoryItem(BaseModel):
     last_price: float | None = None
     stock_vs_options_score: float | None = None
     status: str
+
+
+class MarketQuoteRow(BaseModel):
+    symbol: str
+    pre_mkt_change_pct: float | None = None
+    pre_mkt_price: float | None = None
+    last_price: float | None = None
+    change: float | None = None
+    post_mkt_change_pct: float | None = None
+    post_mkt_price: float | None = None
+    market_cap: float | None = None
+    exchange: str | None = None
+    week_52_high: float | None = None
+    week_52_low: float | None = None
+    shares_outstanding: float | None = None
+    volume: float | None = None
+    change_pct: float | None = None
+    fetched_at_utc: datetime = Field(default_factory=datetime.utcnow)

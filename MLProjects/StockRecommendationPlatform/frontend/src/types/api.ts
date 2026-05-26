@@ -260,6 +260,26 @@ export interface AnalysisHistoryItem {
   status: string;
 }
 
+// ─── Market grid ─────────────────────────────────────────────────────────────
+
+export interface MarketQuoteRow {
+  symbol: string;
+  pre_mkt_change_pct: number | null;
+  pre_mkt_price: number | null;
+  last_price: number | null;
+  change: number | null;
+  post_mkt_change_pct: number | null;
+  post_mkt_price: number | null;
+  market_cap: number | null;
+  exchange: string | null;
+  week_52_high: number | null;
+  week_52_low: number | null;
+  shares_outstanding: number | null;
+  volume: number | null;
+  change_pct: number | null;
+  fetched_at_utc: string;
+}
+
 // ─── SSE streaming event types ───────────────────────────────────────────────
 
 export interface SseAgentDoneEvent {

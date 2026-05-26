@@ -7,6 +7,7 @@ import { useApiKey } from "@/contexts/ApiKeyContext";
 
 const NAV_LINKS = [
   { href: "/", label: "Analysis" },
+  { href: "/market-grid", label: "Market Grid" },
   { href: "/watchlists", label: "Watchlists" },
   { href: "/alerts", label: "Alerts" },
   { href: "/keys", label: "API Keys" },

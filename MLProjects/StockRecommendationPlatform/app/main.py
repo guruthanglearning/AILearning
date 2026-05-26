@@ -4,7 +4,7 @@ import asyncio
 import json
 import uuid
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import UTC, date, datetime
 from functools import partial
 
 import structlog
@@ -34,7 +34,13 @@ from app.providers.factory import build_provider
 from app.routers import alerts as alerts_router
 from app.routers import auth as auth_router
 from app.routers import watchlists as watchlists_router
-from app.schemas.agents import AnalysisHistoryItem, AnalysisRunRequest, LiveQuote, SupervisorVerdict
+from app.schemas.agents import (
+    AnalysisHistoryItem,
+    AnalysisRunRequest,
+    LiveQuote,
+    MarketQuoteRow,
+    SupervisorVerdict,
+)
 from app.schemas.batch import BatchJobRequest, BatchJobResponse, BatchJobStatus
 from app.supervisor import Supervisor
 from app.universe import COMPOSITION_AS_OF, TOP_10, TOP_100, get_sp500
@@ -216,6 +222,57 @@ async def get_live_quote(request: Request, symbol: str) -> LiveQuote:
         return LiveQuote(symbol=sym, **data)
     except Exception:
         return LiveQuote(symbol=sym)
+
+
+@app.get("/v1/market/quotes", response_model=list[MarketQuoteRow])
+@limiter.limit("120/minute")
+async def get_market_quotes(
+    request: Request,
+    symbols: str = Query(..., description="Comma-separated symbols, max 50"),
+) -> list[MarketQuoteRow]:
+    """Batch quote fetch for the market-grid UI. Returns live data for up to 50 symbols."""
+    sym_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    if not sym_list:
+        return []
+    if len(sym_list) > 50:
+        raise HTTPException(status_code=422, detail="Maximum 50 symbols per request")
+
+    def _fetch_one(sym: str) -> MarketQuoteRow:
+        try:
+            info = yf.Ticker(sym).info or {}
+            now = datetime.now(tz=UTC)
+            current = info.get("regularMarketPrice") or info.get("currentPrice")
+            prev_close = info.get("regularMarketPreviousClose") or info.get("previousClose")
+            raw_change = info.get("regularMarketChange")
+            raw_chg_pct = info.get("regularMarketChangePercent")
+            if raw_change is None and current and prev_close and prev_close > 0:
+                raw_change = current - prev_close
+            if raw_chg_pct is None and raw_change and prev_close and prev_close > 0:
+                raw_chg_pct = (raw_change / prev_close) * 100
+            return MarketQuoteRow(
+                symbol=sym,
+                pre_mkt_change_pct=info.get("preMarketChangePercent"),
+                pre_mkt_price=info.get("preMarketPrice"),
+                last_price=current,
+                change=raw_change,
+                post_mkt_change_pct=info.get("postMarketChangePercent"),
+                post_mkt_price=info.get("postMarketPrice"),
+                market_cap=info.get("marketCap"),
+                exchange=info.get("exchange"),
+                week_52_high=info.get("fiftyTwoWeekHigh"),
+                week_52_low=info.get("fiftyTwoWeekLow"),
+                shares_outstanding=info.get("sharesOutstanding"),
+                volume=info.get("regularMarketVolume") or info.get("volume"),
+                change_pct=raw_chg_pct,
+                fetched_at_utc=now,
+            )
+        except Exception:
+            return MarketQuoteRow(symbol=sym, fetched_at_utc=datetime.now(tz=UTC))
+
+    loop = asyncio.get_event_loop()
+    tasks = [loop.run_in_executor(None, _fetch_one, s) for s in sym_list]
+    results = await asyncio.gather(*tasks)
+    return list(results)
 
 
 @app.post("/v1/analysis/batch", response_model=BatchJobResponse, status_code=202)

@@ -8,6 +8,7 @@ import type {
   BatchJobRequest,
   BatchJobResponse,
   LiveQuote,
+  MarketQuoteRow,
   SseEvent,
   SupervisorVerdict,
   WatchlistCreate,
@@ -166,6 +167,15 @@ export function streamAnalysis(
       if (err instanceof Error && err.name === "AbortError") return;
       handlers.onError(err instanceof Error ? err : new Error(String(err)));
     });
+}
+
+export async function getMarketQuotes(symbols: string[]): Promise<MarketQuoteRow[]> {
+  if (!symbols.length) return [];
+  const res = await fetch(
+    `${API_URL}/v1/market/quotes?symbols=${encodeURIComponent(symbols.join(","))}`
+  );
+  await checkResponse(res);
+  return res.json();
 }
 
 // ─── Batch ────────────────────────────────────────────────────────────────────

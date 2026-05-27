@@ -146,6 +146,15 @@ export interface TechnicalsSnapshot {
   trend_hint: string | null;
 }
 
+export interface FundamentalsSnapshot {
+  company_name: string | null;
+  sector: string | null;
+  market_cap: number | null;
+  pe_ratio: number | null;
+  forward_pe: number | null;
+  revenue_growth: number | null;
+}
+
 export interface SupervisorVerdict {
   instrument_recommendation: InstrumentRecommendation;
   confidence_note: string;
@@ -154,6 +163,7 @@ export interface SupervisorVerdict {
   data_freshness: DataFreshness;
   decision_aids: DecisionAids | null;
   technicals: TechnicalsSnapshot | null;
+  fundamentals: FundamentalsSnapshot | null;
 }
 
 export interface LiveQuote {

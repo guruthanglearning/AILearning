@@ -30,6 +30,7 @@ from app.schemas.agents import (
     DataFreshness,
     FinancialsOutput,
     FundamentalsOutput,
+    FundamentalsSnapshot,
     InstrumentRecommendation,
     MarketDataOutput,
     OptionsGuidance,
@@ -249,6 +250,7 @@ class Supervisor:
             data_freshness=freshness,
             decision_aids=decision_aids,
             technicals=tech if tech.status == AgentStatus.complete else None,
+            fundamentals=self._fundamentals_snapshot(f),
         )
 
         # --- DB hook 3: finalise run record (best-effort) ---
@@ -404,6 +406,19 @@ class Supervisor:
 
         yield {"type": "verdict", "data": result.model_dump(mode="json")}
         yield {"type": "done"}
+
+    @staticmethod
+    def _fundamentals_snapshot(f: FundamentalsOutput) -> FundamentalsSnapshot | None:
+        if f.status != AgentStatus.complete:
+            return None
+        return FundamentalsSnapshot(
+            company_name=f.company_name,
+            sector=f.sector,
+            market_cap=f.market_cap,
+            pe_ratio=f.pe_ratio,
+            forward_pe=f.forward_pe,
+            revenue_growth=f.revenue_growth,
+        )
 
     def _merge(self, m, tech, opt, risk, stock_vs_opt_score: float):
         if m.status == AgentStatus.failed or m.last_price is None:

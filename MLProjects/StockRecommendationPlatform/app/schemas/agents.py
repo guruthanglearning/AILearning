@@ -224,6 +224,15 @@ class DecisionAids(BaseModel):
     options_metrics_table: list[OptionsMetricRow] = Field(default_factory=list)
 
 
+class FundamentalsSnapshot(BaseModel):
+    company_name: str | None = None
+    sector: str | None = None
+    market_cap: float | None = None
+    pe_ratio: float | None = None
+    forward_pe: float | None = None
+    revenue_growth: float | None = None
+
+
 class SupervisorVerdict(BaseModel):
     instrument_recommendation: InstrumentRecommendation
     confidence_note: str
@@ -232,6 +241,7 @@ class SupervisorVerdict(BaseModel):
     data_freshness: DataFreshness = Field(default_factory=DataFreshness)
     decision_aids: DecisionAids | None = None
     technicals: TechnicalsOutput | None = None
+    fundamentals: FundamentalsSnapshot | None = None
 
 
 class AnalysisRunRequest(BaseModel):

@@ -9,6 +9,7 @@ import { LivePriceBar } from "@/components/analysis/LivePriceBar";
 import { AnalysisHistory } from "@/components/analysis/AnalysisHistory";
 import { AnalysisLoader } from "@/components/analysis/AnalysisLoader";
 import { DecisionAidsPanel } from "@/components/analysis/DecisionAidsPanel";
+import { FundamentalsPanel } from "@/components/analysis/FundamentalsPanel";
 import { OptionsAnalysisPanel } from "@/components/analysis/OptionsAnalysisPanel";
 import { OptionsGuidanceCard } from "@/components/analysis/OptionsGuidanceCard";
 import { OptionsMetricsTable } from "@/components/analysis/OptionsMetricsTable";
@@ -68,6 +69,10 @@ function HomePage() {
       {verdict && !isFetching && (
         <>
           <VerdictCard verdict={verdict} symbol={req?.symbol ?? ""} />
+
+          {verdict.fundamentals && (
+            <FundamentalsPanel fund={verdict.fundamentals} />
+          )}
 
           {verdict.technicals && (
             <TradeGuidancePanel verdict={verdict} />

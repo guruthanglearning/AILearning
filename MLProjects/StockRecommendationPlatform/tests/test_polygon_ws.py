@@ -3,9 +3,9 @@ No real WebSocket connection required."""
 from __future__ import annotations
 
 import json
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
 
 from app.polygon_ws import PolygonWsManager, get_ws_manager, init_ws_manager
 

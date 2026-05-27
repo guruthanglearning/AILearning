@@ -210,3 +210,80 @@ async def test_full_analysis_agent_timeout_handled(monkeypatch):
     )
     assert opt_contrib is not None
     assert opt_contrib.status.value in ("failed", "degraded")
+
+
+# ---------------------------------------------------------------------------
+# stream_analysis (async generator)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_stream_analysis_yields_agent_done_and_verdict(monkeypatch):
+    """Happy path: 7 agent_done events, then verdict, then done."""
+    prov = _build_mock_provider(last_price=150.0)
+    monkeypatch.setattr("app.supervisor.build_provider", lambda: prov)
+    monkeypatch.setattr("app.supervisor.get_session", _mock_session_factory)
+    monkeypatch.setattr("app.agents.sentiment_ml.settings.finnhub_api_key", None)
+
+    events = []
+    async for event in Supervisor().stream_analysis(_req()):
+        events.append(event)
+
+    types = [e["type"] for e in events]
+    assert "agent_done" in types
+    assert types[-2] == "verdict"
+    assert types[-1] == "done"
+    assert sum(1 for t in types if t == "agent_done") == 7
+
+
+@pytest.mark.asyncio
+async def test_stream_analysis_verdict_contains_recommendation(monkeypatch):
+    """Verdict event carries a parseable instrument_recommendation."""
+    prov = _build_mock_provider(last_price=150.0)
+    monkeypatch.setattr("app.supervisor.build_provider", lambda: prov)
+    monkeypatch.setattr("app.supervisor.get_session", _mock_session_factory)
+    monkeypatch.setattr("app.agents.sentiment_ml.settings.finnhub_api_key", None)
+
+    events = []
+    async for event in Supervisor().stream_analysis(_req()):
+        events.append(event)
+
+    verdict_event = next(e for e in events if e["type"] == "verdict")
+    rec = verdict_event["data"]["instrument_recommendation"]
+    assert rec in ("stock", "options", "insufficient_data", "hold", "avoid")
+
+
+@pytest.mark.asyncio
+async def test_stream_analysis_failed_market_data_returns_insufficient(monkeypatch):
+    """When market data agent fails, stream verdict should be insufficient_data."""
+    prov = _build_mock_provider()
+    prov.get_quote = AsyncMock(side_effect=Exception("provider down"))
+    monkeypatch.setattr("app.supervisor.build_provider", lambda: prov)
+    monkeypatch.setattr("app.supervisor.get_session", _mock_session_factory)
+    monkeypatch.setattr("app.agents.sentiment_ml.settings.finnhub_api_key", None)
+
+    events = []
+    async for event in Supervisor().stream_analysis(_req()):
+        events.append(event)
+
+    verdict_event = next(e for e in events if e["type"] == "verdict")
+    assert verdict_event["data"]["instrument_recommendation"] == "insufficient_data"
+
+
+@pytest.mark.asyncio
+async def test_stream_analysis_agent_done_has_required_fields(monkeypatch):
+    """Each agent_done event has type, agent, status, headline keys."""
+    prov = _build_mock_provider(last_price=150.0)
+    monkeypatch.setattr("app.supervisor.build_provider", lambda: prov)
+    monkeypatch.setattr("app.supervisor.get_session", _mock_session_factory)
+    monkeypatch.setattr("app.agents.sentiment_ml.settings.finnhub_api_key", None)
+
+    events = []
+    async for event in Supervisor().stream_analysis(_req()):
+        events.append(event)
+
+    for ev in events:
+        if ev["type"] == "agent_done":
+            assert "agent" in ev
+            assert "status" in ev
+            assert "headline" in ev

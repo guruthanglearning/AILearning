@@ -487,3 +487,17 @@ def test_score_headlines_empty():
     score, top = _score_headlines(MagicMock(), [])
     assert score == 0.0
     assert top == []
+
+
+def test_score_headlines_nested_list_format():
+    """Some transformers versions return [[{...}]] instead of [{...}] — both must work."""
+    from app.agents.sentiment_ml import _score_headlines
+    mock_pipe = MagicMock()
+    mock_pipe.return_value = [[
+        {"label": "positive", "score": 0.85},
+        {"label": "negative", "score": 0.10},
+        {"label": "neutral", "score": 0.05},
+    ]]
+    score, top = _score_headlines(mock_pipe, ["AAPL beats earnings estimates"])
+    assert score == pytest.approx(0.75, abs=0.01)
+    assert top == ["AAPL beats earnings estimates"]

@@ -1,10 +1,35 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python -m pytest -q)",
-      "Bash(\"D:/Study/AILearning/shared_Environment/Scripts/pip.exe\" install *)",
-      "Bash(\"D:/Study/AILearning/shared_Environment/Scripts/python.exe\" -m pytest -q)",
-      "Bash(git *)"
+      "Bash(*)",
+      "Edit",
+      "Write",
+      "Glob",
+      "Grep"
+    ],
+    "ask": [
+      "Bash(git push *)",
+      "Read(.env*)",
+      "Read(*.pem)",
+      "Read(*.key)",
+      "Read(*.p12)",
+      "Read(*.pfx)",
+      "Read(*.db)",
+      "Read(*.sqlite)",
+      "Read(*.sqlite3)",
+      "Read(*secret*)",
+      "Read(*credential*)",
+      "Read(*password*)",
+      "Read(*cookie*)",
+      "Read(*token*)",
+      "Bash(cat .env*)",
+      "Bash(type .env*)"
+    ],
+    "deny": [
+      "Bash(*AppData*Chrome*Cookies*)",
+      "Bash(*AppData*Firefox*places.sqlite*)",
+      "Bash(*AppData*Microsoft*Credentials*)",
+      "Bash(*AppData*Microsoft*Vault*)"
     ]
   }
 }

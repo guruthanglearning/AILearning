@@ -439,3 +439,206 @@ async def test_revoke_key_direct():
 
     await revoke_key(key_id=row.id, current_key=key, session=session)
     assert row.is_active is False
+
+
+# ---------------------------------------------------------------------------
+# GET /v1/quote/live/{symbol}
+# ---------------------------------------------------------------------------
+
+
+def test_get_live_quote_success(monkeypatch):
+    provider = AsyncMock()
+    provider.get_quote = AsyncMock(
+        return_value={
+            "last_price": 150.0,
+            "previous_close": 148.0,
+            "day_change_pct": 1.35,
+            "volume": 50_000_000,
+            "open_price": 149.0,
+            "market_state": "REGULAR",
+        }
+    )
+    monkeypatch.setattr("app.main.build_provider", lambda: provider)
+
+    with TestClient(app) as client:
+        resp = client.get("/v1/quote/live/AAPL")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["symbol"] == "AAPL"
+    assert data["current"] == pytest.approx(150.0)
+    assert data["market_state"] == "REGULAR"
+
+
+def test_get_live_quote_provider_error_returns_empty(monkeypatch):
+    provider = AsyncMock()
+    provider.get_quote = AsyncMock(side_effect=RuntimeError("rate limited"))
+    monkeypatch.setattr("app.main.build_provider", lambda: provider)
+
+    with TestClient(app) as client:
+        resp = client.get("/v1/quote/live/MSFT")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["symbol"] == "MSFT"
+    assert data["current"] is None
+
+
+# ---------------------------------------------------------------------------
+# GET /v1/logs/errors  and  DELETE /v1/logs/errors
+# ---------------------------------------------------------------------------
+
+
+def test_get_error_logs():
+    with TestClient(app) as client:
+        resp = client.get("/v1/logs/errors")
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+
+
+def test_clear_error_logs():
+    with TestClient(app) as client:
+        resp = client.delete("/v1/logs/errors")
+    assert resp.status_code == 204
+
+
+# ---------------------------------------------------------------------------
+# GET /v1/analysis/stream/{symbol}  (SSE)
+# ---------------------------------------------------------------------------
+
+
+def test_stream_analysis_sse(monkeypatch):
+    async def _mock_stream(req):
+        yield {"type": "agent_done", "agent": "MarketDataAgent", "status": "complete", "headline": "ok", "detail": None}
+        yield {"type": "verdict", "data": {"instrument_recommendation": "stock"}}
+        yield {"type": "done"}
+
+    import app.main as main_module
+    monkeypatch.setattr(main_module._supervisor, "stream_analysis", _mock_stream)
+
+    with TestClient(app) as client:
+        resp = client.get("/v1/analysis/stream/AAPL")
+
+    assert resp.status_code == 200
+    assert "agent_done" in resp.text
+    assert "verdict" in resp.text
+    assert "done" in resp.text
+
+
+def test_stream_analysis_sse_exception_yields_error_event(monkeypatch):
+    async def _mock_stream_error(req):
+        raise RuntimeError("analysis exploded")
+        yield  # make it an async generator
+
+    import app.main as main_module
+    monkeypatch.setattr(main_module._supervisor, "stream_analysis", _mock_stream_error)
+
+    with TestClient(app) as client:
+        resp = client.get("/v1/analysis/stream/TSLA")
+
+    assert resp.status_code == 200
+    assert "error" in resp.text
+
+
+# ---------------------------------------------------------------------------
+# GET /v1/market/quotes
+# ---------------------------------------------------------------------------
+
+
+def test_get_market_quotes_success(monkeypatch):
+    mock_info = {
+        "regularMarketPrice": 150.0,
+        "regularMarketPreviousClose": 148.0,
+        "regularMarketChange": 2.0,
+        "marketCap": 2_500_000_000_000,
+        "exchange": "NASDAQ",
+    }
+    mock_ticker = MagicMock()
+    mock_ticker.info = mock_info
+    monkeypatch.setattr("app.main.yf.Ticker", lambda sym: mock_ticker)
+
+    with TestClient(app) as client:
+        resp = client.get("/v1/market/quotes?symbols=AAPL")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["symbol"] == "AAPL"
+    assert data[0]["last_price"] == pytest.approx(150.0)
+
+
+def test_get_market_quotes_too_many_symbols():
+    syms = ",".join([f"S{i}" for i in range(51)])
+    with TestClient(app) as client:
+        resp = client.get(f"/v1/market/quotes?symbols={syms}")
+    assert resp.status_code == 422
+
+
+def test_get_market_quotes_empty_symbols():
+    with TestClient(app) as client:
+        resp = client.get("/v1/market/quotes?symbols=,,+,")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_get_market_quotes_ticker_error_returns_empty_row(monkeypatch):
+    mock_ticker = MagicMock()
+    mock_ticker.info = MagicMock(side_effect=RuntimeError("network error"))
+    monkeypatch.setattr("app.main.yf.Ticker", lambda sym: mock_ticker)
+
+    with TestClient(app) as client:
+        resp = client.get("/v1/market/quotes?symbols=BADTICKER")
+
+    assert resp.status_code == 200
+    assert resp.json()[0]["symbol"] == "BADTICKER"
+    assert resp.json()[0]["last_price"] is None
+
+
+# ---------------------------------------------------------------------------
+# POST /v1/analysis/batch
+# ---------------------------------------------------------------------------
+
+
+async def _batch_write_session_gen():
+    session = AsyncMock()
+    session.add = MagicMock()
+    session.commit = AsyncMock()
+    yield session
+
+
+def _mk_batch_write_session():
+    return lambda: _batch_write_session_gen()
+
+
+def test_start_batch_top10(monkeypatch):
+    monkeypatch.setattr("app.main.get_session", _mk_batch_write_session())
+    monkeypatch.setattr("app.main.run_batch_job", AsyncMock())
+
+    with TestClient(app) as client:
+        resp = client.post("/v1/analysis/batch", json={"universe": "top10"})
+
+    assert resp.status_code == 202
+    data = resp.json()
+    assert data["universe"] == "top10"
+    assert data["total_symbols"] == 10
+    assert data["status"] == "pending"
+
+
+def test_start_batch_custom_symbols(monkeypatch):
+    monkeypatch.setattr("app.main.get_session", _mk_batch_write_session())
+    monkeypatch.setattr("app.main.run_batch_job", AsyncMock())
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/v1/analysis/batch",
+            json={"universe": "custom", "symbols": ["AAPL", "MSFT"]},
+        )
+
+    assert resp.status_code == 202
+    assert resp.json()["total_symbols"] == 2
+
+
+def test_start_batch_invalid_universe():
+    with TestClient(app) as client:
+        resp = client.post("/v1/analysis/batch", json={"universe": "unknown"})
+    assert resp.status_code == 422

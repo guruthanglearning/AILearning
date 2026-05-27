@@ -6,7 +6,7 @@ from typing import Any
 import httpx
 import pandas as pd
 
-from app.providers.base import MarketDataProvider, ProviderError
+from app.providers.base import MarketDataProvider, ProviderError, _infer_market_state
 
 _BASE = "https://api.polygon.io"
 
@@ -50,41 +50,45 @@ class PolygonProvider(MarketDataProvider):
 
     async def get_quote(self, symbol: str) -> dict[str, Any]:
         try:
-            # /v2/aggs/ticker/{symbol}/prev works on the free Polygon plan
-            prev_data = await self._get(f"/v2/aggs/ticker/{symbol}/prev")
-            results = prev_data.get("results") or []
-            if not results:
-                return {
-                    "last_price": None, "previous_close": None,
-                    "day_change_pct": None, "volume": None,
-                    "source": self.SOURCE,
-                }
-            r = results[0]
-            close = r.get("c")      # closing price (most recent session)
-            open_ = r.get("o")      # opening price of that session
-            volume = r.get("v")
-            change = (
-                (close - open_) / open_ * 100
-                if close is not None and open_
-                else None
+            snap = await self._get(
+                f"/v2/snapshot/locale/us/markets/stocks/tickers/{symbol}"
             )
+            ticker  = snap.get("ticker") or {}
+            day     = ticker.get("day") or {}
+            prev    = ticker.get("prevDay") or {}
+            last_t  = ticker.get("lastTrade") or {}
+
+            # Current price: most-recent trade → day close
+            last_price = last_t.get("p") or day.get("c")
+            prev_close = prev.get("c")
+            change_pct = ticker.get("todaysChangePerc")
+            volume     = day.get("v")
+            open_price = day.get("o")
+
+            if last_price is None:
+                return self._empty_quote()
+
             return {
-                "last_price": float(close) if close is not None else None,
-                "previous_close": float(open_) if open_ is not None else None,
-                "day_change_pct": float(change) if change is not None else None,
-                "volume": int(volume) if volume is not None else None,
-                "source": self.SOURCE,
+                "last_price":     float(last_price),
+                "previous_close": float(prev_close) if prev_close is not None else None,
+                "day_change_pct": float(change_pct) if change_pct is not None else None,
+                "volume":         int(volume) if volume is not None else None,
+                "open_price":     float(open_price) if open_price is not None else None,
+                "market_state":   _infer_market_state(),
+                "source":         self.SOURCE,
             }
         except ProviderError:
             raise
         except Exception:
-            return {
-                "last_price": None,
-                "previous_close": None,
-                "day_change_pct": None,
-                "volume": None,
-                "source": self.SOURCE,
-            }
+            return self._empty_quote()
+
+    def _empty_quote(self) -> dict[str, Any]:
+        return {
+            "last_price": None, "previous_close": None,
+            "day_change_pct": None, "volume": None,
+            "open_price": None, "market_state": None,
+            "source": self.SOURCE,
+        }
 
     async def get_price_history(self, symbol: str, period: str) -> pd.DataFrame:
         days = _PERIOD_DAYS.get(period, 92)

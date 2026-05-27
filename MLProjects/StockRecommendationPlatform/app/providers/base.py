@@ -1,9 +1,30 @@
 from __future__ import annotations
 
+import zoneinfo
 from abc import ABC, abstractmethod
+from datetime import datetime
+from datetime import time as _time
 from typing import Any
 
 import pandas as pd
+
+
+def _infer_market_state() -> str:
+    """Best-effort NYSE market state derived from current wall-clock time."""
+    try:
+        now_et = datetime.now(tz=zoneinfo.ZoneInfo("America/New_York"))
+        t = now_et.time()
+        if now_et.weekday() >= 5:
+            return "CLOSED"
+        if _time(4, 0) <= t < _time(9, 30):
+            return "PRE"
+        if _time(9, 30) <= t < _time(16, 0):
+            return "REGULAR"
+        if _time(16, 0) <= t < _time(20, 0):
+            return "POST"
+    except Exception:
+        pass
+    return "CLOSED"
 
 
 class ProviderError(Exception):

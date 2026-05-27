@@ -5,11 +5,18 @@ import json
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime
-from functools import partial
 
 import structlog
 import yfinance as yf
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
+from fastapi import (
+    BackgroundTasks,
+    FastAPI,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from slowapi import _rate_limit_exceeded_handler
@@ -65,6 +72,9 @@ async def lifespan(app: FastAPI):
 
         from app.db.session import _engine  # type: ignore[attr-defined]
         SQLAlchemyInstrumentor().instrument(engine=_engine)
+    if settings.polygon_api_key:
+        from app.polygon_ws import init_ws_manager
+        init_ws_manager(settings.polygon_api_key)
     yield
 
 
@@ -197,32 +207,46 @@ async def stream_analysis_sse(
 @app.get("/v1/quote/live/{symbol}", response_model=LiveQuote)
 @limiter.limit("30/minute")
 async def get_live_quote(request: Request, symbol: str) -> LiveQuote:
-    """Lightweight live quote: pre-market, open, current, post-market prices."""
+    """Live quote via configured provider (Polygon when API key is set, yfinance otherwise)."""
     sym = symbol.upper().strip()
-
-    def _fetch() -> dict:
-        info = yf.Ticker(sym).info or {}
-        current = info.get("regularMarketPrice") or info.get("currentPrice")
-        prev_close = info.get("regularMarketPreviousClose") or info.get("previousClose")
-        change_pct = None
-        if current and prev_close and prev_close > 0:
-            change_pct = (current - prev_close) / prev_close * 100
-        return {
-            "pre_market":     info.get("preMarketPrice"),
-            "open_price":     info.get("regularMarketOpen") or info.get("open"),
-            "current":        current,
-            "post_market":    info.get("postMarketPrice"),
-            "previous_close": prev_close,
-            "day_change_pct": change_pct,
-            "volume":         info.get("regularMarketVolume") or info.get("volume"),
-            "market_state":   info.get("marketState"),
-        }
-
+    provider = build_provider()
     try:
-        data = await asyncio.get_event_loop().run_in_executor(None, partial(_fetch))
-        return LiveQuote(symbol=sym, **data)
+        data = await provider.get_quote(sym)
+        return LiveQuote(
+            symbol=sym,
+            open_price=data.get("open_price"),
+            current=data.get("last_price"),
+            previous_close=data.get("previous_close"),
+            day_change_pct=data.get("day_change_pct"),
+            volume=data.get("volume"),
+            market_state=data.get("market_state"),
+        )
     except Exception:
         return LiveQuote(symbol=sym)
+
+
+@app.websocket("/v1/ws/quote/{symbol}")
+async def ws_live_quote(websocket: WebSocket, symbol: str) -> None:
+    """Real-time per-second price updates via Polygon WebSocket relay.
+    Closes with 1013 (Try Again Later) when Polygon is not configured."""
+    if not settings.polygon_api_key:
+        await websocket.close(code=1013, reason="Polygon API key not configured")
+        return
+    from app.polygon_ws import get_ws_manager
+    manager = get_ws_manager()
+    if manager is None:
+        await websocket.close(code=1013, reason="WS manager not initialised")
+        return
+    sym = symbol.upper().strip()
+    await websocket.accept()
+    await manager.subscribe(sym, websocket)
+    try:
+        while True:
+            await websocket.receive_text()   # discard client pings; keeps conn alive
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await manager.unsubscribe(sym, websocket)
 
 
 @app.get("/v1/market/quotes", response_model=list[MarketQuoteRow])

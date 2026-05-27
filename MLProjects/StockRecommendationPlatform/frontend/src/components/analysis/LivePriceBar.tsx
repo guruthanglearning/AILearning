@@ -1,6 +1,7 @@
 "use client";
 
 import { useLiveQuote } from "@/hooks/useAnalysis";
+import { useLivePriceWs } from "@/hooks/useLivePriceWs";
 
 const fmt = (v: number | null) =>
   v == null ? "—" : `$${v.toFixed(2)}`;
@@ -52,6 +53,12 @@ function PriceSlot({ label, value, highlight }: PriceSlotProps) {
 
 export function LivePriceBar({ symbol }: { symbol: string }) {
   const { data: q, isFetching, dataUpdatedAt } = useLiveQuote(symbol);
+  const { data: ws, connected: wsConnected } = useLivePriceWs(symbol);
+
+  // WS price overrides the HTTP-polled current price when the stream is live
+  const currentPrice = wsConnected && ws?.price != null ? ws.price : (q?.current ?? null);
+  // WS accumulated volume is fresher during market hours
+  const currentVolume = wsConnected && ws?.volume != null ? ws.volume : (q?.volume ?? null);
 
   const updatedTime = dataUpdatedAt
     ? new Date(dataUpdatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
@@ -73,7 +80,7 @@ export function LivePriceBar({ symbol }: { symbol: string }) {
       <div className="flex items-center gap-6">
         <PriceSlot label="Pre-Market"  value={q?.pre_market ?? null} />
         <PriceSlot label="Open"        value={q?.open_price ?? null} />
-        <PriceSlot label="Current"     value={q?.current ?? null} highlight />
+        <PriceSlot label="Current"     value={currentPrice} highlight />
         <PriceSlot label="Post-Market" value={q?.post_market ?? null} />
         <PriceSlot label="Prev Close"  value={q?.previous_close ?? null} />
       </div>
@@ -91,16 +98,21 @@ export function LivePriceBar({ symbol }: { symbol: string }) {
         </div>
         <div className="flex flex-col items-center gap-0.5">
           <span className="text-xs text-gray-500">Volume</span>
-          <span className="text-sm font-mono text-gray-300">{fmtVol(q?.volume ?? null)}</span>
+          <span className="text-sm font-mono text-gray-300">{fmtVol(currentVolume)}</span>
         </div>
       </div>
 
-      {/* Refresh indicator */}
+      {/* Status indicators */}
       <div className="ml-auto flex items-center gap-2">
-        {isFetching && (
-          <span className="inline-block w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-        )}
-        {updatedTime && (
+        {wsConnected ? (
+          <span className="flex items-center gap-1 text-xs text-green-400 font-medium">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+            LIVE
+          </span>
+        ) : isFetching ? (
+          <span className="inline-block w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+        ) : null}
+        {!wsConnected && updatedTime && (
           <span className="text-xs text-gray-600">as of {updatedTime}</span>
         )}
       </div>

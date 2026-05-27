@@ -8,7 +8,7 @@ from typing import Any
 import pandas as pd
 import yfinance as yf
 
-from app.providers.base import MarketDataProvider
+from app.providers.base import MarketDataProvider, _infer_market_state
 
 _PERIOD_MAP = {
     "5d": "5d",
@@ -42,12 +42,15 @@ class YFinanceProvider(MarketDataProvider):
             prev = float(hist["Close"].iloc[-2]) if len(hist) > 1 else last
             change = (last - prev) / prev * 100 if prev else None
             vol = int(hist["Volume"].iloc[-1]) if "Volume" in hist.columns else None
+            open_price = float(hist["Open"].iloc[-1]) if "Open" in hist.columns else None
             return {
-                "last_price": last,
+                "last_price":     last,
                 "previous_close": prev,
                 "day_change_pct": change,
-                "volume": vol,
-                "source": self.SOURCE,
+                "volume":         vol,
+                "open_price":     open_price,
+                "market_state":   _infer_market_state(),
+                "source":         self.SOURCE,
             }
         except Exception:
             return self._empty_quote()
@@ -119,10 +122,9 @@ class YFinanceProvider(MarketDataProvider):
 
     def _empty_quote(self) -> dict[str, Any]:
         return {
-            "last_price": None,
-            "previous_close": None,
-            "day_change_pct": None,
-            "volume": None,
+            "last_price": None, "previous_close": None,
+            "day_change_pct": None, "volume": None,
+            "open_price": None, "market_state": None,
             "source": self.SOURCE,
         }
 

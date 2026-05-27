@@ -225,23 +225,35 @@ class TestPolygonProviderImpl:
     @pytest.mark.asyncio
     async def test_get_quote_normal(self):
         p = self._prov()
-        p._get = AsyncMock(return_value={"results": [{"c": 150.0, "o": 148.0, "v": 50_000_000}]})
+        snap = {
+            "ticker": {
+                "lastTrade": {"p": 150.0},
+                "day":     {"c": 150.0, "o": 148.5, "v": 50_000_000},
+                "prevDay": {"c": 148.0},
+                "todaysChangePerc": 1.35,
+            }
+        }
+        p._get = AsyncMock(return_value=snap)
         q = await p.get_quote("AAPL")
         assert q["last_price"] == pytest.approx(150.0)
         assert q["previous_close"] == pytest.approx(148.0)
+        assert q["open_price"] == pytest.approx(148.5)
+        assert q["day_change_pct"] == pytest.approx(1.35)
         assert q["source"] == "polygon"
 
     @pytest.mark.asyncio
     async def test_get_quote_empty_results(self):
         p = self._prov()
-        p._get = AsyncMock(return_value={"results": []})
+        p._get = AsyncMock(return_value={"ticker": {}})
         q = await p.get_quote("AAPL")
         assert q["last_price"] is None
 
     @pytest.mark.asyncio
     async def test_get_quote_no_close_no_change(self):
         p = self._prov()
-        p._get = AsyncMock(return_value={"results": [{"o": 148.0, "v": 1_000}]})
+        # No lastTrade and no day.c → last_price is None
+        snap = {"ticker": {"day": {"o": 148.0, "v": 1_000}, "prevDay": {}, "lastTrade": {}}}
+        p._get = AsyncMock(return_value=snap)
         q = await p.get_quote("AAPL")
         assert q["last_price"] is None
         assert q["day_change_pct"] is None

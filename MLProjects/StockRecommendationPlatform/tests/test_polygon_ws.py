@@ -9,7 +9,6 @@ import pytest
 
 from app.polygon_ws import PolygonWsManager, get_ws_manager, init_ws_manager
 
-
 # ---------------------------------------------------------------------------
 # Singleton
 # ---------------------------------------------------------------------------

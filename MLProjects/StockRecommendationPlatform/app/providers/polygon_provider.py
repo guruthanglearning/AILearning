@@ -120,15 +120,19 @@ class PolygonProvider(MarketDataProvider):
             info = ref.get("results") or {}
             day = (snap.get("ticker") or {}).get("day") or {}
             market_cap = info.get("market_cap")
+
+            # Polygon does not supply PE ratios — merge them from yfinance
+            yf_data = await self._yf_fundamentals_fallback(symbol)
+
             return {
-                "company_name": info.get("name"),
-                "sector": info.get("sic_description"),
-                "market_cap": float(market_cap) if market_cap is not None else None,
-                "pe_ratio": None,
-                "forward_pe": None,
-                "revenue_growth": None,
-                "avg_volume": day.get("v"),
-                "earnings_dates": None,
+                "company_name": info.get("name") or yf_data.get("company_name"),
+                "sector": info.get("sic_description") or yf_data.get("sector"),
+                "market_cap": float(market_cap) if market_cap is not None else yf_data.get("market_cap"),
+                "pe_ratio": yf_data.get("pe_ratio"),
+                "forward_pe": yf_data.get("forward_pe"),
+                "revenue_growth": yf_data.get("revenue_growth"),
+                "avg_volume": day.get("v") or yf_data.get("avg_volume"),
+                "earnings_dates": yf_data.get("earnings_dates"),
                 "source": self.SOURCE,
             }
         except Exception:

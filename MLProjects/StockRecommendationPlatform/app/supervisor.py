@@ -357,6 +357,7 @@ class Supervisor:
             contributions.append(AgentContribution(agent_name=a.agent_name, status=a.status, headline=head, detail=det))
 
         m    = results_by_name["MarketDataAgent"]
+        f    = results_by_name["FundamentalsAgent"]
         tech = results_by_name["TechnicalsAgent"]
         opt  = results_by_name["OptionsAgent"]
         risk = results_by_name["RiskProWorkflowAgent"]
@@ -388,6 +389,7 @@ class Supervisor:
             data_freshness=freshness,
             decision_aids=decision_aids,
             technicals=tech if tech.status == AgentStatus.complete else None,
+            fundamentals=self._fundamentals_snapshot(f),
         )
 
         try:

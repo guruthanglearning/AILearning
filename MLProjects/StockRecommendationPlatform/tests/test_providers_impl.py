@@ -308,15 +308,25 @@ class TestPolygonProviderImpl:
         ref = {"results": {"name": "Apple Inc.", "market_cap": 3e12, "sic_description": "Computers"}}
         snap = {"ticker": {"day": {"v": 60_000_000}}}
         p._get = AsyncMock(side_effect=[ref, snap])
+        p._yf_fundamentals_fallback = AsyncMock(return_value={
+            "company_name": None, "sector": None, "market_cap": None,
+            "pe_ratio": 28.5, "forward_pe": 26.0, "revenue_growth": 0.08,
+            "avg_volume": None, "earnings_dates": None, "source": "polygon",
+        })
         f = await p.get_fundamentals("AAPL")
         assert f["company_name"] == "Apple Inc."
         assert f["sector"] == "Computers"
+        assert f["pe_ratio"] == pytest.approx(28.5)
         assert f["source"] == "polygon"
 
     @pytest.mark.asyncio
     async def test_get_fundamentals_empty_results(self):
         p = self._prov()
         p._get = AsyncMock(side_effect=[{"results": {}}, {"ticker": {}}])
+        _empty = {"company_name": None, "sector": None, "market_cap": None,
+                  "pe_ratio": None, "forward_pe": None, "revenue_growth": None,
+                  "avg_volume": None, "earnings_dates": None, "source": "polygon"}
+        p._yf_fundamentals_fallback = AsyncMock(return_value=_empty)
         f = await p.get_fundamentals("AAPL")
         assert f["company_name"] is None
         assert f["market_cap"] is None
@@ -332,6 +342,10 @@ class TestPolygonProviderImpl:
     async def test_get_fundamentals_generic_exception_returns_empty(self):
         p = self._prov()
         p._get = AsyncMock(side_effect=ValueError("bad"))
+        _empty = {"company_name": None, "sector": None, "market_cap": None,
+                  "pe_ratio": None, "forward_pe": None, "revenue_growth": None,
+                  "avg_volume": None, "earnings_dates": None, "source": "polygon"}
+        p._yf_fundamentals_fallback = AsyncMock(return_value=_empty)
         f = await p.get_fundamentals("AAPL")
         assert f["company_name"] is None
 

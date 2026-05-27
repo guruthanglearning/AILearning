@@ -135,6 +135,8 @@ class PolygonProvider(MarketDataProvider):
                 "earnings_dates": yf_data.get("earnings_dates"),
                 "source": self.SOURCE,
             }
+        except ProviderError:
+            raise
         except Exception:
             return await self._yf_fundamentals_fallback(symbol)
 

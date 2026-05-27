@@ -40,7 +40,30 @@ function chgColor(v: number | null): string {
   return v > 0 ? "text-green-400" : v < 0 ? "text-red-400" : "text-gray-400";
 }
 
-// ── Default symbol list (matching screenshot) ─────────────────────────────────
+// ── Sort helpers ──────────────────────────────────────────────────────────────
+
+type SortKey = keyof MarketQuoteRow;
+type SortDir = "asc" | "desc";
+
+function getValue(row: MarketQuoteRow, key: SortKey): string | number {
+  const v = row[key];
+  if (v == null) return key === "symbol" ? "" : -Infinity;
+  return v as string | number;
+}
+
+function sortRows(rows: MarketQuoteRow[], key: SortKey, dir: SortDir): MarketQuoteRow[] {
+  return [...rows].sort((a, b) => {
+    const av = getValue(a, key);
+    const bv = getValue(b, key);
+    if (av === bv) return 0;
+    const cmp = typeof av === "string" && typeof bv === "string"
+      ? av.localeCompare(bv)
+      : (av as number) < (bv as number) ? -1 : 1;
+    return dir === "asc" ? cmp : -cmp;
+  });
+}
+
+// ── Default symbol list ───────────────────────────────────────────────────────
 
 const DEFAULT_SYMBOLS = [
   "NVDA", "MSFT", "AAPL", "GOOG", "AMZN", "META", "AVGO", "TSM", "TSLA", "BRK-B",
@@ -49,18 +72,80 @@ const DEFAULT_SYMBOLS = [
   "DXCM", "JBL", "QS", "TQQQ", "^VIX", "^TYX", "^TNX", "^SPX", "^IXIC", "^DJI",
 ];
 
-const STORAGE_KEY    = "market_grid_symbols_v2";
-const INTERVAL_KEY   = "market_grid_interval";
+const STORAGE_KEY  = "market_grid_symbols_v2";
+const INTERVAL_KEY = "market_grid_interval";
 
-// ── Row component ─────────────────────────────────────────────────────────────
+// ── Column definition ─────────────────────────────────────────────────────────
 
-const TH = "px-3 py-2 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap select-none";
+interface ColDef {
+  key: SortKey;
+  label: string;
+  subLabel?: string;
+  sticky?: boolean;
+}
+
+const COLUMNS: ColDef[] = [
+  { key: "symbol",           label: "Symbol",                 sticky: true },
+  { key: "pre_mkt_price",    label: "Pre-Mkt",  subLabel: "Price"   },
+  { key: "pre_mkt_change",   label: "Pre-Mkt",  subLabel: "Change"  },
+  { key: "last_price",       label: "Last Price"                      },
+  { key: "change",           label: "Change"                          },
+  { key: "post_mkt_price",   label: "Post-Mkt", subLabel: "Price"   },
+  { key: "post_mkt_change",  label: "Post-Mkt", subLabel: "Change"  },
+  { key: "earnings_date",    label: "Earnings Date"                   },
+  { key: "market_cap",       label: "Market Cap"                      },
+  { key: "div_payment_date", label: "Div Payment", subLabel: "Date" },
+  { key: "exchange",         label: "Exchange"                        },
+  { key: "week_52_high",     label: "52-Wk High"                      },
+  { key: "week_52_low",      label: "52-Wk Low"                       },
+  { key: "shares_outstanding", label: "Shares Out"                   },
+];
+
+// ── Shared cell classes ───────────────────────────────────────────────────────
+
 const TD = "px-3 py-2 text-xs whitespace-nowrap";
+
+// ── SortableHeader ────────────────────────────────────────────────────────────
+
+function SortArrow({ active, dir }: { active: boolean; dir: SortDir }) {
+  if (!active) return <span className="ml-1 text-gray-700">↕</span>;
+  return <span className="ml-1 text-indigo-400">{dir === "asc" ? "↑" : "↓"}</span>;
+}
+
+interface ThProps {
+  col: ColDef;
+  sortKey: SortKey;
+  sortDir: SortDir;
+  onSort: (key: SortKey) => void;
+}
+
+function Th({ col, sortKey, sortDir, onSort }: ThProps) {
+  const active = sortKey === col.key;
+  return (
+    <th
+      onClick={() => onSort(col.key)}
+      className={[
+        "px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap",
+        "select-none cursor-pointer transition-colors",
+        active ? "text-indigo-300 bg-gray-800/60" : "text-gray-400 hover:text-gray-200 hover:bg-gray-800/30",
+        col.sticky ? "sticky left-0 bg-gray-900 z-10" : "",
+      ].join(" ")}
+    >
+      {col.subLabel ? (
+        <span>
+          {col.label}<br />{col.subLabel}
+        </span>
+      ) : col.label}
+      <SortArrow active={active} dir={sortDir} />
+    </th>
+  );
+}
+
+// ── Row ───────────────────────────────────────────────────────────────────────
 
 function Row({ row, onAnalyze }: { row: MarketQuoteRow; onAnalyze: (s: string) => void }) {
   return (
     <tr className="border-b border-gray-800/70 hover:bg-gray-800/30 transition-colors">
-      {/* Symbol */}
       <td className={`${TD} font-bold sticky left-0 bg-gray-950 z-10`}>
         <button
           type="button"
@@ -71,37 +156,18 @@ function Row({ row, onAnalyze }: { row: MarketQuoteRow; onAnalyze: (s: string) =
           {row.symbol}
         </button>
       </td>
-      {/* Pre-Mkt Price */}
       <td className={`${TD} font-mono text-gray-300`}>{fmtPrice(row.pre_mkt_price)}</td>
-      {/* Pre-Mkt Change */}
-      <td className={`${TD} font-mono font-semibold ${chgColor(row.pre_mkt_change)}`}>
-        {fmtChange(row.pre_mkt_change)}
-      </td>
-      {/* Last Price */}
+      <td className={`${TD} font-mono font-semibold ${chgColor(row.pre_mkt_change)}`}>{fmtChange(row.pre_mkt_change)}</td>
       <td className={`${TD} font-mono font-semibold text-white`}>{fmtPrice(row.last_price)}</td>
-      {/* Change */}
-      <td className={`${TD} font-mono font-semibold ${chgColor(row.change)}`}>
-        {fmtChange(row.change)}
-      </td>
-      {/* Post-Mkt Price */}
+      <td className={`${TD} font-mono font-semibold ${chgColor(row.change)}`}>{fmtChange(row.change)}</td>
       <td className={`${TD} font-mono text-gray-300`}>{fmtPrice(row.post_mkt_price)}</td>
-      {/* Post-Mkt Change */}
-      <td className={`${TD} font-mono ${chgColor(row.post_mkt_change)}`}>
-        {fmtChange(row.post_mkt_change)}
-      </td>
-      {/* Earnings Date */}
+      <td className={`${TD} font-mono ${chgColor(row.post_mkt_change)}`}>{fmtChange(row.post_mkt_change)}</td>
       <td className={`${TD} text-gray-400`}>{row.earnings_date ?? "--"}</td>
-      {/* Market Cap */}
       <td className={`${TD} text-gray-300`}>{fmtCap(row.market_cap)}</td>
-      {/* Div Payment Date */}
       <td className={`${TD} text-gray-400`}>{row.div_payment_date ?? "--"}</td>
-      {/* Exchange */}
       <td className={`${TD} text-gray-500`}>{row.exchange ?? "--"}</td>
-      {/* 52-Wk High */}
       <td className={`${TD} font-mono text-gray-300`}>{fmtPrice(row.week_52_high)}</td>
-      {/* 52-Wk Low */}
       <td className={`${TD} font-mono text-gray-300`}>{fmtPrice(row.week_52_low)}</td>
-      {/* Shares Out */}
       <td className={`${TD} text-gray-300`}>{fmtShares(row.shares_outstanding)}</td>
     </tr>
   );
@@ -137,6 +203,10 @@ export function MarketGrid({ onAnalyze }: MarketGridProps) {
   const [addInput, setAddInput]       = useState("");
   const [intervalInput, setIntervalInput] = useState(String(intervalSec));
 
+  // Sort state — default: symbol ascending (original list order)
+  const [sortKey, setSortKey] = useState<SortKey>("symbol");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const cdRef    = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -163,18 +233,30 @@ export function MarketGrid({ onAnalyze }: MarketGridProps) {
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current);
     if (cdRef.current)    clearInterval(cdRef.current);
-
     fetchQuotes();
     setCountdown(intervalSec);
-
     timerRef.current = setInterval(() => { fetchQuotes(); setCountdown(intervalSec); }, intervalSec * 1000);
     cdRef.current    = setInterval(() => setCountdown((c) => Math.max(0, c - 1)), 1000);
-
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (cdRef.current)    clearInterval(cdRef.current);
     };
   }, [symbols, intervalSec, fetchQuotes]);
+
+  function handleSort(key: SortKey) {
+    if (key === sortKey) {
+      setSortDir((d) => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      // Numeric columns default to descending (highest first); text columns ascending
+      const numericCols: SortKey[] = [
+        "last_price", "change", "pre_mkt_price", "pre_mkt_change",
+        "post_mkt_price", "post_mkt_change", "market_cap",
+        "week_52_high", "week_52_low", "shares_outstanding",
+      ];
+      setSortDir(numericCols.includes(key) ? "desc" : "asc");
+    }
+  }
 
   function addSymbol() {
     const sym = addInput.trim().toUpperCase();
@@ -192,6 +274,8 @@ export function MarketGrid({ onAnalyze }: MarketGridProps) {
     const v = parseInt(intervalInput, 10);
     if (!isNaN(v) && v >= 5 && v <= 300) setIntervalSec(v);
   }
+
+  const sortedRows = sortRows(rows, sortKey, sortDir);
 
   return (
     <div className="space-y-3">
@@ -239,6 +323,23 @@ export function MarketGrid({ onAnalyze }: MarketGridProps) {
           {loading ? "Refreshing…" : "↻ Refresh now"}
         </button>
 
+        {/* Active sort indicator */}
+        {sortKey !== "symbol" && (
+          <span className="text-xs text-gray-500 bg-gray-800 px-2 py-1.5 rounded border border-gray-700">
+            Sorted by <span className="text-indigo-400">
+              {COLUMNS.find((c) => c.key === sortKey)?.label}
+            </span> {sortDir === "asc" ? "↑" : "↓"}
+            <button
+              type="button"
+              onClick={() => { setSortKey("symbol"); setSortDir("asc"); }}
+              className="ml-2 text-gray-600 hover:text-red-400 transition-colors"
+              title="Clear sort"
+            >
+              ✕
+            </button>
+          </span>
+        )}
+
         <div className="ml-auto text-right">
           {lastUpdated && (
             <p className="text-xs text-gray-500">Updated {lastUpdated.toLocaleTimeString()}</p>
@@ -275,31 +376,20 @@ export function MarketGrid({ onAnalyze }: MarketGridProps) {
           <table className="w-full text-left">
             <thead className="bg-gray-900 border-b border-gray-700">
               <tr>
-                <th className={`${TH} sticky left-0 bg-gray-900 z-10`}>Symbol</th>
-                <th className={TH}>Pre-Mkt<br/>Price</th>
-                <th className={TH}>Pre-Mkt<br/>Change</th>
-                <th className={TH}>Last Price</th>
-                <th className={TH}>Change</th>
-                <th className={TH}>Post-Mkt<br/>Price</th>
-                <th className={TH}>Post-Mkt<br/>Change</th>
-                <th className={TH}>Earnings Date</th>
-                <th className={TH}>Market Cap</th>
-                <th className={TH}>Div Payment<br/>Date</th>
-                <th className={TH}>Exchange</th>
-                <th className={TH}>52-Wk High</th>
-                <th className={TH}>52-Wk Low</th>
-                <th className={TH}>Shares Out</th>
+                {COLUMNS.map((col) => (
+                  <Th key={col.key} col={col} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                ))}
               </tr>
             </thead>
             <tbody className="bg-gray-950 divide-y divide-gray-800/50">
-              {rows.length === 0 && !loading && (
+              {sortedRows.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={14} className="px-3 py-10 text-center text-xs text-gray-600">
+                  <td colSpan={COLUMNS.length} className="px-3 py-10 text-center text-xs text-gray-600">
                     {symbols.length === 0 ? "Add symbols above to populate the grid." : "Loading…"}
                   </td>
                 </tr>
               )}
-              {rows.map((row) => (
+              {sortedRows.map((row) => (
                 <Row key={row.symbol} row={row} onAnalyze={onAnalyze ?? (() => {})} />
               ))}
             </tbody>

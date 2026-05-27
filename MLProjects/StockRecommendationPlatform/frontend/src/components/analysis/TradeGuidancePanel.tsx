@@ -392,13 +392,13 @@ function evalOptionsRow(row: OptionsMetricRow): IndicatorSignal[] {
   if (row.liquidity) {
     const good = ["adequate", "good", "high"].some(k => row.liquidity!.toLowerCase().includes(k));
     const thin = row.liquidity.toLowerCase().includes("thin");
-    signals.push({ category: "Options", name: "Liquidity", value: row.liquidity, side: good ? "options" : thin ? "stock" : "neutral", note: good ? "Adequate chain liquidity — options viable" : thin ? "Thin chain — wide spreads; stock preferred" : "Unknown liquidity — verify on your broker" });
+    signals.push({ category: "Options", name: `Liquidity (${label})`, value: row.liquidity, side: good ? "options" : thin ? "stock" : "neutral", note: good ? "Adequate chain liquidity — options viable" : thin ? "Thin chain — wide spreads; stock preferred" : "Unknown liquidity — verify on your broker" });
   }
   if (row.expected_move) {
-    signals.push({ category: "Options", name: "Expected Move", value: row.expected_move, side: "neutral", note: "Market-implied move; size positions accordingly" });
+    signals.push({ category: "Options", name: `Expected Move (${label})`, value: row.expected_move, side: "neutral", note: "Market-implied move; size positions accordingly" });
   }
   if (row.execution_quality) {
-    signals.push({ category: "Options", name: "Execution Quality", value: "Limit orders", side: "neutral", note: row.execution_quality });
+    signals.push({ category: "Options", name: `Execution Quality (${label})`, value: "Limit orders", side: "neutral", note: row.execution_quality });
   }
   if (row.risk_profile) {
     signals.push({ category: "Options", name: `Risk Profile (${label})`, value: row.risk_profile.slice(0, 30) + "…", side: "neutral", note: row.risk_profile });

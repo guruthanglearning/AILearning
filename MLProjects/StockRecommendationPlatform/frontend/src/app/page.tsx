@@ -12,7 +12,6 @@ import { DecisionAidsPanel } from "@/components/analysis/DecisionAidsPanel";
 import { OptionsAnalysisPanel } from "@/components/analysis/OptionsAnalysisPanel";
 import { OptionsGuidanceCard } from "@/components/analysis/OptionsGuidanceCard";
 import { OptionsMetricsTable } from "@/components/analysis/OptionsMetricsTable";
-import { TechnicalIndicatorsPanel } from "@/components/analysis/TechnicalIndicatorsPanel";
 import { PriceForecastPanel } from "@/components/analysis/PriceForecastPanel";
 import { TradeGuidancePanel } from "@/components/analysis/TradeGuidancePanel";
 import { VerdictCard } from "@/components/analysis/VerdictCard";
@@ -69,10 +68,6 @@ function HomePage() {
       {verdict && !isFetching && (
         <>
           <VerdictCard verdict={verdict} symbol={req?.symbol ?? ""} />
-
-          {verdict.technicals && (
-            <TechnicalIndicatorsPanel tech={verdict.technicals} />
-          )}
 
           {verdict.technicals && (
             <TradeGuidancePanel verdict={verdict} />

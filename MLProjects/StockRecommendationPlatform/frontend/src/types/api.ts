@@ -116,6 +116,7 @@ export interface DecisionAids {
   position_sizing: PositionSizingHint[];
   comparison_matrix: Record<string, unknown>;
   user_questions: string[];
+  user_answers: string[];
   options_metrics_table: OptionsMetricRow[];
 }
 

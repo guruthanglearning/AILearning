@@ -516,12 +516,110 @@ async def build_decision_aids(
         },
     }
 
+    opts_table = await _build_options_metrics_table(symbol, last_price, opt, tech, provider)
+
     questions = [
         "Is this trade speculative or part of a multi-month thesis?",
         "What invalidates the idea — price level, time, or vol event?",
         "Can you state max loss in dollars before entering?",
         "If assigned on a short put / covered call, is that acceptable?",
     ]
+
+    # --- Q1: speculative vs thesis ---
+    if trend in ("bullish", "bearish") and not risk.has_upcoming_earnings and regime not in ("iv_rich", "unknown"):
+        q1 = (
+            f"The {trend} technical trend with stable IV suggests this can be sized as a multi-week directional thesis "
+            f"(2–8 weeks) rather than a pure speculative play. Use a defined stop and plan your exit before entering."
+        )
+    elif risk.has_upcoming_earnings:
+        q1 = (
+            "Earnings ahead make this primarily speculative — binary event risk dominates. "
+            "Treat as a short-duration trade with strict size limits; do not let it become a thesis hold through the print."
+        )
+    elif trend == "mixed":
+        q1 = (
+            "Mixed technicals suggest no strong directional thesis. This is a speculative trade at best. "
+            "Keep size small, define your exit upfront, and do not average down."
+        )
+    else:
+        q1 = (
+            "Classify this explicitly before entering: if thesis-grade, document the catalyst and target; "
+            "if speculative, cap size at 0.5–1% of portfolio and set a hard stop."
+        )
+
+    # --- Q2: invalidation levels ---
+    invalidations: list[str] = []
+    if last_price:
+        if trend == "bullish":
+            stop_ref = round(last_price * 0.95, 2)
+            invalidations.append(f"price below ${stop_ref:.2f} (~5% below current ${last_price:.2f}) invalidates the bullish case")
+        elif trend == "bearish":
+            stop_ref = round(last_price * 1.05, 2)
+            invalidations.append(f"price reclaiming ${stop_ref:.2f} (~5% above current ${last_price:.2f}) invalidates the bearish case")
+        else:
+            invalidations.append(f"a decisive break outside the current range from ${last_price:.2f} invalidates the setup")
+    if risk.has_upcoming_earnings:
+        invalidations.append("any earnings print that contradicts the thesis (gap invalidates immediately)")
+    if regime == "iv_rich":
+        invalidations.append("a sharp IV spike (≥20% above current levels) would crush option values even if direction is right")
+    if opt.nearest_expiry:
+        invalidations.append(f"time — if the move hasn't started by mid-way to {opt.nearest_expiry}, exit and reassess")
+    q2 = "Invalidation: " + "; ".join(invalidations) + "." if invalidations else (
+        "Define your invalidation before entering: a specific price level, a date by which the thesis must play out, "
+        "or a vol event that would change the picture."
+    )
+
+    # --- Q3: max loss in dollars ---
+    max_loss_parts: list[str] = []
+    if last_price and last_price > 0:
+        stop_loss_5pct = round(last_price * 0.05 * 100, 2)
+        max_loss_parts.append(f"Stock (100 shares): ~${stop_loss_5pct:.0f} at a 5% stop from ${last_price:.2f}")
+    spread_rows = [r for r in opts_table if r.max_loss is not None and r.row_data_quality == "full"]
+    for row in spread_rows:
+        max_loss_parts.append(f"{row.strategy_label}: ${row.max_loss:.2f} max loss per contract (×100 = ${row.max_loss * 100:.0f})")
+    if portfolio_value_usd and max_risk_pct:
+        budget = portfolio_value_usd * (max_risk_pct / 100.0)
+        max_loss_parts.append(f"your risk budget at {max_risk_pct}% of ${portfolio_value_usd:,.0f} = ${budget:,.0f} per trade")
+    q3 = (
+        "Yes — before entering, your max loss is: " + "; ".join(max_loss_parts) + ". "
+        "Do not enter unless you can state this number and accept it."
+    ) if max_loss_parts else (
+        "Calculate max loss before entering: for stock use (entry price − stop) × shares; "
+        "for options use premium paid × 100 per contract; for spreads use (spread width − credit) × 100."
+    )
+
+    # --- Q4: assignment acceptability ---
+    if trend == "bullish" and last_price:
+        short_put_row = next((r for r in opts_table if r.template_id == "short_put_spread" and r.breakeven_prices), None)
+        if short_put_row and short_put_row.breakeven_prices:
+            be = short_put_row.breakeven_prices[0]
+            q4 = (
+                f"For a short put: effective cost basis if assigned is ~${be:.2f} (breakeven). "
+                f"Given the {trend} technical outlook and current price of ${last_price:.2f}, "
+                f"assignment at ${be:.2f} is {'acceptable — below current price and aligned with bull thesis' if be < last_price else 'marginal — near or above current price, so assignment would immediately be at a loss'}. "
+                f"For a covered call: you cap upside above the short strike — acceptable if you're comfortable selling at that level."
+            )
+        else:
+            q4 = (
+                f"With a {trend} bias, assignment on a short put is generally acceptable if you wanted to own the stock anyway. "
+                f"Confirm the effective cost basis (strike − credit received) is within your valuation comfort. "
+                f"For covered calls, assignment caps your upside — only sell if you'd be happy exiting at that strike."
+            )
+    elif trend == "bearish":
+        q4 = (
+            "With a bearish bias, assignment on a short put is NOT acceptable — you'd be buying stock into a downtrend. "
+            "Avoid short puts in a bearish regime. If running a covered call on existing shares, assignment (selling the stock) may actually align with your view."
+        )
+    else:
+        q4 = (
+            "Neutral/mixed trend — assignment on a short put means owning stock without directional conviction. "
+            "Only run short puts if you have a specific target price where you'd genuinely want to own shares. "
+            "For covered calls, ensure you're comfortable parting with the shares at the strike."
+        )
+    if risk.has_upcoming_earnings:
+        q4 += " Caution: earnings risk means assignment could come after a large gap — size accordingly."
+
+    answers = [q1, q2, q3, q4]
 
     headline = (
         "Lean stock / long shares or simple stock risk if clarity is high and options data is weak."
@@ -530,8 +628,6 @@ async def build_decision_aids(
         if score < -0.35
         else "Balanced — compare long stock vs debit spread vs long option using max loss and breakeven."
     )
-
-    opts_table = await _build_options_metrics_table(symbol, last_price, opt, tech, provider)
 
     return DecisionAids(
         summary_headline=headline,
@@ -542,5 +638,6 @@ async def build_decision_aids(
         position_sizing=sizing,
         comparison_matrix=matrix,
         user_questions=questions,
+        user_answers=answers,
         options_metrics_table=opts_table,
     )

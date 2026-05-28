@@ -38,7 +38,7 @@ export function DecisionAidsPanel({ aids }: { aids: DecisionAids }) {
 
       {aids.user_questions.length > 0 && (
         <Accordion title="Reflective Questions">
-          <UserQuestionsSection questions={aids.user_questions} />
+          <UserQuestionsSection questions={aids.user_questions} answers={aids.user_answers ?? []} />
         </Accordion>
       )}
     </div>

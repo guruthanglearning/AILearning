@@ -221,6 +221,10 @@ class DecisionAids(BaseModel):
         default_factory=list,
         description="Prompts the trader should answer before sizing a trade",
     )
+    user_answers: list[str] = Field(
+        default_factory=list,
+        description="AI-generated answers to user_questions based on analysis data",
+    )
     options_metrics_table: list[OptionsMetricRow] = Field(default_factory=list)
 
 

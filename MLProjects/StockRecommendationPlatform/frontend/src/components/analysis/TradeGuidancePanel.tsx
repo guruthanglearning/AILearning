@@ -414,16 +414,142 @@ function evalOptionsRow(row: OptionsMetricRow): IndicatorSignal[] {
 
 // ── Score aggregation ─────────────────────────────────────────────────────────
 
-function scoreToVerdict(stockCount: number, optionsCount: number, total: number): {
-  verdict: string; color: string; pct: number; rationale: string;
-} {
+interface VerdictResult {
+  verdict: string;
+  color: string;
+  pct: number;
+  rationale: string;
+  watchList?: string[];
+}
+
+function scoreToVerdict(
+  stockCount: number,
+  optionsCount: number,
+  total: number,
+  verdict: SupervisorVerdict,
+): VerdictResult {
   const net = stockCount - optionsCount;
   const pct = total > 0 ? Math.round((stockCount / total) * 100) : 50;
-  if (net >= 6)       return { verdict: "Strong Stock Signal", color: "text-green-400", pct, rationale: "Majority of indicators favour a direct stock position. Momentum, trend, and volatility all support ownership." };
-  if (net >= 3)       return { verdict: "Lean Stock", color: "text-green-300", pct, rationale: "More indicators favour stock than options. Stock entry is the primary choice; consider a small protective put if risk averse." };
-  if (net <= -6)      return { verdict: "Strong Options Signal", color: "text-indigo-400", pct, rationale: "Most indicators favour an options structure. High volatility, overbought conditions, or weak trend suggest defined-risk plays." };
-  if (net <= -3)      return { verdict: "Lean Options", color: "text-indigo-300", pct, rationale: "More indicators favour options. Consider a credit spread or debit spread over outright stock for better risk control." };
-  return { verdict: "Mixed — Further Analysis Needed", color: "text-amber-400", pct: 50, rationale: "Indicators are split. Wait for a clearer signal, reduce position size, or use a smaller defined-risk options structure." };
+
+  if (net >= 6)  return { verdict: "Strong Stock Signal",   color: "text-green-400",  pct, rationale: "Majority of indicators favour a direct stock position. Momentum, trend, and volatility all support ownership." };
+  if (net >= 3)  return { verdict: "Lean Stock",            color: "text-green-300",  pct, rationale: "More indicators favour stock than options. Stock entry is the primary choice; consider a small protective put if risk averse." };
+  if (net <= -6) return { verdict: "Strong Options Signal", color: "text-indigo-400", pct, rationale: "Most indicators favour an options structure. High volatility, overbought conditions, or weak trend suggest defined-risk plays." };
+  if (net <= -3) return { verdict: "Lean Options",          color: "text-indigo-300", pct, rationale: "More indicators favour options. Consider a credit spread or debit spread over outright stock for better risk control." };
+
+  // ── Balanced zone: apply tie-breaker hierarchy ─────────────────────────────
+  const tech      = verdict.technicals;
+  const vol       = verdict.decision_aids?.volatility;
+  const checklist = verdict.decision_aids?.checklist ?? [];
+
+  let tieScore = 0;
+  const reasons:   string[] = [];
+  const watchList: string[] = [];
+
+  // 1. Trend direction — highest weight
+  const trend = tech?.trend_hint;
+  if (trend === "bullish") {
+    tieScore += 2;
+    reasons.push("bullish technical trend (SMA 20 > SMA 50)");
+  } else if (trend === "bearish") {
+    tieScore -= 2;
+    reasons.push("bearish technical trend (SMA 20 < SMA 50)");
+  } else {
+    watchList.push("Wait for SMA 20 to cross above SMA 50 before committing to a directional stock position");
+  }
+
+  // 2. IV vs realised vol — second most important
+  const atm_iv = vol?.atm_iv;
+  const hv     = vol?.hv_20d_annualized;
+  const ivRatio = atm_iv && hv && hv > 0 ? atm_iv / hv : null;
+  const regime  = vol?.regime;
+  if (regime === "iv_rich" || (ivRatio && ivRatio > 1.2)) {
+    tieScore -= 1.5;
+    reasons.push(`IV elevated vs realised vol (ratio ${ivRatio ? (ivRatio * 100).toFixed(0) : "—"}%) — premium selling favoured`);
+  } else if (regime === "iv_cheap" || (ivRatio && ivRatio < 0.85)) {
+    tieScore += 1;
+    reasons.push("IV below realised vol — options cheap; stock or long-premium structure viable");
+  } else {
+    watchList.push("Check IV rank vs 30-day average: above 50th percentile → favour credit spreads over stock");
+  }
+
+  // 3. Earnings risk — binary event raises options priority
+  const hasEarnings = checklist.some(c => c.id === "earn" && c.state === "warn");
+  if (hasEarnings) {
+    tieScore -= 2;
+    reasons.push("earnings event approaching — defined-risk options cap gap exposure");
+    watchList.push("Size down before the earnings print; an options structure limits binary event risk");
+  }
+
+  // 4. RSI 14 momentum
+  const rsi = tech?.rsi_14;
+  if (rsi != null) {
+    if (rsi >= 68)      { tieScore -= 1;    reasons.push(`RSI 14 at ${rsi.toFixed(0)} — overbought, favour options structures`); }
+    else if (rsi >= 55) { tieScore += 1;    reasons.push(`RSI 14 at ${rsi.toFixed(0)} — healthy bullish momentum`); }
+    else if (rsi <= 32) { tieScore += 0.5;  reasons.push(`RSI 14 at ${rsi.toFixed(0)} — oversold, potential snap-back entry`); }
+    else if (rsi <= 45) { tieScore -= 0.5; }
+    else watchList.push(`RSI 14 is ${rsi.toFixed(0)} — watch for a push above 55 to confirm bullish momentum before a full stock position`);
+  }
+
+  // 5. MACD histogram direction
+  const macd = tech?.macd_6_13_hist;
+  if (macd != null) {
+    tieScore += macd > 0 ? 0.5 : -0.5;
+    watchList.push(
+      macd > 0
+        ? "MACD histogram is positive — confirm it's expanding before adding size"
+        : "MACD histogram is negative — wait for a crossover before entering a directional stock position",
+    );
+  }
+
+  // 6. OBV volume confirmation
+  const obv = tech?.obv;
+  if (obv != null) {
+    if (obv > 0) { tieScore += 0.5; reasons.push("positive OBV confirms net buying pressure"); }
+    else         { tieScore -= 0.5; }
+  }
+
+  // ── Firm recommendation from tie-score ────────────────────────────────────
+  if (tieScore >= 1.5) {
+    return {
+      verdict: "Lean Stock (Tie-Breaker Applied)",
+      color:   "text-green-300",
+      pct,
+      rationale: `Indicators are near-balanced, but key tie-breakers favour stock: ${reasons.join("; ")}. Enter with a defined stop and 50–75% of normal size until confirmation.`,
+      watchList: watchList.length > 0 ? watchList : undefined,
+    };
+  }
+
+  if (tieScore <= -1.5) {
+    return {
+      verdict: "Lean Options (Tie-Breaker Applied)",
+      color:   "text-indigo-300",
+      pct,
+      rationale: `Indicators are near-balanced, but key tie-breakers favour an options structure: ${reasons.join("; ")}. Use a credit spread or debit spread with a defined max loss.`,
+      watchList: watchList.length > 0 ? watchList : undefined,
+    };
+  }
+
+  // ── Genuinely borderline: give a slight-edge call + specific criteria ──────
+  const slightStock = stockCount >= optionsCount;
+  return {
+    verdict: slightStock
+      ? "Slight Lean Stock — Confirm Before Entering"
+      : "Slight Lean Options — Confirm Before Entering",
+    color: "text-amber-400",
+    pct,
+    rationale: slightStock
+      ? `Indicators are closely split (${stockCount} stock vs ${optionsCount} options signals). Stock holds a slight edge but conviction is low — use 50% of normal size or substitute with a debit call spread to limit max loss.`
+      : `Indicators are closely split (${optionsCount} options vs ${stockCount} stock signals). Options hold a slight edge — use a defined-risk structure (debit or credit spread) rather than outright stock.`,
+    watchList: [
+      ...watchList,
+      "Require at least 2 of the following before entering: MACD histogram positive and expanding, RSI 14 > 55, SMA 20 crossed above SMA 50 in last 3 sessions",
+      "Check the sector ETF trend — if it aligns with your thesis, conviction increases",
+      "Verify OBV has trended up over the last 5 sessions to confirm accumulation",
+      ...(regime !== "iv_rich" && regime !== "iv_cheap"
+        ? ["Check IV rank vs 30-day average — above 50th percentile favours selling premium (credit spread) over buying stock"]
+        : []),
+    ],
+  };
 }
 
 // ── OptionPlayCard ────────────────────────────────────────────────────────────
@@ -567,7 +693,7 @@ export function TradeGuidancePanel({ verdict }: { verdict: SupervisorVerdict }) 
   const neutralCount = signals.filter(s => s.side === "neutral").length;
   const total = signals.length;
 
-  const { verdict: verdictLabel, color, rationale } = scoreToVerdict(stockCount, optionsCount, total);
+  const { verdict: verdictLabel, color, rationale, watchList } = scoreToVerdict(stockCount, optionsCount, total, verdict);
 
   // Group by category
   const seen = new Set<string>();
@@ -599,6 +725,21 @@ export function TradeGuidancePanel({ verdict }: { verdict: SupervisorVerdict }) 
         </div>
 
         <p className="text-xs text-gray-400 leading-relaxed">{rationale}</p>
+
+        {watchList && watchList.length > 0 && (
+          <div className="space-y-1.5 border-t border-gray-700 pt-3">
+            <p className="text-xs font-semibold text-amber-400 uppercase tracking-wide">Before entering — confirm these signals:</p>
+            <ul className="space-y-1">
+              {watchList.map((item, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs text-gray-300">
+                  <span className="text-amber-500 shrink-0 mt-0.5">→</span>
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <p className="text-xs text-amber-600 italic">Hypothetical analysis only — not investment advice.</p>
       </div>
 

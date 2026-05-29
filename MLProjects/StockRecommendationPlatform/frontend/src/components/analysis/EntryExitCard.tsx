@@ -109,11 +109,21 @@ export function EntryExitCard({ verdict }: { verdict: SupervisorVerdict }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h2 className="text-sm font-medium text-gray-400">Entry / Exit Levels</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-medium text-gray-400">Entry / Exit Levels</h2>
+          <span className="text-xs font-medium text-green-400 bg-green-900/30 border border-green-800/50 px-2 py-0.5 rounded-full">
+            Stocks only
+          </span>
+        </div>
         <span className={`text-xs font-mono font-semibold ${rrColor}`}>
           R:R {rrLabel}
         </span>
       </div>
+
+      <p className="text-xs text-gray-500 leading-relaxed">
+        Levels derived from price-chart technicals (SMA, ATR, 52-week range) — relevant when trading the stock directly.
+        For options positions, refer to the <span className="text-gray-400">Strike Zone</span> and <span className="text-gray-400">Options Play Recommendation</span> sections above.
+      </p>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {zones.map(z => <ZoneCard key={z.label} {...z} />)}

@@ -511,10 +511,11 @@ function scoreToVerdict(
   const net = stockCount - optionsCount;
   const pct = total > 0 ? Math.round((stockCount / total) * 100) : 50;
 
-  if (net >= 6)  return { verdict: "Strong Stock Signal",   color: "text-green-400",  pct, rationale: "Majority of indicators favour a direct stock position. Momentum, trend, and volatility all support ownership." };
-  if (net >= 3)  return { verdict: "Lean Stock",            color: "text-green-300",  pct, rationale: "More indicators favour stock than options. Stock entry is the primary choice; consider a small protective put if risk averse." };
-  if (net <= -6) return { verdict: "Strong Options Signal", color: "text-indigo-400", pct, rationale: "Most indicators favour an options structure. High volatility, overbought conditions, or weak trend suggest defined-risk plays." };
-  if (net <= -3) return { verdict: "Lean Options",          color: "text-indigo-300", pct, rationale: "More indicators favour options. Consider a credit spread or debit spread over outright stock for better risk control." };
+  // Thresholds scaled for direction-only signal pool (~15–19 signals)
+  if (net >= 4)  return { verdict: "Strong Stock Signal",   color: "text-green-400",  pct, rationale: "Majority of direction indicators favour a direct stock position. Momentum, trend, and volatility all support ownership." };
+  if (net >= 2)  return { verdict: "Lean Stock",            color: "text-green-300",  pct, rationale: "More direction indicators favour stock than options. Stock entry is the primary choice; consider a small protective put if risk averse." };
+  if (net <= -4) return { verdict: "Strong Options Signal", color: "text-indigo-400", pct, rationale: "Most direction indicators favour an options structure. High volatility, overbought conditions, or weak trend suggest defined-risk plays." };
+  if (net <= -2) return { verdict: "Lean Options",          color: "text-indigo-300", pct, rationale: "More direction indicators favour options. Consider a credit spread or debit spread over outright stock for better risk control." };
 
   // ── Balanced zone: apply tie-breaker hierarchy ─────────────────────────────
   const tech      = verdict.technicals;
@@ -769,8 +770,9 @@ export function TradeGuidancePanel({ verdict }: { verdict: SupervisorVerdict }) 
 
   const optionPlay = computeOptionPlay(verdict);
 
-  // Build all signals
-  const signals: IndicatorSignal[] = [
+  // Direction signals — counted in the stock vs options verdict.
+  // These reflect directional bias (trend, momentum, volatility, sector context).
+  const dirSignals: IndicatorSignal[] = [
     evalEma20(tech), evalEma200(tech),
     evalDma20(tech), evalDma50(tech), evalDma200(tech),
     evalRsi7(tech), evalRsi14(tech), evalRsi200(tech),
@@ -778,25 +780,32 @@ export function TradeGuidancePanel({ verdict }: { verdict: SupervisorVerdict }) 
     evalObv(tech),
     evalAtr14(tech), evalAtr50(tech),
     ...eval52w(tech),
-    ...nonSummaryRows.flatMap(evalOptionsRow),
   ];
 
-  // Append sector ETF signals when data is ready
+  // Append sector ETF direction signals when data is ready
   const etfPerf = etfBars && etfBars.length > 0 ? computeEtfPerf(etfBars) : null;
   if (etfTicker && etfPerf) {
-    signals.push(...evalSectorEtf(etfTicker, etfPerf, tech.trend_hint));
+    dirSignals.push(...evalSectorEtf(etfTicker, etfPerf, tech.trend_hint));
   }
 
-  const stockCount   = signals.filter(s => s.side === "stock").length;
-  const optionsCount = signals.filter(s => s.side === "options").length;
-  const neutralCount = signals.filter(s => s.side === "neutral").length;
-  const total = signals.length;
+  // Options execution signals — informational only, NOT counted in verdict.
+  // These describe how well a specific options strategy is positioned
+  // (theta, gamma, credit quality, liquidity) — not whether options beats stock.
+  const execSignals: IndicatorSignal[] = nonSummaryRows.flatMap(evalOptionsRow);
+
+  // All signals for display (direction first, then execution)
+  const allSignals = [...dirSignals, ...execSignals];
+
+  const stockCount   = dirSignals.filter(s => s.side === "stock").length;
+  const optionsCount = dirSignals.filter(s => s.side === "options").length;
+  const neutralCount = dirSignals.filter(s => s.side === "neutral").length;
+  const total = dirSignals.length;
 
   const { verdict: verdictLabel, color, rationale, watchList } = scoreToVerdict(stockCount, optionsCount, total, verdict);
 
-  // Group by category
+  // Group by category for display
   const seen = new Set<string>();
-  const categories = signals.map(s => s.category).filter(c => { if (seen.has(c)) return false; seen.add(c); return true; });
+  const categories = allSignals.map(s => s.category).filter(c => { if (seen.has(c)) return false; seen.add(c); return true; });
 
   return (
     <div className="space-y-4">
@@ -804,9 +813,9 @@ export function TradeGuidancePanel({ verdict }: { verdict: SupervisorVerdict }) 
 
       {/* Verdict card */}
       <div className="bg-gray-900 border border-gray-700 rounded-lg p-4 space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <span className={`text-lg font-bold ${color}`}>{verdictLabel}</span>
-          <span className="text-xs text-gray-500">{total} indicators evaluated</span>
+          <span className="text-xs text-gray-500">{total} direction indicators scored</span>
         </div>
 
         {/* Score bar */}
@@ -847,13 +856,19 @@ export function TradeGuidancePanel({ verdict }: { verdict: SupervisorVerdict }) 
 
       {/* Per-category signal tables */}
       {categories.map(cat => {
-        const catSignals = signals.filter(s => s.category === cat);
+        const catSignals = allSignals.filter(s => s.category === cat);
+        const isExecOnly = cat === "Options";
         return (
           <div key={cat} className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
-            <div className="px-3 py-2 bg-gray-800/60 border-b border-gray-800 flex items-center gap-2">
+            <div className="px-3 py-2 bg-gray-800/60 border-b border-gray-800 flex items-center gap-2 flex-wrap">
               <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{cat}</span>
               {cat === "Sector ETF" && etfTicker && (
                 <span className="text-xs text-gray-600 font-mono">({etfTicker})</span>
+              )}
+              {isExecOnly && (
+                <span className="text-xs text-gray-500 bg-gray-800 border border-gray-700 px-2 py-0.5 rounded-full">
+                  Execution quality — not counted in verdict
+                </span>
               )}
             </div>
             <div className="overflow-x-auto">

@@ -165,6 +165,43 @@ export interface SupervisorVerdict {
   decision_aids: DecisionAids | null;
   technicals: TechnicalsSnapshot | null;
   fundamentals: FundamentalsSnapshot | null;
+  sentiment_headlines: string[];
+  sentiment_forecast: string | null;
+  sentiment_score: number | null;
+  earnings_days_away: number | null;
+  has_upcoming_earnings: boolean;
+}
+
+export interface PriceBar {
+  date: string;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  close: number | null;
+  volume: number | null;
+}
+
+export interface PriceHistoryResponse {
+  symbol: string;
+  period: string;
+  data: PriceBar[];
+}
+
+export interface PeerRow {
+  symbol: string;
+  name: string;
+  price: number | null;
+  market_cap: number | null;
+  pe_ratio: number | null;
+  forward_pe: number | null;
+  ytd_return: number | null;
+  sector: string | null;
+}
+
+export interface PeersResponse {
+  symbol: string;
+  sector: string | null;
+  peers: PeerRow[];
 }
 
 export interface LiveQuote {

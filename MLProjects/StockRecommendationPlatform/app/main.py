@@ -421,6 +421,99 @@ async def get_analysis_history(
         return items
 
 
+@app.get("/v1/price-history/{symbol}")
+@limiter.limit(settings.rate_limit_default)
+async def get_price_history(
+    request: Request,
+    symbol: str,
+    period: str = Query(default="3mo", pattern="^(1mo|3mo|6mo|1y)$"),
+) -> dict:
+    """OHLCV price history for a symbol, used by the mini price chart."""
+    sym = symbol.upper().strip()
+    provider = build_provider()
+    try:
+        hist = await provider.get_price_history(sym, period)
+    except Exception as exc:
+        raise HTTPException(500, f"Price history fetch failed: {exc}") from exc
+    if hist is None or hist.empty:
+        raise HTTPException(404, "No price history data available")
+    hist = hist.reset_index()
+    date_col = "Date" if "Date" in hist.columns else hist.columns[0]
+    records = []
+    for _, row in hist.iterrows():
+        records.append({
+            "date": str(row[date_col])[:10],
+            "open":  round(float(row["Open"]),  2) if "Open"  in hist.columns else None,
+            "high":  round(float(row["High"]),  2) if "High"  in hist.columns else None,
+            "low":   round(float(row["Low"]),   2) if "Low"   in hist.columns else None,
+            "close": round(float(row["Close"]), 2) if "Close" in hist.columns else None,
+            "volume": int(row["Volume"])           if "Volume" in hist.columns else None,
+        })
+    return {"symbol": sym, "period": period, "data": records}
+
+
+# Hardcoded sector → representative peer tickers (top liquid names per sector)
+_SECTOR_PEERS: dict[str, list[str]] = {
+    "Technology":             ["AAPL", "MSFT", "NVDA", "GOOGL", "META"],
+    "Consumer Cyclical":      ["AMZN", "TSLA", "HD", "NKE", "SBUX"],
+    "Communication Services": ["GOOGL", "META", "NFLX", "DIS", "T"],
+    "Healthcare":             ["JNJ", "UNH", "PFE", "ABBV", "MRK"],
+    "Financials":             ["JPM", "BAC", "WFC", "GS", "MS"],
+    "Industrials":            ["CAT", "BA", "HON", "UPS", "RTX"],
+    "Consumer Defensive":     ["PG", "KO", "PEP", "WMT", "COST"],
+    "Energy":                 ["XOM", "CVX", "COP", "SLB", "EOG"],
+    "Basic Materials":        ["LIN", "APD", "ECL", "NEM", "FCX"],
+    "Real Estate":            ["AMT", "PLD", "CCI", "EQIX", "SPG"],
+    "Utilities":              ["NEE", "DUK", "SO", "D", "AEP"],
+}
+
+
+@app.get("/v1/peers/{symbol}")
+@limiter.limit(settings.rate_limit_default)
+async def get_peers(request: Request, symbol: str) -> dict:
+    """Return sector peer comparison data (PE, market cap, YTD return)."""
+    sym = symbol.upper().strip()
+    loop = asyncio.get_event_loop()
+
+    def _fetch(tickers: list[str]) -> list[dict]:
+        results = []
+        for t in tickers:
+            try:
+                info = yf.Ticker(t).info
+                hist = yf.Ticker(t).history(period="ytd")
+                ytd_return = None
+                if not hist.empty and len(hist) >= 2:
+                    ytd_return = round((hist["Close"].iloc[-1] / hist["Close"].iloc[0] - 1) * 100, 2)
+                results.append({
+                    "symbol":     t,
+                    "name":       info.get("shortName") or info.get("longName") or t,
+                    "price":      info.get("currentPrice") or info.get("regularMarketPrice"),
+                    "market_cap": info.get("marketCap"),
+                    "pe_ratio":   info.get("trailingPE"),
+                    "forward_pe": info.get("forwardPE"),
+                    "ytd_return": ytd_return,
+                    "sector":     info.get("sector"),
+                })
+            except Exception:
+                results.append({"symbol": t, "name": t})
+        return results
+
+    def _get_sector_and_peers() -> tuple[str | None, list[str]]:
+        try:
+            info = yf.Ticker(sym).info
+            sector = info.get("sector")
+            peers = _SECTOR_PEERS.get(sector or "", [])
+            # Ensure the queried symbol is in the list and limit to 5
+            all_tickers = [sym] + [p for p in peers if p != sym]
+            return sector, all_tickers[:5]
+        except Exception:
+            return None, [sym]
+
+    sector, tickers = await loop.run_in_executor(None, _get_sector_and_peers)
+    peers_data = await loop.run_in_executor(None, _fetch, tickers)
+    return {"symbol": sym, "sector": sector, "peers": peers_data}
+
+
 @app.get("/v1/logs/errors")
 @limiter.limit(settings.rate_limit_default)
 async def get_error_logs(

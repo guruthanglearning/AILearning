@@ -246,6 +246,11 @@ class SupervisorVerdict(BaseModel):
     decision_aids: DecisionAids | None = None
     technicals: TechnicalsOutput | None = None
     fundamentals: FundamentalsSnapshot | None = None
+    sentiment_headlines: list[str] = Field(default_factory=list)
+    sentiment_forecast: str | None = None
+    sentiment_score: float | None = None
+    earnings_days_away: int | None = None
+    has_upcoming_earnings: bool = False
 
 
 class AnalysisRunRequest(BaseModel):

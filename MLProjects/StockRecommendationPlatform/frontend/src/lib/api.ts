@@ -10,6 +10,8 @@ import type {
   ErrorLogEntry,
   LiveQuote,
   MarketQuoteRow,
+  PeersResponse,
+  PriceHistoryResponse,
   SseEvent,
   SupervisorVerdict,
   WatchlistCreate,
@@ -318,6 +320,25 @@ export async function getErrorLogs(limit = 200): Promise<ErrorLogEntry[]> {
 export async function clearErrorLogs(): Promise<void> {
   const res = await fetch(`${API_URL}/v1/logs/errors`, { method: "DELETE" });
   if (!res.ok && res.status !== 204) await checkResponse(res);
+}
+
+// ─── Price history & Peers ────────────────────────────────────────────────────
+
+export async function getPriceHistory(
+  symbol: string,
+  period = "3mo"
+): Promise<PriceHistoryResponse> {
+  const res = await fetch(
+    `${API_URL}/v1/price-history/${encodeURIComponent(symbol)}?period=${period}`
+  );
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function getPeers(symbol: string): Promise<PeersResponse> {
+  const res = await fetch(`${API_URL}/v1/peers/${encodeURIComponent(symbol)}`);
+  await checkResponse(res);
+  return res.json();
 }
 
 // ─── Alerts ───────────────────────────────────────────────────────────────────

@@ -251,6 +251,11 @@ class Supervisor:
             decision_aids=decision_aids,
             technicals=tech if tech.status == AgentStatus.complete else None,
             fundamentals=self._fundamentals_snapshot(f),
+            sentiment_headlines=sent.top_headlines if sent.status == AgentStatus.complete else [],
+            sentiment_forecast=sent.forecast_signal if sent.status == AgentStatus.complete else None,
+            sentiment_score=sent.sentiment_score if sent.status == AgentStatus.complete else None,
+            earnings_days_away=risk.earnings_days_away,
+            has_upcoming_earnings=risk.has_upcoming_earnings,
         )
 
         # --- DB hook 3: finalise run record (best-effort) ---
@@ -390,6 +395,11 @@ class Supervisor:
             decision_aids=decision_aids,
             technicals=tech if tech.status == AgentStatus.complete else None,
             fundamentals=self._fundamentals_snapshot(f),
+            sentiment_headlines=sent.top_headlines if sent.status == AgentStatus.complete else [],
+            sentiment_forecast=sent.forecast_signal if sent.status == AgentStatus.complete else None,
+            sentiment_score=sent.sentiment_score if sent.status == AgentStatus.complete else None,
+            earnings_days_away=risk.earnings_days_away,
+            has_upcoming_earnings=risk.has_upcoming_earnings,
         )
 
         try:

@@ -1,24 +1,147 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useRef } from "react";
+import { Suspense, useCallback, useEffect, useRef } from "react";
 
 import { AgentStatusGrid } from "@/components/analysis/AgentStatusGrid";
 import { AnalysisForm } from "@/components/analysis/AnalysisForm";
-import { LivePriceBar } from "@/components/analysis/LivePriceBar";
 import { AnalysisHistory } from "@/components/analysis/AnalysisHistory";
 import { AnalysisLoader } from "@/components/analysis/AnalysisLoader";
 import { DecisionAidsPanel } from "@/components/analysis/DecisionAidsPanel";
+import { EarningsCountdown } from "@/components/analysis/EarningsCountdown";
+import { EntryExitCard } from "@/components/analysis/EntryExitCard";
 import { FundamentalsPanel } from "@/components/analysis/FundamentalsPanel";
+import { LivePriceBar } from "@/components/analysis/LivePriceBar";
 import { OptionsAnalysisPanel } from "@/components/analysis/OptionsAnalysisPanel";
 import { OptionsGuidanceCard } from "@/components/analysis/OptionsGuidanceCard";
 import { OptionsMetricsTable } from "@/components/analysis/OptionsMetricsTable";
+import { PeerComparisonTable } from "@/components/analysis/PeerComparisonTable";
+import { PriceChartPanel } from "@/components/analysis/PriceChartPanel";
 import { PriceForecastPanel } from "@/components/analysis/PriceForecastPanel";
+import { SentimentCard } from "@/components/analysis/SentimentCard";
 import { TradeGuidancePanel } from "@/components/analysis/TradeGuidancePanel";
 import { VerdictCard } from "@/components/analysis/VerdictCard";
 import { ErrorMessage } from "@/components/ui/ErrorMessage";
 import { useAnalysis } from "@/contexts/AnalysisContext";
-import type { AnalysisRunRequest } from "@/types/api";
+import type { AnalysisRunRequest, SupervisorVerdict } from "@/types/api";
+
+function buildExportText(symbol: string, verdict: SupervisorVerdict): string {
+  const lines: string[] = [
+    `=== Stock Analysis: ${symbol} ===`,
+    `Generated: ${new Date().toLocaleString()}`,
+    "",
+    `Recommendation: ${verdict.instrument_recommendation.toUpperCase()}`,
+    `Confidence: ${verdict.confidence_note}`,
+    "",
+  ];
+
+  if (verdict.fundamentals) {
+    const f = verdict.fundamentals;
+    lines.push("--- Fundamentals ---");
+    if (f.company_name) lines.push(`Company: ${f.company_name}`);
+    if (f.sector)       lines.push(`Sector: ${f.sector}`);
+    if (f.market_cap)   lines.push(`Market Cap: $${(f.market_cap / 1e9).toFixed(1)}B`);
+    if (f.pe_ratio)     lines.push(`Trailing P/E: ${f.pe_ratio.toFixed(1)}×`);
+    if (f.forward_pe)   lines.push(`Forward P/E: ${f.forward_pe.toFixed(1)}×`);
+    if (f.revenue_growth) lines.push(`Revenue Growth: ${(f.revenue_growth * 100).toFixed(1)}%`);
+    lines.push("");
+  }
+
+  if (verdict.technicals) {
+    const t = verdict.technicals;
+    lines.push("--- Technicals ---");
+    if (t.trend_hint)  lines.push(`Trend: ${t.trend_hint}`);
+    if (t.rsi_14)      lines.push(`RSI 14: ${t.rsi_14.toFixed(1)}`);
+    if (t.sma_20)      lines.push(`SMA 20: $${t.sma_20.toFixed(2)}`);
+    if (t.sma_50)      lines.push(`SMA 50: $${t.sma_50.toFixed(2)}`);
+    if (t.atr_pct_14)  lines.push(`ATR 14d: ${t.atr_pct_14.toFixed(2)}%`);
+    lines.push("");
+  }
+
+  if (verdict.sentiment_score != null || verdict.sentiment_forecast) {
+    lines.push("--- Sentiment ---");
+    if (verdict.sentiment_forecast) lines.push(`Signal: ${verdict.sentiment_forecast}`);
+    if (verdict.sentiment_score != null) lines.push(`Score: ${verdict.sentiment_score.toFixed(3)}`);
+    if (verdict.sentiment_headlines.length > 0) {
+      lines.push("Top Headlines:");
+      verdict.sentiment_headlines.forEach((h, i) => lines.push(`  ${i + 1}. ${h}`));
+    }
+    lines.push("");
+  }
+
+  if (verdict.has_upcoming_earnings && verdict.earnings_days_away != null) {
+    lines.push(`Earnings: ${verdict.earnings_days_away} days away`);
+    lines.push("");
+  }
+
+  if (verdict.decision_aids) {
+    const da = verdict.decision_aids;
+    lines.push("--- Decision Aids ---");
+    lines.push(`Summary: ${da.summary_headline}`);
+    lines.push(`Stock vs Options Score: ${da.stock_vs_options_score.toFixed(2)}`);
+    if (da.user_questions.length > 0) {
+      lines.push("Reflective Questions:");
+      da.user_questions.forEach((q, i) => {
+        lines.push(`  Q${i + 1}: ${q}`);
+        if (da.user_answers[i]) lines.push(`  A${i + 1}: ${da.user_answers[i]}`);
+      });
+    }
+    lines.push("");
+  }
+
+  lines.push("--- Agent Contributions ---");
+  verdict.agent_contributions.forEach(a => {
+    lines.push(`[${a.status.toUpperCase()}] ${a.agent_name}: ${a.headline}`);
+  });
+
+  lines.push("");
+  lines.push("Disclaimer: This analysis is for informational purposes only and is not investment advice.");
+
+  return lines.join("\n");
+}
+
+function RerunButton({ onRerun }: { onRerun: () => void }) {
+  return (
+    <button
+      onClick={onRerun}
+      className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-1.5 rounded-md transition-colors"
+    >
+      <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M1.5 8a6.5 6.5 0 1 0 2.2-4.9" strokeLinecap="round" />
+        <polyline points="1.5,3 1.5,8 6.5,8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      Re-run Analysis
+    </button>
+  );
+}
+
+function ExportButton({ symbol, verdict }: { symbol: string; verdict: SupervisorVerdict }) {
+  function handleExport() {
+    const text = buildExportText(symbol, verdict);
+    navigator.clipboard.writeText(text).then(() => {
+      // Brief visual feedback via title flash — no toast needed
+    }).catch(() => {
+      // Fallback: open in new tab as plain text
+      const blob = new Blob([text], { type: "text/plain" });
+      const url  = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+    });
+  }
+
+  return (
+    <button
+      onClick={handleExport}
+      title="Copy analysis summary to clipboard"
+      className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-1.5 rounded-md transition-colors"
+    >
+      <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+        <rect x="5" y="5" width="9" height="9" rx="1" />
+        <path d="M11 5V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h2" strokeLinecap="round" />
+      </svg>
+      Copy Summary
+    </button>
+  );
+}
 
 function HomePage() {
   const searchParams = useSearchParams();
@@ -26,7 +149,6 @@ function HomePage() {
   const { req, verdict, partialContributions, isFetching, error, startedAt, submit } = useAnalysis();
   const autoSubmitted = useRef(false);
 
-  // Auto-submit when navigated from watchlist
   useEffect(() => {
     if (autoSymbol && !autoSubmitted.current) {
       autoSubmitted.current = true;
@@ -38,7 +160,10 @@ function HomePage() {
     submit(newReq);
   }
 
-  // Which contributions to show in the agent grid
+  const handleRerun = useCallback(() => {
+    if (req) submit(req);
+  }, [req, submit]);
+
   const gridContributions = verdict?.agent_contributions ?? partialContributions;
   const showGrid = gridContributions.length > 0;
 
@@ -58,7 +183,6 @@ function HomePage() {
 
       {req?.symbol && <LivePriceBar symbol={req.symbol} />}
 
-      {/* Live agent grid: visible as each agent reports in, pending cards fill the rest */}
       {showGrid && (
         <AgentStatusGrid
           contributions={gridContributions}
@@ -68,14 +192,39 @@ function HomePage() {
 
       {verdict && !isFetching && (
         <>
-          <VerdictCard verdict={verdict} symbol={req?.symbol ?? ""} />
+          {/* Earnings alert — shown at the top so it's impossible to miss */}
+          {verdict.has_upcoming_earnings && (
+            <EarningsCountdown verdict={verdict} />
+          )}
+
+          {/* Verdict + action bar */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-end gap-2">
+              <RerunButton onRerun={handleRerun} />
+              <ExportButton symbol={req?.symbol ?? ""} verdict={verdict} />
+            </div>
+            <VerdictCard verdict={verdict} symbol={req?.symbol ?? ""} />
+          </div>
+
+          {/* Price chart */}
+          {req?.symbol && <PriceChartPanel symbol={req.symbol} />}
 
           {verdict.fundamentals && (
             <FundamentalsPanel fund={verdict.fundamentals} />
           )}
 
+          {/* Sentiment */}
+          {(verdict.sentiment_score != null || verdict.sentiment_forecast) && (
+            <SentimentCard verdict={verdict} />
+          )}
+
           {verdict.technicals && (
             <TradeGuidancePanel verdict={verdict} />
+          )}
+
+          {/* Entry / Exit levels */}
+          {verdict.technicals && (
+            <EntryExitCard verdict={verdict} />
           )}
 
           {verdict.technicals && (
@@ -104,6 +253,9 @@ function HomePage() {
               />
             </div>
           )}
+
+          {/* Peer comparison */}
+          {req?.symbol && <PeerComparisonTable symbol={req.symbol} />}
 
           {req?.symbol && <AnalysisHistory symbol={req.symbol} />}
         </>

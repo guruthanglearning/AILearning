@@ -110,7 +110,7 @@ class PolygonWsManager:
                         await self._dispatch(raw)
 
             except Exception as exc:
-                log.warning("polygon_ws_disconnected", error=str(exc))
+                log.warning("polygon_ws_disconnected: %s", exc)
                 self._ws = None
 
             await asyncio.sleep(_RECONNECT_DELAY_S)
@@ -127,7 +127,7 @@ class PolygonWsManager:
             sym     = ev.get("sym", "")
 
             if ev_type == "status":
-                log.info("polygon_ws_status", message=ev.get("message"), status=ev.get("status"))
+                log.info("polygon_ws_status: %s (%s)", ev.get("message"), ev.get("status"))
                 continue
 
             if ev_type == "A" and sym:

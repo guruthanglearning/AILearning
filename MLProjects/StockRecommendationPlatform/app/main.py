@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime
+from typing import Any
 
 import structlog
 import yfinance as yf
@@ -54,6 +56,22 @@ from app.supervisor import Supervisor
 from app.universe import COMPOSITION_AS_OF, TOP_10, TOP_100, get_sp500
 
 log = structlog.get_logger(__name__)
+
+# ── Simple TTL cache for expensive yfinance lookups ───────────────────────────
+_TTL_CACHE: dict[str, tuple[float, Any]] = {}
+_CACHE_TTL_SECS = 300  # 5 minutes
+
+
+def _cache_get(key: str) -> Any | None:
+    entry = _TTL_CACHE.get(key)
+    if entry and time.monotonic() - entry[0] < _CACHE_TTL_SECS:
+        return entry[1]
+    _TTL_CACHE.pop(key, None)
+    return None
+
+
+def _cache_set(key: str, value: Any) -> None:
+    _TTL_CACHE[key] = (time.monotonic(), value)
 
 
 def _parse_cors_origins(raw: str) -> list[str]:
@@ -430,6 +448,11 @@ async def get_price_history(
 ) -> dict:
     """OHLCV price history for a symbol, used by the mini price chart."""
     sym = symbol.upper().strip()
+    cache_key = f"price_history:{sym}:{period}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     provider = build_provider()
     try:
         hist = await provider.get_price_history(sym, period)
@@ -449,7 +472,9 @@ async def get_price_history(
             "close": round(float(row["Close"]), 2) if "Close" in hist.columns else None,
             "volume": int(row["Volume"])           if "Volume" in hist.columns else None,
         })
-    return {"symbol": sym, "period": period, "data": records}
+    result = {"symbol": sym, "period": period, "data": records}
+    _cache_set(cache_key, result)
+    return result
 
 
 # Hardcoded sector → representative peer tickers (top liquid names per sector)
@@ -473,45 +498,51 @@ _SECTOR_PEERS: dict[str, list[str]] = {
 async def get_peers(request: Request, symbol: str) -> dict:
     """Return sector peer comparison data (PE, market cap, YTD return)."""
     sym = symbol.upper().strip()
+    cache_key = f"peers:{sym}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     loop = asyncio.get_event_loop()
 
-    def _fetch(tickers: list[str]) -> list[dict]:
-        results = []
-        for t in tickers:
-            try:
-                info = yf.Ticker(t).info
-                hist = yf.Ticker(t).history(period="ytd")
-                ytd_return = None
-                if not hist.empty and len(hist) >= 2:
-                    ytd_return = round((hist["Close"].iloc[-1] / hist["Close"].iloc[0] - 1) * 100, 2)
-                results.append({
-                    "symbol":     t,
-                    "name":       info.get("shortName") or info.get("longName") or t,
-                    "price":      info.get("currentPrice") or info.get("regularMarketPrice"),
-                    "market_cap": info.get("marketCap"),
-                    "pe_ratio":   info.get("trailingPE"),
-                    "forward_pe": info.get("forwardPE"),
-                    "ytd_return": ytd_return,
-                    "sector":     info.get("sector"),
-                })
-            except Exception:
-                results.append({"symbol": t, "name": t})
-        return results
+    def _fetch_one(t: str) -> dict:
+        try:
+            ticker = yf.Ticker(t)
+            info = ticker.info
+            hist = ticker.history(period="ytd")
+            ytd_return = None
+            if not hist.empty and len(hist) >= 2:
+                ytd_return = round((hist["Close"].iloc[-1] / hist["Close"].iloc[0] - 1) * 100, 2)
+            return {
+                "symbol":     t,
+                "name":       info.get("shortName") or info.get("longName") or t,
+                "price":      info.get("currentPrice") or info.get("regularMarketPrice"),
+                "market_cap": info.get("marketCap"),
+                "pe_ratio":   info.get("trailingPE"),
+                "forward_pe": info.get("forwardPE"),
+                "ytd_return": ytd_return,
+                "sector":     info.get("sector"),
+            }
+        except Exception:
+            return {"symbol": t, "name": t}
 
     def _get_sector_and_peers() -> tuple[str | None, list[str]]:
         try:
             info = yf.Ticker(sym).info
             sector = info.get("sector")
             peers = _SECTOR_PEERS.get(sector or "", [])
-            # Ensure the queried symbol is in the list and limit to 5
             all_tickers = [sym] + [p for p in peers if p != sym]
             return sector, all_tickers[:5]
         except Exception:
             return None, [sym]
 
     sector, tickers = await loop.run_in_executor(None, _get_sector_and_peers)
-    peers_data = await loop.run_in_executor(None, _fetch, tickers)
-    return {"symbol": sym, "sector": sector, "peers": peers_data}
+    # Fetch all tickers in parallel instead of sequentially
+    tasks = [loop.run_in_executor(None, _fetch_one, t) for t in tickers]
+    peers_data = list(await asyncio.gather(*tasks))
+    result = {"symbol": sym, "sector": sector, "peers": peers_data}
+    _cache_set(cache_key, result)
+    return result
 
 
 @app.get("/v1/logs/errors")

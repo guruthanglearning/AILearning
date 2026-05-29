@@ -1,6 +1,9 @@
 "use client";
 
-import type { OptionsMetricRow, SupervisorVerdict, TechnicalsSnapshot } from "@/types/api";
+import { useEffect, useState } from "react";
+
+import { getPriceHistory } from "@/lib/api";
+import type { OptionsMetricRow, PriceBar, SupervisorVerdict, TechnicalsSnapshot } from "@/types/api";
 
 // ── Option Play types ─────────────────────────────────────────────────────────
 
@@ -412,6 +415,83 @@ function evalOptionsRow(row: OptionsMetricRow): IndicatorSignal[] {
   return signals;
 }
 
+// ── Sector ETF ────────────────────────────────────────────────────────────────
+
+const SECTOR_ETF: Record<string, string> = {
+  "Technology":              "XLK",
+  "Consumer Cyclical":       "XLY",
+  "Consumer Defensive":      "XLP",
+  "Consumer Staples":        "XLP",
+  "Healthcare":              "XLV",
+  "Health Care":             "XLV",
+  "Financial Services":      "XLF",
+  "Financials":              "XLF",
+  "Energy":                  "XLE",
+  "Utilities":               "XLU",
+  "Real Estate":             "XLRE",
+  "Basic Materials":         "XLB",
+  "Materials":               "XLB",
+  "Industrials":             "XLI",
+  "Communication Services":  "XLC",
+  "Telecommunications":      "XLC",
+};
+
+function computeEtfPerf(bars: PriceBar[]): { pctChange: number; trend: "bullish" | "bearish" | "flat" } | null {
+  const closes = bars.map(b => b.close).filter((c): c is number => c != null);
+  if (closes.length < 5) return null;
+  const recent = closes.slice(-20);
+  const first = recent[0], last = recent[recent.length - 1];
+  const pctChange = ((last - first) / first) * 100;
+  const trend = pctChange > 1 ? "bullish" : pctChange < -1 ? "bearish" : "flat";
+  return { pctChange, trend };
+}
+
+function evalSectorEtf(
+  etfTicker: string,
+  etfPerf: { pctChange: number; trend: "bullish" | "bearish" | "flat" },
+  stockTrend: string | null,
+): IndicatorSignal[] {
+  const sign = etfPerf.pctChange >= 0 ? "+" : "";
+  const pctStr = `${etfTicker} ${sign}${etfPerf.pctChange.toFixed(1)}%`;
+
+  const etfSide: Side =
+    etfPerf.trend === "bullish" ? "stock" :
+    etfPerf.trend === "bearish" ? "options" : "neutral";
+
+  const etfNote =
+    etfPerf.trend === "bullish" ? `${etfTicker} sector trending up over 20 days — broad sector tailwind` :
+    etfPerf.trend === "bearish" ? `${etfTicker} sector trending down — sector headwind; prefer defined risk` :
+    `${etfTicker} sector is flat — no strong macro tailwind or headwind`;
+
+  let alignSide: Side = "neutral";
+  let alignNote = "Insufficient trend data to compare stock vs sector";
+
+  if (stockTrend === "bullish" && etfPerf.trend === "bullish") {
+    alignSide = "stock";
+    alignNote = `Stock trend aligns with bullish ${etfTicker} sector — tailwind confirms long thesis`;
+  } else if (stockTrend === "bullish" && etfPerf.trend === "bearish") {
+    alignSide = "neutral";
+    alignNote = `Stock outperforming a declining ${etfTicker} sector — rotation play; monitor sustainability`;
+  } else if (stockTrend === "bullish" && etfPerf.trend === "flat") {
+    alignSide = "stock";
+    alignNote = `Stock bullish in a flat ${etfTicker} sector — idiosyncratic strength favors stock`;
+  } else if (stockTrend === "bearish" && etfPerf.trend === "bullish") {
+    alignSide = "options";
+    alignNote = `Stock lagging a strong ${etfTicker} sector — relative weakness; options hedge preferred`;
+  } else if (stockTrend === "bearish" && etfPerf.trend === "bearish") {
+    alignSide = "options";
+    alignNote = `Stock and sector both declining — sector headwinds amplify downside; use defined risk`;
+  } else if (stockTrend === "bearish") {
+    alignSide = "options";
+    alignNote = `Stock bearish vs flat ${etfTicker} sector — confirm before entry; options hedge viable`;
+  }
+
+  return [
+    { category: "Sector ETF", name: `${etfTicker} 20-day Trend`, value: pctStr, side: etfSide, note: etfNote },
+    { category: "Sector ETF", name: "Stock vs Sector", value: stockTrend ?? "—", side: alignSide, note: alignNote },
+  ];
+}
+
 // ── Score aggregation ─────────────────────────────────────────────────────────
 
 interface VerdictResult {
@@ -672,6 +752,19 @@ export function TradeGuidancePanel({ verdict }: { verdict: SupervisorVerdict }) 
   const rows = verdict.decision_aids?.options_metrics_table ?? [];
   const nonSummaryRows = rows.filter(r => r.template_id !== "underlying_summary");
 
+  // Sector ETF: fetch price history for the mapped ETF ticker
+  const sector    = verdict.fundamentals?.sector ?? null;
+  const etfTicker = sector ? (SECTOR_ETF[sector] ?? null) : null;
+  const [etfBars, setEtfBars] = useState<PriceBar[] | null>(null);
+
+  useEffect(() => {
+    if (!etfTicker) return;
+    setEtfBars(null);
+    getPriceHistory(etfTicker, "1mo")
+      .then(r => setEtfBars(r.data))
+      .catch(() => setEtfBars([]));
+  }, [etfTicker]);
+
   if (!tech) return null;
 
   const optionPlay = computeOptionPlay(verdict);
@@ -687,6 +780,12 @@ export function TradeGuidancePanel({ verdict }: { verdict: SupervisorVerdict }) 
     ...eval52w(tech),
     ...nonSummaryRows.flatMap(evalOptionsRow),
   ];
+
+  // Append sector ETF signals when data is ready
+  const etfPerf = etfBars && etfBars.length > 0 ? computeEtfPerf(etfBars) : null;
+  if (etfTicker && etfPerf) {
+    signals.push(...evalSectorEtf(etfTicker, etfPerf, tech.trend_hint));
+  }
 
   const stockCount   = signals.filter(s => s.side === "stock").length;
   const optionsCount = signals.filter(s => s.side === "options").length;
@@ -751,8 +850,11 @@ export function TradeGuidancePanel({ verdict }: { verdict: SupervisorVerdict }) 
         const catSignals = signals.filter(s => s.category === cat);
         return (
           <div key={cat} className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
-            <div className="px-3 py-2 bg-gray-800/60 border-b border-gray-800">
+            <div className="px-3 py-2 bg-gray-800/60 border-b border-gray-800 flex items-center gap-2">
               <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{cat}</span>
+              {cat === "Sector ETF" && etfTicker && (
+                <span className="text-xs text-gray-600 font-mono">({etfTicker})</span>
+              )}
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
@@ -772,6 +874,17 @@ export function TradeGuidancePanel({ verdict }: { verdict: SupervisorVerdict }) 
           </div>
         );
       })}
+
+      {/* Sector ETF loading state — shown only while fetch is in-flight */}
+      {etfTicker && etfBars === null && (
+        <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+          <div className="px-3 py-2 bg-gray-800/60 border-b border-gray-800 flex items-center gap-2">
+            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Sector ETF</span>
+            <span className="text-xs text-gray-600 font-mono">({etfTicker})</span>
+          </div>
+          <p className="px-3 py-3 text-xs text-gray-500 italic">Loading {etfTicker} sector data…</p>
+        </div>
+      )}
     </div>
   );
 }

@@ -173,10 +173,15 @@ export function TechnicalIndicatorsPanel({ tech }: { tech: TechnicalsSnapshot })
         {/* OBV */}
         <Group title="Volume">
           <Row
-            label="OBV"
+            label="OBV (cumulative)"
             value={fmtObv(tech.obv)}
-            color={tech.obv == null ? "text-gray-500" : tech.obv >= 0 ? "text-green-400" : "text-red-400"}
-            note={tech.obv != null ? (tech.obv >= 0 ? "buying pressure" : "selling pressure") : undefined}
+            color="text-gray-300"
+          />
+          <Row
+            label="OBV 20d Trend"
+            value={tech.obv_slope == null ? "—" : tech.obv_slope > 0 ? "Rising ↑" : tech.obv_slope < 0 ? "Falling ↓" : "Flat →"}
+            color={tech.obv_slope == null ? "text-gray-500" : tech.obv_slope > 0 ? "text-green-400" : tech.obv_slope < 0 ? "text-red-400" : "text-gray-400"}
+            note={tech.obv_slope != null ? (tech.obv_slope > 0 ? "accumulation" : tech.obv_slope < 0 ? "distribution" : "neutral") : undefined}
           />
         </Group>
 

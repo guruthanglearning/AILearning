@@ -137,6 +137,7 @@ export interface TechnicalsSnapshot {
   macd_6_13_hist: number | null;
   // Volume
   obv: number | null;
+  obv_slope: number | null; // 20-day normalized slope: positive = accumulation, negative = distribution
   // Volatility
   atr_pct_14: number | null;
   atr_pct_50: number | null;

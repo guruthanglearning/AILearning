@@ -208,10 +208,10 @@ function evalEma20(t: TechnicalsSnapshot): IndicatorSignal {
   const ema = t.ema_20; const sma = t.sma_20;
   let side: Side = "neutral"; let note = "Insufficient data";
   if (ema != null && sma != null) {
-    if (sma > ema) { side = "stock";   note = "Price above EMA 20 — short-term uptrend"; }
-    else           { side = "options"; note = "Price below EMA 20 — short-term weakness"; }
+    if (sma > ema) { side = "stock";   note = "SMA 20 above EMA 20 — recent closes above the rolling mean; short-term uptrend"; }
+    else           { side = "options"; note = "SMA 20 below EMA 20 — recent closes below the rolling mean; short-term weakness"; }
   }
-  return { category: "Moving Averages", name: "EMA 20", value: fmtD(ema), side, note };
+  return { category: "Moving Averages", name: "SMA 20 vs EMA 20", value: fmtD(ema), side, note };
 }
 
 function evalEma200(t: TechnicalsSnapshot): IndicatorSignal {
@@ -296,16 +296,16 @@ function evalMacd(t: TechnicalsSnapshot): IndicatorSignal[] {
   const bullish = line != null && sig != null && line > sig;
   const cross: Side = hist != null ? (hist >= 0 ? "stock" : "options") : "neutral";
   const crossNote = hist != null
-    ? (hist >= 0 ? "Bullish crossover — momentum building" : "Bearish crossover — momentum fading")
+    ? (hist >= 0 ? "Histogram positive — bullish momentum building" : "Histogram negative — bearish momentum")
     : "Insufficient data";
   return [
     {
-      category: "MACD (6/13/9)", name: "MACD 6 (fast line)",
+      category: "MACD (6/13/9)", name: "MACD Line (6−13)",
       value: fmt(line, 4), side: bullish ? "stock" : "options",
-      note: bullish ? "Fast EMA above slow — upward momentum" : "Fast EMA below slow — downward pressure",
+      note: bullish ? "MACD line above signal line — upward momentum" : "MACD line below signal line — downward pressure",
     },
     {
-      category: "MACD (6/13/9)", name: "MACD 13 (slow line)",
+      category: "MACD (6/13/9)", name: "Signal Line (9-EMA)",
       value: fmt(sig, 4), side: cross,
       note: crossNote,
     },
@@ -313,13 +313,15 @@ function evalMacd(t: TechnicalsSnapshot): IndicatorSignal[] {
 }
 
 function evalObv(t: TechnicalsSnapshot): IndicatorSignal {
-  const v = t.obv;
+  const slope = t.obv_slope;
   let side: Side = "neutral"; let note = "—";
-  if (v != null) {
-    if (v > 0) { side = "stock";   note = "Positive OBV — net buying pressure supports stock"; }
-    else       { side = "options"; note = "Negative OBV — net selling pressure; hedge or wait"; }
+  let display = "—";
+  if (slope != null) {
+    if (slope > 0)       { side = "stock";   note = "OBV rising over 20 days — net accumulation; buying pressure supports stock"; display = "Rising"; }
+    else if (slope < 0)  { side = "options"; note = "OBV falling over 20 days — net distribution; selling pressure; hedge or wait"; display = "Falling"; }
+    else                 { side = "neutral"; note = "OBV flat — no directional volume bias over 20 days"; display = "Flat"; }
   }
-  return { category: "Volume", name: "OBV", value: fmtObv(v), side, note };
+  return { category: "Volume", name: "OBV 20d Trend", value: display, side, note };
 }
 
 function evalAtr14(t: TechnicalsSnapshot): IndicatorSignal {

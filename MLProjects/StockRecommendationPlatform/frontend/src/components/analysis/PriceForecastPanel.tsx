@@ -32,6 +32,8 @@ interface ForecastResult {
 // ── Model ─────────────────────────────────────────────────────────────────────
 
 function extractSentimentScore(verdict: SupervisorVerdict): number | null {
+  // Prefer the direct field; fall back to parsing the agent headline
+  if (verdict.sentiment_score != null) return verdict.sentiment_score;
   const agent = verdict.agent_contributions.find(a =>
     a.agent_name.toLowerCase().includes("sentiment")
   );
@@ -213,6 +215,17 @@ export function PriceForecastPanel({ verdict }: { verdict: SupervisorVerdict }) 
             {dataQuality === "partial" ? "Partial signals — lower confidence" : "Insufficient signals"}
           </span>
         )}
+      </div>
+
+      {/* Prominent model disclaimer */}
+      <div className="flex items-start gap-2 bg-amber-900/20 border border-amber-700/50 rounded-lg px-4 py-3">
+        <span className="text-amber-400 font-bold shrink-0 mt-0.5">⚠</span>
+        <p className="text-xs text-amber-300 leading-relaxed">
+          <strong>Illustration only — do not use for trade entries, exits, or stops.</strong>{" "}
+          Price projections use fixed momentum coefficients that are not statistically calibrated.
+          The dollar targets shown are directional bias visualisations, not predictions.
+          Actual prices can differ significantly within the confidence range.
+        </p>
       </div>
 
       {/* Summary bar */}

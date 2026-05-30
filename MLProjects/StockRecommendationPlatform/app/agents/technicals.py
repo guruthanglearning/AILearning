@@ -30,8 +30,9 @@ def _rsi(series: pd.Series, period: int) -> float | None:
     delta = series.diff()
     gain = delta.where(delta > 0, 0.0)
     loss = (-delta).where(delta < 0, 0.0)
-    avg_gain = gain.rolling(period).mean()
-    avg_loss = loss.rolling(period).mean()
+    # Wilder's smoothing (alpha = 1/period) — matches TradingView/Bloomberg standard
+    avg_gain = gain.ewm(alpha=1 / period, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1 / period, adjust=False).mean()
     rs = avg_gain / avg_loss.replace(0, np.nan)
     rsi = 100 - (100 / (1 + rs))
     v = rsi.iloc[-1]
@@ -52,16 +53,29 @@ def _macd(series: pd.Series, fast: int, slow: int, signal: int = 9) -> tuple[flo
     return _f(line), _f(sig), _f(hist)
 
 
-def _obv(hist: pd.DataFrame) -> float | None:
+def _obv(hist: pd.DataFrame) -> tuple[float | None, float | None]:
+    """Return (obv_last, obv_slope_20d).
+
+    obv_slope is normalized by average daily volume so it is scale-independent.
+    Positive = net accumulation over the last 20 sessions; negative = distribution.
+    """
     if "Volume" not in hist.columns or hist.empty:
-        return None
+        return None, None
     close = hist["Close"]
     volume = hist["Volume"]
     direction = np.sign(close.diff())
     direction.iloc[0] = 0
-    obv = (direction * volume).cumsum()
-    v = obv.iloc[-1]
-    return float(v) if pd.notna(v) else None
+    obv_series = (direction * volume).cumsum()
+    last = obv_series.iloc[-1]
+    obv_last = float(last) if pd.notna(last) else None
+    obv_slope = None
+    if len(obv_series) >= 21:
+        prior = float(obv_series.iloc[-21])
+        recent = float(obv_series.iloc[-1])
+        avg_vol = float(volume.tail(20).mean())
+        if avg_vol > 0:
+            obv_slope = (recent - prior) / avg_vol
+    return obv_last, obv_slope
 
 
 def _atr_pct(hist: pd.DataFrame, period: int) -> float | None:
@@ -70,7 +84,8 @@ def _atr_pct(hist: pd.DataFrame, period: int) -> float | None:
     high, low, close = hist["High"], hist["Low"], hist["Close"]
     prev = close.shift(1)
     tr = pd.concat([(high - low), (high - prev).abs(), (low - prev).abs()], axis=1).max(axis=1)
-    atr = tr.rolling(period).mean().iloc[-1]
+    # Wilder's smoothing (alpha = 1/period) — matches standard ATR definition
+    atr = tr.ewm(alpha=1 / period, adjust=False).mean().iloc[-1]
     spot = close.iloc[-1]
     if pd.notna(atr) and spot > 0:
         return float(atr / spot * 100)
@@ -121,7 +136,7 @@ class TechnicalsAgent(BaseAgent[TechnicalsOutput]):
 
             macd_line, macd_sig, macd_hist = _macd(close, fast=6, slow=13, signal=9)
 
-            obv = _obv(hist)
+            obv, obv_slope = _obv(hist)
 
             atr14 = _atr_pct(hist, 14)
             atr50 = _atr_pct(hist, 50)
@@ -129,10 +144,11 @@ class TechnicalsAgent(BaseAgent[TechnicalsOutput]):
             w52h, w52l = _52w(hist)
 
             # Trend: SMA20 vs SMA50 + RSI14 primary signal
-            if sma20 and sma50 and (rsi14 or 50):
-                if sma20 > sma50 and (rsi14 or 50) > 50:
+            rsi14_val = rsi14 if rsi14 is not None else 50
+            if sma20 is not None and sma50 is not None:
+                if sma20 > sma50 and rsi14_val > 50:
                     trend = "bullish"
-                elif sma20 < sma50 and (rsi14 or 50) < 50:
+                elif sma20 < sma50 and rsi14_val < 50:
                     trend = "bearish"
                 else:
                     trend = "mixed"
@@ -155,6 +171,7 @@ class TechnicalsAgent(BaseAgent[TechnicalsOutput]):
                 macd_6_13_signal=macd_sig,
                 macd_6_13_hist=macd_hist,
                 obv=obv,
+                obv_slope=obv_slope,
                 atr_pct_14=atr14,
                 atr_pct_50=atr50,
                 week_52_high=w52h,

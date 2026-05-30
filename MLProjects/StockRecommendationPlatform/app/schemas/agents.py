@@ -62,6 +62,7 @@ class TechnicalsOutput(AgentResultBase):
     macd_6_13_hist: float | None = None
     # Volume
     obv: float | None = None
+    obv_slope: float | None = None  # 20-day normalized slope: positive = accumulation, negative = distribution
     # Volatility
     atr_pct_14: float | None = None
     atr_pct_50: float | None = None

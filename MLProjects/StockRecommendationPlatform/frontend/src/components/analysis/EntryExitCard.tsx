@@ -75,6 +75,8 @@ export function EntryExitCard({ verdict }: { verdict: SupervisorVerdict }) {
   const t1Pct     = ((t1 - spot) / spot) * 100;
   const t2Pct     = ((t2 - spot) / spot) * 100;
 
+  const isExtended = spot > entryHigh * 1.015; // price is >1.5% above entry zone top
+
   const zones: ZoneRow[] = [
     {
       label: "Entry Zone",
@@ -124,6 +126,16 @@ export function EntryExitCard({ verdict }: { verdict: SupervisorVerdict }) {
         Levels derived from price-chart technicals (SMA, ATR, 52-week range) — relevant when trading the stock directly.
         For options positions, refer to the <span className="text-gray-400">Strike Zone</span> and <span className="text-gray-400">Options Play Recommendation</span> sections above.
       </p>
+
+      {isExtended && (
+        <div className="flex items-start gap-2 bg-amber-900/20 border border-amber-800/40 rounded-lg px-3 py-2">
+          <span className="text-amber-400 text-xs shrink-0 mt-0.5">→</span>
+          <p className="text-xs text-amber-300 leading-relaxed">
+            Current price is extended above the entry zone. Either wait for a pullback to SMA 20, or if entering now,
+            set your stop loss relative to current price (not the entry zone) and adjust R:R accordingly.
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {zones.map(z => <ZoneCard key={z.label} {...z} />)}

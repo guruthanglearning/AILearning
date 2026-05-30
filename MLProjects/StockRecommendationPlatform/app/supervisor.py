@@ -239,7 +239,8 @@ class Supervisor:
         )
 
         verdict, options_guidance, note = self._merge(
-            m, tech, opt, risk, decision_aids.stock_vs_options_score
+            m, tech, opt, risk, decision_aids.stock_vs_options_score,
+            vol_regime=decision_aids.volatility.regime if decision_aids.volatility else "unknown",
         )
 
         result = SupervisorVerdict(
@@ -384,7 +385,10 @@ class Supervisor:
             ml_forecast_signal=sent.forecast_signal,  # type: ignore[attr-defined]
         )
 
-        verdict, options_guidance, note = self._merge(m, tech, opt, risk, decision_aids.stock_vs_options_score)
+        verdict, options_guidance, note = self._merge(
+            m, tech, opt, risk, decision_aids.stock_vs_options_score,
+            vol_regime=decision_aids.volatility.regime if decision_aids.volatility else "unknown",
+        )
 
         result = SupervisorVerdict(
             instrument_recommendation=verdict,
@@ -432,7 +436,7 @@ class Supervisor:
             revenue_growth=f.revenue_growth,
         )
 
-    def _merge(self, m, tech, opt, risk, stock_vs_opt_score: float):
+    def _merge(self, m, tech, opt, risk, stock_vs_opt_score: float, vol_regime: str = "unknown"):
         if m.status == AgentStatus.failed or m.last_price is None:
             return (
                 InstrumentRecommendation.insufficient_data,
@@ -456,7 +460,10 @@ class Supervisor:
             )
 
         options_ok = opt.status != AgentStatus.failed and opt.atm_iv is not None
-        iv_rich = opt.atm_iv and opt.atm_iv > 0.35
+        # Use IV/HV regime from decision_aids (ratio > 1.25); fallback only for extremely high absolute IV (>60%)
+        iv_rich = vol_regime == "iv_rich" or (
+            vol_regime in ("unknown", "iv_only") and opt.atm_iv and opt.atm_iv > 0.60
+        )
 
         if not options_ok:
             og = None
@@ -466,7 +473,7 @@ class Supervisor:
                 note = "Options data missing or weak; stock is the default actionable lane."
             return InstrumentRecommendation.stock, og, note
 
-        # IV-rich + not immediate earnings -> credit-style options umbrella
+        # IV elevated vs historical vol + not immediate earnings -> credit-style options umbrella
         if iv_rich and not risk.has_upcoming_earnings and (tech.trend_hint or "") != "bearish":
             og = OptionsGuidance(
                 strategy_family="premium_selling_or_covered_call",

@@ -192,6 +192,7 @@ class VolatilityContext(BaseModel):
     regime: str
     atm_iv: float | None = None
     hv_20d_annualized: float | None = None
+    iv_rank_52w: float | None = None  # 0–100: where current ATM IV sits vs 52W rolling-HV range
     iv_vs_hv_note: str | None = None
     implied_move_1d_pct: float | None = None
 

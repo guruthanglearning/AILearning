@@ -96,6 +96,7 @@ export interface VolatilityContext {
   regime: string;
   atm_iv: number | null;
   hv_20d_annualized: number | null;
+  iv_rank_52w: number | null; // 0–100: where ATM IV sits vs 52W rolling-HV range
   iv_vs_hv_note: string | null;
   implied_move_1d_pct: number | null;
 }

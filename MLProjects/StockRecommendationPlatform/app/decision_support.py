@@ -42,6 +42,30 @@ async def _hv_20d(symbol: str, provider: MarketDataProvider) -> float | None:
         return None
 
 
+async def _iv_rank_52w(symbol: str, atm_iv: float, provider: MarketDataProvider) -> float | None:
+    """Rank current ATM IV within the 52-week rolling-HV range (0 = cheapest, 100 = richest).
+
+    Uses rolling 20-day annualised HV computed from 1-year price history as the historical
+    IV proxy — the best approximation available without a dedicated historical-IV data feed.
+    """
+    try:
+        h = await provider.get_price_history(symbol, "1y")
+        if h is None or h.empty or len(h) < 60:
+            return None
+        lr = np.log(h["Close"]).diff().dropna()
+        rolling_hv = lr.rolling(20).std().dropna() * math.sqrt(252)
+        if len(rolling_hv) < 20:
+            return None
+        hv_min = float(rolling_hv.min())
+        hv_max = float(rolling_hv.max())
+        if hv_max <= hv_min:
+            return None
+        rank = (atm_iv - hv_min) / (hv_max - hv_min) * 100.0
+        return float(max(0.0, min(100.0, rank)))
+    except Exception:
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Options metrics table helpers (§6)
 # ---------------------------------------------------------------------------
@@ -311,10 +335,13 @@ async def build_decision_aids(
         regime = "iv_only"
         iv_note = "Historical vol unavailable; rely on chain and events."
 
+    iv_rank = await _iv_rank_52w(symbol, atm_iv, provider) if atm_iv is not None else None
+
     vol_ctx = VolatilityContext(
         regime=regime,
         atm_iv=atm_iv,
         hv_20d_annualized=hv,
+        iv_rank_52w=iv_rank,
         iv_vs_hv_note=iv_note,
         implied_move_1d_pct=opt.implied_move_1d_pct,
     )

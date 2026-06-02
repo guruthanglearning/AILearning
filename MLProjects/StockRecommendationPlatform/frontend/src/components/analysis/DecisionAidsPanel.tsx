@@ -19,7 +19,7 @@ export function DecisionAidsPanel({ aids }: { aids: DecisionAids }) {
       )}
 
       {aids.volatility && (
-        <Accordion title="Volatility Context">
+        <Accordion title="Volatility Context" defaultOpen={true}>
           <VolatilitySection vol={aids.volatility} />
         </Accordion>
       )}

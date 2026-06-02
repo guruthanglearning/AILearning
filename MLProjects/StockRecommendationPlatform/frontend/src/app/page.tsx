@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef } from "react";
 
@@ -11,6 +12,7 @@ import { DecisionAidsPanel } from "@/components/analysis/DecisionAidsPanel";
 import { EarningsCountdown } from "@/components/analysis/EarningsCountdown";
 import { EntryExitCard } from "@/components/analysis/EntryExitCard";
 import { FundamentalsPanel } from "@/components/analysis/FundamentalsPanel";
+import { HowToReadModal } from "@/components/analysis/HowToReadModal";
 import { LivePriceBar } from "@/components/analysis/LivePriceBar";
 import { OptionsAnalysisPanel } from "@/components/analysis/OptionsAnalysisPanel";
 import { OptionsGuidanceCard } from "@/components/analysis/OptionsGuidanceCard";
@@ -24,6 +26,29 @@ import { VerdictCard } from "@/components/analysis/VerdictCard";
 import { ErrorMessage } from "@/components/ui/ErrorMessage";
 import { useAnalysis } from "@/contexts/AnalysisContext";
 import type { AnalysisRunRequest, SupervisorVerdict } from "@/types/api";
+
+// ── Stage divider ─────────────────────────────────────────────────────────────
+
+interface StageDividerProps {
+  stage: number;
+  title: string;
+  subtitle: string;
+}
+
+function StageDivider({ stage, title, subtitle }: StageDividerProps) {
+  return (
+    <div className="flex items-center gap-3 pt-2">
+      <span className="text-xs font-bold text-gray-600 uppercase tracking-widest shrink-0">
+        Stage {stage}
+      </span>
+      <span className="text-xs font-medium text-gray-500 shrink-0">{title}</span>
+      <span className="text-xs text-gray-700 shrink-0 hidden sm:inline">{subtitle}</span>
+      <div className="flex-1 border-t border-gray-800" />
+    </div>
+  );
+}
+
+// ── Export / action buttons ───────────────────────────────────────────────────
 
 function buildExportText(symbol: string, verdict: SupervisorVerdict): string {
   const lines: string[] = [
@@ -110,7 +135,7 @@ function RerunButton({ onRerun }: { onRerun: () => void }) {
         <path d="M1.5 8a6.5 6.5 0 1 0 2.2-4.9" strokeLinecap="round" />
         <polyline points="1.5,3 1.5,8 6.5,8" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
-      Re-run Analysis
+      Re-run
     </button>
   );
 }
@@ -118,13 +143,9 @@ function RerunButton({ onRerun }: { onRerun: () => void }) {
 function ExportButton({ symbol, verdict }: { symbol: string; verdict: SupervisorVerdict }) {
   function handleExport() {
     const text = buildExportText(symbol, verdict);
-    navigator.clipboard.writeText(text).then(() => {
-      // Brief visual feedback via title flash — no toast needed
-    }).catch(() => {
-      // Fallback: open in new tab as plain text
+    navigator.clipboard.writeText(text).catch(() => {
       const blob = new Blob([text], { type: "text/plain" });
-      const url  = URL.createObjectURL(blob);
-      window.open(url, "_blank");
+      window.open(URL.createObjectURL(blob), "_blank");
     });
   }
 
@@ -143,11 +164,30 @@ function ExportButton({ symbol, verdict }: { symbol: string; verdict: Supervisor
   );
 }
 
+function HowToReadButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 bg-indigo-900/30 hover:bg-indigo-900/50 border border-indigo-800/60 px-3 py-1.5 rounded-md transition-colors"
+    >
+      <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="8" cy="8" r="6.5" />
+        <path d="M8 7v4" strokeLinecap="round" />
+        <circle cx="8" cy="5" r="0.5" fill="currentColor" />
+      </svg>
+      How to read this
+    </button>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+
 function HomePage() {
   const searchParams = useSearchParams();
   const autoSymbol = searchParams.get("symbol") ?? "";
   const { req, verdict, partialContributions, isFetching, error, startedAt, submit } = useAnalysis();
   const autoSubmitted = useRef(false);
+  const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
     if (autoSymbol && !autoSubmitted.current) {
@@ -156,16 +196,12 @@ function HomePage() {
     }
   }, [autoSymbol]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function handleSubmit(newReq: AnalysisRunRequest) {
-    submit(newReq);
-  }
-
-  const handleRerun = useCallback(() => {
-    if (req) submit(req);
-  }, [req, submit]);
+  const handleSubmit = (newReq: AnalysisRunRequest) => submit(newReq);
+  const handleRerun  = useCallback(() => { if (req) submit(req); }, [req, submit]);
 
   const gridContributions = verdict?.agent_contributions ?? partialContributions;
   const showGrid = gridContributions.length > 0;
+  const optRows  = verdict?.decision_aids?.options_metrics_table ?? [];
 
   return (
     <div className="space-y-6">
@@ -181,85 +217,93 @@ function HomePage() {
 
       {error && !isFetching && <ErrorMessage error={error as Error} />}
 
-      {req?.symbol && <LivePriceBar symbol={req.symbol} />}
+      {/* ── STAGE 1 — Go / No-Go ─────────────────────────────────────── */}
+      {req?.symbol && (
+        <>
+          <StageDivider stage={1} title="Go / No-Go" subtitle="30 seconds" />
+          <LivePriceBar symbol={req.symbol} />
+        </>
+      )}
 
       {showGrid && (
-        <AgentStatusGrid
-          contributions={gridContributions}
-          streaming={isFetching}
-        />
+        <AgentStatusGrid contributions={gridContributions} streaming={isFetching} />
+      )}
+
+      {verdict && !isFetching && verdict.has_upcoming_earnings && (
+        <EarningsCountdown verdict={verdict} />
       )}
 
       {verdict && !isFetching && (
         <>
-          {/* Earnings alert — shown at the top so it's impossible to miss */}
-          {verdict.has_upcoming_earnings && (
-            <EarningsCountdown verdict={verdict} />
-          )}
+          {/* ── STAGE 2 — Stock or Options? ──────────────────────────────── */}
+          <StageDivider stage={2} title="Stock or Options?" subtitle="1–2 minutes" />
 
-          {/* Verdict + action bar */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-end gap-2">
-              <RerunButton onRerun={handleRerun} />
-              <ExportButton symbol={req?.symbol ?? ""} verdict={verdict} />
-            </div>
-            <VerdictCard verdict={verdict} symbol={req?.symbol ?? ""} />
+          {/* Action bar */}
+          <div className="flex items-center justify-end gap-2 flex-wrap">
+            <HowToReadButton onClick={() => setModalOpen(true)} />
+            <RerunButton onRerun={handleRerun} />
+            <ExportButton symbol={req?.symbol ?? ""} verdict={verdict} />
           </div>
 
-          {/* Price chart */}
-          {req?.symbol && <PriceChartPanel symbol={req.symbol} />}
-
-          {verdict.fundamentals && (
-            <FundamentalsPanel fund={verdict.fundamentals} />
-          )}
-
-          {/* Sentiment */}
-          {(verdict.sentiment_score != null || verdict.sentiment_forecast) && (
-            <SentimentCard verdict={verdict} />
-          )}
-
-          {verdict.technicals && (
-            <TradeGuidancePanel verdict={verdict} />
-          )}
-
-          {/* Entry / Exit levels */}
-          {verdict.technicals && (
-            <EntryExitCard verdict={verdict} />
-          )}
-
-          {verdict.technicals && (
-            <PriceForecastPanel verdict={verdict} />
-          )}
-
-          {verdict.options && (
-            <OptionsGuidanceCard guidance={verdict.options} />
-          )}
+          <VerdictCard verdict={verdict} symbol={req?.symbol ?? ""} />
 
           {verdict.decision_aids && (
             <DecisionAidsPanel aids={verdict.decision_aids} />
           )}
 
-          {(verdict.decision_aids?.options_metrics_table ?? []).length > 0 && (
-            <OptionsAnalysisPanel
-              rows={verdict.decision_aids!.options_metrics_table}
-            />
+          {/* ── STAGE 3 — Confirm the Direction ──────────────────────────── */}
+          <StageDivider stage={3} title="Confirm the Direction" subtitle="2 minutes" />
+
+          {req?.symbol && <PriceChartPanel symbol={req.symbol} />}
+
+          {verdict.technicals && (
+            <TradeGuidancePanel verdict={verdict} />
           )}
 
-          {(verdict.decision_aids?.options_metrics_table ?? []).length > 0 && (
-            <div className="space-y-2">
-              <h2 className="text-sm font-medium text-gray-400">Options Metrics Table</h2>
-              <OptionsMetricsTable
-                rows={verdict.decision_aids!.options_metrics_table}
-              />
-            </div>
+          {(verdict.sentiment_score != null || verdict.sentiment_forecast) && (
+            <SentimentCard verdict={verdict} />
           )}
 
-          {/* Peer comparison */}
+          {/* ── STAGE 4 — Entry, Size & Exit ─────────────────────────────── */}
+          <StageDivider stage={4} title="Entry, Size &amp; Exit" subtitle="2 minutes" />
+
+          {verdict.technicals && <EntryExitCard verdict={verdict} />}
+
+          {optRows.length > 0 && (
+            <>
+              <OptionsAnalysisPanel rows={optRows} />
+              <div className="space-y-2">
+                <h2 className="text-sm font-medium text-gray-400">Options Metrics Table</h2>
+                <OptionsMetricsTable rows={optRows} />
+              </div>
+            </>
+          )}
+
+          {verdict.options && <OptionsGuidanceCard guidance={verdict.options} />}
+
+          {/* ── STAGE 5 — Valuation & Context ────────────────────────────── */}
+          <StageDivider stage={5} title="Valuation &amp; Context" subtitle="1 minute · swing trades" />
+
+          {verdict.fundamentals && <FundamentalsPanel fund={verdict.fundamentals} />}
+
           {req?.symbol && <PeerComparisonTable symbol={req.symbol} />}
+
+          {/* ── Reference ────────────────────────────────────────────────── */}
+          <div className="flex items-center gap-3 pt-2">
+            <span className="text-xs font-bold text-gray-700 uppercase tracking-widest shrink-0">
+              Reference
+            </span>
+            <div className="flex-1 border-t border-gray-800" />
+          </div>
+
+          {verdict.technicals && <PriceForecastPanel verdict={verdict} />}
 
           {req?.symbol && <AnalysisHistory symbol={req.symbol} />}
         </>
       )}
+
+      {/* How to read modal */}
+      <HowToReadModal open={modalOpen} onClose={() => setModalOpen(false)} />
     </div>
   );
 }

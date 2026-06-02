@@ -4,16 +4,40 @@ function pct(v: number | null) {
   return v == null ? "—" : `${(v * 100).toFixed(1)}%`;
 }
 
-function ivRankColor(rank: number): string {
-  if (rank >= 70) return "text-red-400";
-  if (rank >= 40) return "text-amber-400";
-  return "text-green-400";
+interface IvZone {
+  label: string;
+  hint: string;       // one-line action hint
+  badgeBg: string;
+  badgeText: string;
+  barColor: string;
+  textColor: string;
 }
 
-function ivRankLabel(rank: number): string {
-  if (rank >= 70) return "Elevated — favour selling premium (credit spreads)";
-  if (rank >= 40) return "Neutral — directional bias drives instrument choice";
-  return "Cheap — long premium structures relatively inexpensive";
+function ivZone(rank: number): IvZone {
+  if (rank >= 70) return {
+    label: "Elevated",
+    hint: "Premium is historically expensive — favour selling premium (credit spreads, covered calls)",
+    badgeBg: "bg-red-900/40 border-red-700",
+    badgeText: "text-red-300",
+    barColor: "bg-red-500",
+    textColor: "text-red-400",
+  };
+  if (rank >= 40) return {
+    label: "Neutral",
+    hint: "Premium is fairly priced — let directional bias (trend, RSI) drive instrument choice",
+    badgeBg: "bg-amber-900/40 border-amber-700",
+    badgeText: "text-amber-300",
+    barColor: "bg-amber-500",
+    textColor: "text-amber-400",
+  };
+  return {
+    label: "Cheap",
+    hint: "Premium is historically inexpensive — buying long calls/puts costs less than usual vs recent swings",
+    badgeBg: "bg-green-900/40 border-green-700",
+    badgeText: "text-green-300",
+    barColor: "bg-green-500",
+    textColor: "text-green-400",
+  };
 }
 
 export function VolatilitySection({ vol }: { vol: VolatilityContext }) {
@@ -33,32 +57,56 @@ export function VolatilitySection({ vol }: { vol: VolatilityContext }) {
           <p className="text-gray-200 font-medium mt-0.5">{pct(vol.hv_20d_annualized)}</p>
         </div>
 
-        {/* IV Rank — spans full row for emphasis */}
-        {vol.iv_rank_52w != null && (
-          <div className="col-span-2 sm:col-span-3">
-            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
-              IV Rank (52W) <span className="normal-case text-gray-600">— vs rolling HV range</span>
-            </p>
-            <div className="flex items-center gap-3">
-              {/* Gauge bar */}
-              <div className="flex-1 h-2 bg-gray-800 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all ${
-                    vol.iv_rank_52w >= 70 ? "bg-red-500" :
-                    vol.iv_rank_52w >= 40 ? "bg-amber-500" : "bg-green-500"
-                  }`}
-                  style={{ width: `${vol.iv_rank_52w.toFixed(0)}%` }}
-                />
+        {/* IV Rank — full-width block */}
+        {vol.iv_rank_52w != null && (() => {
+          const zone = ivZone(vol.iv_rank_52w);
+          const rank = vol.iv_rank_52w;
+          return (
+            <div className="col-span-2 sm:col-span-3 space-y-2">
+              {/* Label row */}
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <p className="text-xs text-gray-500 uppercase tracking-wide">
+                  IV Rank (52W)
+                </p>
+                {/* Zone badge */}
+                <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full border ${zone.badgeBg} ${zone.badgeText}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${zone.barColor}`} />
+                  {zone.label}
+                </span>
               </div>
-              <span className={`text-sm font-bold font-mono w-12 text-right ${ivRankColor(vol.iv_rank_52w)}`}>
-                {vol.iv_rank_52w.toFixed(0)}
-              </span>
+
+              {/* Gauge with zone markers */}
+              <div className="space-y-1">
+                <div className="relative h-3 bg-gray-800 rounded-full overflow-visible">
+                  {/* Filled bar */}
+                  <div
+                    className={`h-full rounded-full transition-all ${zone.barColor}`}
+                    style={{ width: `${rank.toFixed(0)}%` }}
+                  />
+                  {/* Zone boundary tick at 40 */}
+                  <div className="absolute top-0 bottom-0 w-px bg-gray-600" style={{ left: "40%" }} />
+                  {/* Zone boundary tick at 70 */}
+                  <div className="absolute top-0 bottom-0 w-px bg-gray-600" style={{ left: "70%" }} />
+                </div>
+
+                {/* Zone labels under gauge */}
+                <div className="flex text-xs" style={{ position: "relative" }}>
+                  <span className="text-green-500 font-medium" style={{ width: "40%" }}>Cheap &lt;40</span>
+                  <span className="text-amber-500 font-medium text-center" style={{ width: "30%" }}>Neutral 40–70</span>
+                  <span className="text-red-500 font-medium text-right flex-1">Elevated &gt;70</span>
+                </div>
+
+                {/* Rank number */}
+                <div className="flex items-center justify-between">
+                  <p className={`text-xs leading-relaxed ${zone.textColor}`}>{zone.hint}</p>
+                  <span className={`text-sm font-bold font-mono ml-3 shrink-0 ${zone.textColor}`}>
+                    {rank.toFixed(0)}
+                  </span>
+                </div>
+              </div>
             </div>
-            <p className={`text-xs mt-1 ${ivRankColor(vol.iv_rank_52w)}`}>
-              {ivRankLabel(vol.iv_rank_52w)}
-            </p>
-          </div>
-        )}
+          );
+        })()}
 
         {vol.implied_move_1d_pct != null && (
           <div>

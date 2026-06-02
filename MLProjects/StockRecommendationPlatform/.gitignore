@@ -21,6 +21,7 @@ env/
 # pytest
 .pytest_cache/
 .coverage
+coverage.json
 htmlcov/
 
 # Alembic generated files (keep versions in git, exclude temp)

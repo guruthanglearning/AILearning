@@ -323,6 +323,8 @@ def test_batch_no_batch_key_creates_new_job(monkeypatch):
         session.commit = AsyncMock()
         yield session
     monkeypatch.setattr("app.main.get_session", lambda: _gen())
+    # Prevent the background task from trying to connect to the real DB
+    monkeypatch.setattr("app.main.run_batch_job", AsyncMock())
 
     with TestClient(app) as client:
         resp = client.post("/v1/analysis/batch", json={"universe": "top10"})

@@ -5,14 +5,14 @@ from __future__ import annotations
 import time
 import uuid
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pandas as pd
 import pytest
 from starlette.testclient import TestClient
 
 from app.limiter import limiter
-from app.main import _cache_get, _cache_set, _TTL_CACHE, app
+from app.main import _TTL_CACHE, _cache_get, _cache_set, app
 
 
 @pytest.fixture(autouse=True)

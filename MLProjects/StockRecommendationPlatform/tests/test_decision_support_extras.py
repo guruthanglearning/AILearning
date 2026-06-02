@@ -2,8 +2,7 @@
 and supervisor _merge vol_regime branches."""
 from __future__ import annotations
 
-import math
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import numpy as np
 import pandas as pd

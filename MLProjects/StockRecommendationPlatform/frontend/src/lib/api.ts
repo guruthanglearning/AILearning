@@ -10,6 +10,7 @@ import type {
   ErrorLogEntry,
   LiveQuote,
   MarketQuoteRow,
+  MomentumSectorsResponse,
   PeersResponse,
   PriceHistoryResponse,
   SseEvent,
@@ -337,6 +338,12 @@ export async function getPriceHistory(
 
 export async function getPeers(symbol: string): Promise<PeersResponse> {
   const res = await fetch(`${API_URL}/v1/peers/${encodeURIComponent(symbol)}`);
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function getMomentumSectors(limit = 10): Promise<MomentumSectorsResponse> {
+  const res = await fetch(`${API_URL}/v1/momentum/sectors?limit=${limit}`);
   await checkResponse(res);
   return res.json();
 }

@@ -49,6 +49,9 @@ from app.schemas.agents import (
     AnalysisRunRequest,
     LiveQuote,
     MarketQuoteRow,
+    MomentumSectorsResponse,
+    MomentumStockRow,
+    SectorMomentum,
     SupervisorVerdict,
 )
 from app.schemas.batch import BatchJobRequest, BatchJobResponse, BatchJobStatus
@@ -574,3 +577,119 @@ async def trigger_ingest_warm(
     if settings.use_redis and cleaned:
         background_tasks.add_task(warm_cache, cleaned, build_provider())
     return {"status": "queued", "count": str(len(cleaned))}
+
+
+# ── Momentum Sectors ──────────────────────────────────────────────────────────
+
+_MOMENTUM_UNIVERSE: dict[str, list[str]] = {
+    "Technology":             ["AAPL", "MSFT", "NVDA", "AVGO", "ORCL", "ADBE", "CRM", "AMD", "QCOM", "TXN"],
+    "Consumer Cyclical":      ["AMZN", "TSLA", "HD", "LOW", "NKE", "SBUX", "TJX", "MCD", "BKNG", "F"],
+    "Communication Services": ["GOOGL", "META", "NFLX", "DIS", "T", "VZ", "CMCSA", "CHTR", "SNAP", "PINS"],
+    "Healthcare":             ["UNH", "JNJ", "LLY", "PFE", "ABBV", "MRK", "TMO", "ABT", "DHR", "BMY"],
+    "Financials":             ["JPM", "BAC", "WFC", "GS", "MS", "AXP", "BLK", "SCHW", "USB", "C"],
+    "Industrials":            ["CAT", "BA", "HON", "UPS", "RTX", "GE", "MMM", "DE", "FDX", "LMT"],
+    "Consumer Defensive":     ["WMT", "PG", "KO", "PEP", "COST", "MDLZ", "MO", "PM", "CL", "EL"],
+    "Energy":                 ["XOM", "CVX", "COP", "SLB", "EOG", "MPC", "PSX", "VLO", "OXY", "HAL"],
+    "Basic Materials":        ["LIN", "APD", "ECL", "NEM", "FCX", "DOW", "DD", "ALB", "CF", "MOS"],
+    "Real Estate":            ["AMT", "PLD", "CCI", "EQIX", "SPG", "DLR", "PSA", "O", "WELL", "AVB"],
+    "Utilities":              ["NEE", "DUK", "SO", "D", "AEP", "EXC", "SRE", "PCG", "XEL", "ES"],
+}
+
+
+def _compute_momentum_score(
+    price: float | None,
+    low52: float | None,
+    high52: float | None,
+    sma50: float | None,
+    sma200: float | None,
+    day_change_pct: float | None,
+) -> float | None:
+    if price is None:
+        return None
+    score = 0.0
+    # 52-week range position (0–40 pts): where current price sits in the annual range
+    if low52 is not None and high52 is not None and high52 > low52:
+        score += ((price - low52) / (high52 - low52)) * 40.0
+    # Above 50-day SMA (0–20 pts)
+    if sma50 is not None and price > sma50:
+        score += 20.0
+    # Above 200-day SMA (0–20 pts)
+    if sma200 is not None and price > sma200:
+        score += 20.0
+    # Day-change % clamped to [-5, +5] mapped to [0, 20 pts]
+    if day_change_pct is not None:
+        clamped = max(-5.0, min(5.0, day_change_pct))
+        score += (clamped + 5.0) / 10.0 * 20.0
+    return round(min(100.0, max(0.0, score)), 1)
+
+
+def _fetch_momentum_stock(sym: str) -> MomentumStockRow:
+    try:
+        info = yf.Ticker(sym).info
+        price = info.get("currentPrice") or info.get("regularMarketPrice")
+        low52 = info.get("fiftyTwoWeekLow")
+        high52 = info.get("fiftyTwoWeekHigh")
+        score = _compute_momentum_score(
+            price,
+            low52,
+            high52,
+            info.get("fiftyDayAverage"),
+            info.get("twoHundredDayAverage"),
+            info.get("regularMarketChangePercent"),
+        )
+        return MomentumStockRow(
+            symbol=sym,
+            company_name=info.get("shortName") or info.get("longName"),
+            sector=info.get("sector"),
+            industry=info.get("industry"),
+            pre_market=info.get("preMarketPrice"),
+            open_price=info.get("regularMarketOpen"),
+            close_price=price,
+            post_market=info.get("postMarketPrice"),
+            momentum_score=score,
+            day_change_pct=info.get("regularMarketChangePercent"),
+            week_52_high=high52,
+            week_52_low=low52,
+        )
+    except Exception:
+        return MomentumStockRow(symbol=sym)
+
+
+@app.get("/v1/momentum/sectors", response_model=MomentumSectorsResponse)
+@limiter.limit("30/minute")
+async def get_momentum_sectors(
+    request: Request,
+    limit: int = Query(default=10, ge=1, le=25),
+) -> MomentumSectorsResponse:
+    """Top-N momentum stocks per GICS sector. Scores combine 52-week range
+    position, SMA cross signals, and daily change. Not investment advice."""
+    cache_key = "momentum_sectors_all"
+    cached = _cache_get(cache_key)
+
+    if cached is not None:
+        all_sector_rows: list[tuple[str, list[MomentumStockRow]]] = cached["rows"]
+        fetched_at: datetime = cached["fetched_at"]
+    else:
+        loop = asyncio.get_event_loop()
+        tasks = [loop.run_in_executor(None, _fetch_momentum_stock, s)
+                 for syms in _MOMENTUM_UNIVERSE.values() for s in syms]
+        fetched: list[MomentumStockRow] = list(await asyncio.gather(*tasks))
+
+        by_sym = {r.symbol: r for r in fetched}
+        all_sector_rows = []
+        for sector, syms in _MOMENTUM_UNIVERSE.items():
+            sector_rows = [by_sym[s] for s in syms if s in by_sym]
+            sector_rows.sort(
+                key=lambda r: r.momentum_score if r.momentum_score is not None else -1.0,
+                reverse=True,
+            )
+            all_sector_rows.append((sector, sector_rows))
+
+        fetched_at = datetime.now(UTC)
+        _cache_set(cache_key, {"rows": all_sector_rows, "fetched_at": fetched_at})
+
+    sectors = [
+        SectorMomentum(sector=sector, stocks=rows[:limit])
+        for sector, rows in all_sector_rows
+    ]
+    return MomentumSectorsResponse(sectors=sectors, limit=limit, fetched_at_utc=fetched_at)

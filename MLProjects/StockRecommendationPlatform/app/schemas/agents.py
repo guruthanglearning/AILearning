@@ -308,3 +308,29 @@ class MarketQuoteRow(BaseModel):
     week_52_low: float | None = None
     shares_outstanding: float | None = None
     fetched_at_utc: datetime = Field(default_factory=datetime.utcnow)
+
+
+class MomentumStockRow(BaseModel):
+    symbol: str
+    company_name: str | None = None
+    sector: str | None = None
+    industry: str | None = None
+    pre_market: float | None = None
+    open_price: float | None = None
+    close_price: float | None = None
+    post_market: float | None = None
+    momentum_score: float | None = None
+    day_change_pct: float | None = None
+    week_52_high: float | None = None
+    week_52_low: float | None = None
+
+
+class SectorMomentum(BaseModel):
+    sector: str
+    stocks: list[MomentumStockRow]
+
+
+class MomentumSectorsResponse(BaseModel):
+    sectors: list[SectorMomentum]
+    limit: int
+    fetched_at_utc: datetime

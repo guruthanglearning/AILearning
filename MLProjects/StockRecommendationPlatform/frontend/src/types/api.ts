@@ -312,6 +312,32 @@ export interface AnalysisHistoryItem {
 
 // ─── Market grid ─────────────────────────────────────────────────────────────
 
+export interface MomentumStockRow {
+  symbol: string;
+  company_name: string | null;
+  sector: string | null;
+  industry: string | null;
+  pre_market: number | null;
+  open_price: number | null;
+  close_price: number | null;
+  post_market: number | null;
+  momentum_score: number | null;
+  day_change_pct: number | null;
+  week_52_high: number | null;
+  week_52_low: number | null;
+}
+
+export interface SectorMomentum {
+  sector: string;
+  stocks: MomentumStockRow[];
+}
+
+export interface MomentumSectorsResponse {
+  sectors: SectorMomentum[];
+  limit: number;
+  fetched_at_utc: string;
+}
+
 export interface MarketQuoteRow {
   symbol: string;
   pre_mkt_price: number | null;

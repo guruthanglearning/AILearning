@@ -584,11 +584,11 @@ function scoreToVerdict(
     );
   }
 
-  // 6. OBV volume confirmation
-  const obv = tech?.obv;
-  if (obv != null) {
-    if (obv > 0) { tieScore += 0.5; reasons.push("positive OBV confirms net buying pressure"); }
-    else         { tieScore -= 0.5; }
+  // 6. OBV 20d slope — use directional slope, not path-dependent cumulative value
+  const obvSlope = tech?.obv_slope;
+  if (obvSlope != null) {
+    if (obvSlope > 0)      { tieScore += 0.5; reasons.push("OBV rising (20d slope) confirms net accumulation"); }
+    else if (obvSlope < 0) { tieScore -= 0.5; }
   }
 
   // ── Firm recommendation from tie-score ────────────────────────────────────

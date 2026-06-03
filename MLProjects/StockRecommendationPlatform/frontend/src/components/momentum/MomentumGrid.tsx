@@ -5,6 +5,37 @@ import { useState } from "react";
 import { useMomentumSectors } from "@/hooks/useMomentumSectors";
 import type { MomentumStockRow } from "@/types/api";
 
+// ── Skeleton loading ──────────────────────────────────────────────────────────
+
+const SKELETON_WIDTHS = ["w-12", "w-28", "w-20", "w-14", "w-14", "w-14", "w-14", "w-20", "w-10"];
+
+function SkeletonRow() {
+  return (
+    <tr className="border-b border-gray-800/70">
+      {SKELETON_WIDTHS.map((w, i) => (
+        <td key={i} className="px-3 py-3">
+          <div className={`h-2.5 bg-gray-800 rounded animate-pulse ${w}`} />
+        </td>
+      ))}
+    </tr>
+  );
+}
+
+function SkeletonTabs() {
+  const widths = [88, 120, 108, 72, 80, 96, 128, 64, 80, 80, 72];
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {widths.map((w, i) => (
+        <div
+          key={i}
+          className="h-6 rounded-full bg-gray-800 animate-pulse"
+          style={{ width: `${w}px` }}
+        />
+      ))}
+    </div>
+  );
+}
+
 // ── Formatters ────────────────────────────────────────────────────────────────
 
 function fmtPrice(v: number | null): string {
@@ -209,10 +240,19 @@ export function MomentumGrid({ onAnalyze }: MomentumGridProps) {
           </p>
         </div>
         <div className="flex items-center gap-3 text-xs text-gray-500">
-          {fetchedAt && <span>Updated {fetchedAt}</span>}
-          <span className={countdown <= 30 ? "text-amber-500" : ""}>
-            Next in {countdown}s
-          </span>
+          {isLoading && !data ? (
+            <span className="flex items-center gap-1.5 text-indigo-400">
+              <span className="inline-block w-3 h-3 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin" />
+              Scanning all sectors in background…
+            </span>
+          ) : (
+            <>
+              {fetchedAt && <span>Updated {fetchedAt}</span>}
+              <span className={countdown <= 30 ? "text-amber-500" : ""}>
+                Next in {countdown}s
+              </span>
+            </>
+          )}
           <button
             type="button"
             onClick={() => refresh()}
@@ -230,28 +270,32 @@ export function MomentumGrid({ onAnalyze }: MomentumGridProps) {
         </p>
       )}
 
-      {/* ── Sector tabs ── */}
-      {sectors.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {sectors.map((s) => (
-            <button
-              key={s.sector}
-              type="button"
-              onClick={() => setActiveSector(s.sector)}
-              className={[
-                "px-3 py-1 text-xs rounded-full border transition-colors",
-                s.sector === currentSector
-                  ? "bg-indigo-600 border-indigo-500 text-white"
-                  : "bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200 hover:border-gray-600",
-              ].join(" ")}
-            >
-              {s.sector}
-            </button>
-          ))}
-        </div>
+      {/* ── Sector tabs — skeleton while loading ── */}
+      {isLoading && !data ? (
+        <SkeletonTabs />
+      ) : (
+        sectors.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {sectors.map((s) => (
+              <button
+                key={s.sector}
+                type="button"
+                onClick={() => setActiveSector(s.sector)}
+                className={[
+                  "px-3 py-1 text-xs rounded-full border transition-colors",
+                  s.sector === currentSector
+                    ? "bg-indigo-600 border-indigo-500 text-white"
+                    : "bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200 hover:border-gray-600",
+                ].join(" ")}
+              >
+                {s.sector}
+              </button>
+            ))}
+          </div>
+        )
       )}
 
-      {/* ── Table ── */}
+      {/* ── Table — skeleton rows while loading ── */}
       <div className="rounded-lg border border-gray-800 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
@@ -269,27 +313,23 @@ export function MomentumGrid({ onAnalyze }: MomentumGridProps) {
               </tr>
             </thead>
             <tbody className="bg-gray-950 divide-y divide-gray-800/50">
-              {isLoading && rows.length === 0 && (
-                <tr>
-                  <td colSpan={COLUMNS.length} className="px-3 py-10 text-center text-xs text-gray-600">
-                    Fetching momentum data for all sectors…
-                  </td>
-                </tr>
-              )}
-              {!isLoading && rows.length === 0 && !error && (
+              {isLoading && !data ? (
+                Array.from({ length: 10 }).map((_, i) => <SkeletonRow key={i} />)
+              ) : rows.length === 0 && !error ? (
                 <tr>
                   <td colSpan={COLUMNS.length} className="px-3 py-10 text-center text-xs text-gray-600">
                     No data for this sector.
                   </td>
                 </tr>
+              ) : (
+                rows.map((row) => (
+                  <StockRow key={row.symbol} row={row} onAnalyze={handleAnalyze} />
+                ))
               )}
-              {rows.map((row) => (
-                <StockRow key={row.symbol} row={row} onAnalyze={handleAnalyze} />
-              ))}
             </tbody>
           </table>
         </div>
-        {isLoading && <div className="h-0.5 bg-indigo-600/70 animate-pulse" />}
+        {isLoading && data && <div className="h-0.5 bg-indigo-600/70 animate-pulse" />}
       </div>
 
       <p className="text-xs text-gray-700 italic">

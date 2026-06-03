@@ -6,6 +6,9 @@ import { useState } from "react";
 
 import { AnalysisProvider } from "@/contexts/AnalysisContext";
 import { ApiKeyProvider } from "@/contexts/ApiKeyContext";
+import { NotificationProvider } from "@/contexts/NotificationContext";
+import { MomentumPrefetcher } from "@/components/layout/MomentumPrefetcher";
+import { ToastContainer } from "@/components/ui/Toast";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -24,12 +27,16 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ApiKeyProvider>
       <QueryClientProvider client={queryClient}>
-        <AnalysisProvider>
-          {children}
-          {process.env.NODE_ENV === "development" && (
-            <ReactQueryDevtools initialIsOpen={false} />
-          )}
-        </AnalysisProvider>
+        <NotificationProvider>
+          <AnalysisProvider>
+            {children}
+            <MomentumPrefetcher />
+            <ToastContainer />
+            {process.env.NODE_ENV === "development" && (
+              <ReactQueryDevtools initialIsOpen={false} />
+            )}
+          </AnalysisProvider>
+        </NotificationProvider>
       </QueryClientProvider>
     </ApiKeyProvider>
   );

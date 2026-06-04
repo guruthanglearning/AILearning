@@ -325,6 +325,12 @@ export interface MomentumStockRow {
   day_change_pct: number | null;
   week_52_high: number | null;
   week_52_low: number | null;
+  // Professional momentum factors
+  return_1m: number | null;
+  return_3m: number | null;
+  return_6m: number | null;
+  vs_spy_6m: number | null;
+  rsi_14: number | null;
 }
 
 export interface SectorMomentum {

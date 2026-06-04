@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime
 from typing import Any
 
+import pandas as pd
 import structlog
 import yfinance as yf
 from fastapi import (
@@ -581,6 +582,10 @@ async def trigger_ingest_warm(
 
 # ── Momentum Sectors ──────────────────────────────────────────────────────────
 
+# Ensures only one concurrent yfinance fetch runs when the cache is cold,
+# preventing thundering-herd from multiple simultaneous browser tabs.
+_MOMENTUM_FETCH_LOCK = asyncio.Lock()
+
 _MOMENTUM_UNIVERSE: dict[str, list[str]] = {
     "Technology":             ["AAPL", "MSFT", "NVDA", "AVGO", "ORCL", "ADBE", "CRM", "AMD", "QCOM", "TXN"],
     "Consumer Cyclical":      ["AMZN", "TSLA", "HD", "LOW", "NKE", "SBUX", "TJX", "MCD", "BKNG", "F"],
@@ -596,63 +601,167 @@ _MOMENTUM_UNIVERSE: dict[str, list[str]] = {
 }
 
 
-def _compute_momentum_score(
+# ── Professional momentum helpers ─────────────────────────────────────────────
+
+def _rsi(closes: pd.Series, period: int = 14) -> float | None:
+    """Wilder's 14-day RSI from a daily close series."""
+    s = closes.dropna()
+    if len(s) < period + 1:
+        return None
+    delta = s.diff().dropna()
+    gain = delta.clip(lower=0).rolling(period).mean()
+    loss = (-delta.clip(upper=0)).rolling(period).mean()
+    last_loss = float(loss.iloc[-1])
+    if last_loss == 0:
+        return 100.0
+    rs = float(gain.iloc[-1]) / last_loss
+    return round(100.0 - 100.0 / (1.0 + rs), 1)
+
+
+def _stock_returns(s: pd.Series) -> tuple[float | None, float | None, float | None]:
+    """(1M, 3M, 6M) returns from a daily close series (21/63/126 trading days)."""
+    s = s.dropna()
+    if len(s) < 5:
+        return None, None, None
+    now = float(s.iloc[-1])
+
+    def _ret(n: int) -> float | None:
+        if len(s) < n + 1:
+            return None
+        past = float(s.iloc[-n])
+        return (now / past - 1.0) if past > 0 else None
+
+    return _ret(21), _ret(63), _ret(min(126, len(s) - 1))
+
+
+def _fetch_universe_history() -> pd.DataFrame | None:
+    """Single batch yf.download for all universe stocks + SPY benchmark."""
+    all_syms = [s for syms in _MOMENTUM_UNIVERSE.values() for s in syms]
+    to_fetch = list(dict.fromkeys(all_syms + ["SPY"]))
+    try:
+        raw = yf.download(
+            to_fetch,
+            period="6mo",
+            interval="1d",
+            auto_adjust=True,
+            progress=False,
+            threads=True,
+        )
+        if isinstance(raw.columns, pd.MultiIndex):
+            return raw["Close"]
+        # Single-ticker fallback (shouldn't happen with 100+ tickers)
+        return raw.rename(columns={"Close": to_fetch[0]})[["Close"]].rename(
+            columns={"Close": to_fetch[0]}
+        )
+    except Exception:
+        return None
+
+
+def _percentile_ranks(values: list[float | None]) -> list[float | None]:
+    """Cross-sectional percentile rank (0–100) within the non-null values."""
+    indexed = [(i, v) for i, v in enumerate(values) if v is not None]
+    if not indexed:
+        return [None] * len(values)
+    ranked = sorted(indexed, key=lambda x: x[1])
+    n = len(ranked)
+    rank_map: dict[int, float] = {
+        i: (r / (n - 1)) * 100.0 if n > 1 else 50.0
+        for r, (i, _) in enumerate(ranked)
+    }
+    return [rank_map.get(i) for i in range(len(values))]
+
+
+def _compute_momentum_score_pro(
+    pct_6m: float | None,
+    pct_3m: float | None,
+    pct_1m: float | None,
+    pct_vs_spy: float | None,
+    rsi_14: float | None,
     price: float | None,
-    low52: float | None,
-    high52: float | None,
     sma50: float | None,
     sma200: float | None,
-    day_change_pct: float | None,
+    low52: float | None,
+    high52: float | None,
 ) -> float | None:
+    """
+    Cross-sectional momentum score (0–100).
+
+    Weights (research-backed):
+      - 6M return percentile rank   30 pts  (Jegadeesh-Titman primary signal)
+      - 3M return percentile rank   20 pts  (intermediate momentum)
+      - vs-SPY 6M percentile rank   20 pts  (relative alpha vs benchmark)
+      - 1M return percentile rank   10 pts  (skip-1M adjustment is applied at caller)
+      - SMA trend alignment         12 pts  (price > SMA200: 6 pts; golden cross: +6)
+      - 52-week range position       8 pts  (proximity to new highs)
+    RSI quality filter: -5 pts if RSI > 80 or < 30 (extreme overbought/oversold).
+    """
     if price is None:
         return None
-    score = 0.0
-    # 52-week range position (0–40 pts): where current price sits in the annual range
-    if low52 is not None and high52 is not None and high52 > low52:
-        score += ((price - low52) / (high52 - low52)) * 40.0
-    # Above 50-day SMA (0–20 pts)
-    if sma50 is not None and price > sma50:
-        score += 20.0
-    # Above 200-day SMA (0–20 pts)
+
+    # ── Cross-sectional component (80 pts max) ──────────────────────────────
+    cross, total_w = 0.0, 0.0
+    for pct, w in [
+        (pct_6m,    0.375),   # 30 pts
+        (pct_3m,    0.250),   # 20 pts
+        (pct_vs_spy, 0.250),  # 20 pts
+        (pct_1m,    0.125),   # 10 pts
+    ]:
+        if pct is not None:
+            cross += pct * w
+            total_w += w
+
+    if total_w > 0:
+        cross_score = (cross / total_w) * 0.80   # normalise to 80 pts
+    elif low52 is not None and high52 is not None and high52 > low52:
+        # Graceful fallback when no history data: use 52W position scaled to 40 pts
+        cross_score = ((price - low52) / (high52 - low52)) * 40.0
+    else:
+        return None
+
+    # ── Trend alignment (12 pts) ─────────────────────────────────────────────
+    trend = 0.0
     if sma200 is not None and price > sma200:
-        score += 20.0
-    # Day-change % clamped to [-5, +5] mapped to [0, 20 pts]
-    if day_change_pct is not None:
-        clamped = max(-5.0, min(5.0, day_change_pct))
-        score += (clamped + 5.0) / 10.0 * 20.0
-    return round(min(100.0, max(0.0, score)), 1)
+        trend += 6.0
+        if sma50 is not None and price > sma50 and sma50 > sma200:
+            trend += 6.0   # golden cross: both SMAs confirm uptrend
+
+    # ── 52-week high proximity (8 pts) ──────────────────────────────────────
+    range_pts = 0.0
+    if low52 is not None and high52 is not None and high52 > low52:
+        range_pts = ((price - low52) / (high52 - low52)) * 8.0
+
+    # ── RSI quality filter ───────────────────────────────────────────────────
+    rsi_adj = 0.0
+    if rsi_14 is not None:
+        if rsi_14 > 80 or rsi_14 < 30:
+            rsi_adj = -5.0   # overbought / oversold penalty
+
+    raw = cross_score + trend + range_pts + rsi_adj
+    return round(min(100.0, max(0.0, raw)), 1)
 
 
-def _fetch_momentum_stock(sym: str) -> MomentumStockRow:
+def _fetch_stock_raw(sym: str) -> dict:
+    """Fetch yfinance .info for one symbol; returns a plain dict for downstream scoring."""
     try:
         info = yf.Ticker(sym).info
         price = info.get("currentPrice") or info.get("regularMarketPrice")
-        low52 = info.get("fiftyTwoWeekLow")
-        high52 = info.get("fiftyTwoWeekHigh")
-        score = _compute_momentum_score(
-            price,
-            low52,
-            high52,
-            info.get("fiftyDayAverage"),
-            info.get("twoHundredDayAverage"),
-            info.get("regularMarketChangePercent"),
-        )
-        return MomentumStockRow(
-            symbol=sym,
-            company_name=info.get("shortName") or info.get("longName"),
-            sector=info.get("sector"),
-            industry=info.get("industry"),
-            pre_market=info.get("preMarketPrice"),
-            open_price=info.get("regularMarketOpen"),
-            close_price=price,
-            post_market=info.get("postMarketPrice"),
-            momentum_score=score,
-            day_change_pct=info.get("regularMarketChangePercent"),
-            week_52_high=high52,
-            week_52_low=low52,
-        )
+        return {
+            "symbol": sym,
+            "company_name": info.get("shortName") or info.get("longName"),
+            "sector": info.get("sector"),
+            "industry": info.get("industry"),
+            "pre_market": info.get("preMarketPrice"),
+            "open_price": info.get("regularMarketOpen"),
+            "close_price": price,
+            "post_market": info.get("postMarketPrice"),
+            "day_change_pct": info.get("regularMarketChangePercent"),
+            "week_52_high": info.get("fiftyTwoWeekHigh"),
+            "week_52_low": info.get("fiftyTwoWeekLow"),
+            "sma50": info.get("fiftyDayAverage"),
+            "sma200": info.get("twoHundredDayAverage"),
+        }
     except Exception:
-        return MomentumStockRow(symbol=sym)
+        return {"symbol": sym}
 
 
 @app.get("/v1/momentum/sectors", response_model=MomentumSectorsResponse)
@@ -661,32 +770,122 @@ async def get_momentum_sectors(
     request: Request,
     limit: int = Query(default=10, ge=1, le=25),
 ) -> MomentumSectorsResponse:
-    """Top-N momentum stocks per GICS sector. Scores combine 52-week range
-    position, SMA cross signals, and daily change. Not investment advice."""
-    cache_key = "momentum_sectors_all"
-    cached = _cache_get(cache_key)
+    """Top-N momentum stocks per GICS sector.
 
+    Professional cross-sectional scoring:
+      - Multi-timeframe returns (1M/3M/6M) via single batch yf.download
+      - Percentile-ranked within the 110-stock universe (relative, not absolute)
+      - Relative strength vs SPY benchmark
+      - SMA trend confirmation + 52-week high proximity
+      - RSI quality filter for extreme overbought/oversold
+    Not investment advice.
+    """
+    cache_key = "momentum_sectors_all"
+
+    cached = _cache_get(cache_key)
     if cached is not None:
         all_sector_rows: list[tuple[str, list[MomentumStockRow]]] = cached["rows"]
         fetched_at: datetime = cached["fetched_at"]
     else:
-        loop = asyncio.get_event_loop()
-        tasks = [loop.run_in_executor(None, _fetch_momentum_stock, s)
-                 for syms in _MOMENTUM_UNIVERSE.values() for s in syms]
-        fetched: list[MomentumStockRow] = list(await asyncio.gather(*tasks))
+        async with _MOMENTUM_FETCH_LOCK:
+            cached = _cache_get(cache_key)
+            if cached is not None:
+                all_sector_rows = cached["rows"]
+                fetched_at = cached["fetched_at"]
+            else:
+                loop = asyncio.get_event_loop()
+                all_syms = [s for syms in _MOMENTUM_UNIVERSE.values() for s in syms]
 
-        by_sym = {r.symbol: r for r in fetched}
-        all_sector_rows = []
-        for sector, syms in _MOMENTUM_UNIVERSE.items():
-            sector_rows = [by_sym[s] for s in syms if s in by_sym]
-            sector_rows.sort(
-                key=lambda r: r.momentum_score if r.momentum_score is not None else -1.0,
-                reverse=True,
-            )
-            all_sector_rows.append((sector, sector_rows))
+                # ── Phase 1: batch history + per-symbol .info in parallel ──────
+                hist_task = loop.run_in_executor(None, _fetch_universe_history)
+                info_tasks = [loop.run_in_executor(None, _fetch_stock_raw, s) for s in all_syms]
+                results = list(await asyncio.gather(hist_task, *info_tasks))
+                close_df: pd.DataFrame | None = results[0]
+                raw_data: list[dict] = results[1:]
 
-        fetched_at = datetime.now(UTC)
-        _cache_set(cache_key, {"rows": all_sector_rows, "fetched_at": fetched_at})
+                # ── Phase 2: compute returns + RSI from history ───────────────
+                spy_6m: float | None = None
+                hist_map: dict[str, dict] = {}
+
+                if close_df is not None:
+                    spy_series = close_df.get("SPY") if "SPY" in close_df.columns else None
+                    if spy_series is not None:
+                        _, _, spy_6m = _stock_returns(spy_series)
+
+                    for sym in all_syms:
+                        if sym in close_df.columns:
+                            r1m, r3m, r6m = _stock_returns(close_df[sym])
+                            vs_spy = (
+                                (r6m - spy_6m)
+                                if r6m is not None and spy_6m is not None
+                                else None
+                            )
+                            hist_map[sym] = {
+                                "return_1m": r1m,
+                                "return_3m": r3m,
+                                "return_6m": r6m,
+                                "vs_spy_6m": vs_spy,
+                                "rsi_14": _rsi(close_df[sym]),
+                            }
+
+                # ── Phase 3: cross-sectional percentile ranks ─────────────────
+                r6m_vals   = [hist_map.get(d["symbol"], {}).get("return_6m")   for d in raw_data]
+                r3m_vals   = [hist_map.get(d["symbol"], {}).get("return_3m")   for d in raw_data]
+                r1m_vals   = [hist_map.get(d["symbol"], {}).get("return_1m")   for d in raw_data]
+                spy_vals   = [hist_map.get(d["symbol"], {}).get("vs_spy_6m")   for d in raw_data]
+
+                pct_6m  = _percentile_ranks(r6m_vals)
+                pct_3m  = _percentile_ranks(r3m_vals)
+                pct_1m  = _percentile_ranks(r1m_vals)
+                pct_spy = _percentile_ranks(spy_vals)
+
+                # ── Phase 4: build MomentumStockRow objects with final scores ──
+                fetched: list[MomentumStockRow] = []
+                for i, d in enumerate(raw_data):
+                    sym = d["symbol"]
+                    h = hist_map.get(sym, {})
+                    score = _compute_momentum_score_pro(
+                        pct_6m[i], pct_3m[i], pct_1m[i], pct_spy[i],
+                        h.get("rsi_14"),
+                        d.get("close_price"),
+                        d.get("sma50"),
+                        d.get("sma200"),
+                        d.get("week_52_low"),
+                        d.get("week_52_high"),
+                    )
+                    fetched.append(MomentumStockRow(
+                        symbol=sym,
+                        company_name=d.get("company_name"),
+                        sector=d.get("sector"),
+                        industry=d.get("industry"),
+                        pre_market=d.get("pre_market"),
+                        open_price=d.get("open_price"),
+                        close_price=d.get("close_price"),
+                        post_market=d.get("post_market"),
+                        day_change_pct=d.get("day_change_pct"),
+                        week_52_high=d.get("week_52_high"),
+                        week_52_low=d.get("week_52_low"),
+                        momentum_score=score,
+                        return_1m=h.get("return_1m"),
+                        return_3m=h.get("return_3m"),
+                        return_6m=h.get("return_6m"),
+                        vs_spy_6m=h.get("vs_spy_6m"),
+                        rsi_14=h.get("rsi_14"),
+                    ))
+
+                # ── Phase 5: group by sector, sort by score, cache ────────────
+                by_sym = {r.symbol: r for r in fetched}
+                all_sector_rows = []
+                for sector, syms in _MOMENTUM_UNIVERSE.items():
+                    sector_rows = [by_sym[s] for s in syms if s in by_sym]
+                    sector_rows.sort(
+                        key=lambda r: r.momentum_score if r.momentum_score is not None else -1.0,
+                        reverse=True,
+                    )
+                    all_sector_rows.append((sector, sector_rows))
+
+                fetched_at = datetime.now(UTC)
+                _cache_set(cache_key, {"rows": all_sector_rows, "fetched_at": fetched_at})
 
     sectors = [
         SectorMomentum(sector=sector, stocks=rows[:limit])

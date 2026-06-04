@@ -7,10 +7,10 @@ import type { MomentumStockRow } from "@/types/api";
 
 // ── Skeleton loading ──────────────────────────────────────────────────────────
 
-// All Sectors: #, Symbol, Score, Company, Sector, Industry, Close, 1M%, 3M%, 6M%, vs S&P, RSI, Day%
-const SKELETON_ALL    = ["w-6","w-12","w-20","w-28","w-20","w-20","w-14","w-12","w-12","w-12","w-12","w-10","w-12"];
-// Per-sector:   #, Symbol, Score, Company, Industry, Close, 1M%, 3M%, 6M%, vs S&P, RSI, Day%
-const SKELETON_SECTOR = ["w-6","w-12","w-20","w-28","w-20","w-14","w-12","w-12","w-12","w-12","w-10","w-12"];
+// All Sectors: #, Symbol, Score, Company, Sector, Industry, Price, 52W High, 52W Low, 1M%, 3M%, 6M%, vs S&P, RSI, Day%
+const SKELETON_ALL    = ["w-6","w-12","w-20","w-28","w-20","w-20","w-14","w-14","w-14","w-12","w-12","w-12","w-12","w-10","w-12"];
+// Per-sector:   #, Symbol, Score, Company, Industry, Price, 52W High, 52W Low, 1M%, 3M%, 6M%, vs S&P, RSI, Day%
+const SKELETON_SECTOR = ["w-6","w-12","w-20","w-28","w-20","w-14","w-14","w-14","w-12","w-12","w-12","w-12","w-10","w-12"];
 
 function SkeletonRow({ showSector }: { showSector: boolean }) {
   const widths = showSector ? SKELETON_ALL : SKELETON_SECTOR;
@@ -155,9 +155,11 @@ const SECTOR_COL: ColDef = {
 };
 
 const DETAIL_COLS: ColDef[] = [
-  { key: "industry",       label: "Industry", title: "Industry sub-group within the sector" },
-  { key: "close_price",    label: "Price",    numeric: true, title: "Latest closing price (USD)" },
-  { key: "return_1m",      label: "1-Month",  numeric: true,
+  { key: "industry",       label: "Industry",  title: "Industry sub-group within the sector" },
+  { key: "close_price",    label: "Price",     numeric: true, title: "Latest closing price (USD)" },
+  { key: "week_52_high",   label: "52W High",  numeric: true, title: "Highest closing price over the past 52 weeks — proximity to this level signals strong momentum" },
+  { key: "week_52_low",    label: "52W Low",   numeric: true, title: "Lowest closing price over the past 52 weeks — distance from this level shows recovery strength" },
+  { key: "return_1m",      label: "1-Month",   numeric: true,
     title: "Price return over the past 1 month (~21 trading days). Shows recent momentum." },
   { key: "return_3m",      label: "3-Month",  numeric: true,
     title: "Price return over the past 3 months (~63 trading days). The core momentum signal." },
@@ -258,6 +260,9 @@ function StockRow({ row, rank, showSector, onAnalyze }: {
       <td className={`${TD} font-mono font-semibold text-white`}>
         {fmtPrice(row.close_price)}
       </td>
+      {/* 52-week range */}
+      <td className={`${TD} font-mono text-gray-400`}>{fmtPrice(row.week_52_high)}</td>
+      <td className={`${TD} font-mono text-gray-500`}>{fmtPrice(row.week_52_low)}</td>
       {/* Return columns */}
       <td className={`${TD} font-mono font-semibold ${pctColor(row.return_1m)}`}>
         {fmtReturn(row.return_1m)}

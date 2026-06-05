@@ -306,7 +306,7 @@ function InfoPanel({ isAllSectors }: { isAllSectors: boolean }) {
           <span className="text-indigo-400">ℹ</span>
           <span className="font-medium">
             {isAllSectors
-              ? "What am I looking at? — All Sectors (Top 10 across all markets)"
+              ? "What am I looking at? — All Sectors (Top 5 per sector+industry)"
               : "What am I looking at? — Single Sector view"}
           </span>
         </span>
@@ -318,16 +318,17 @@ function InfoPanel({ isAllSectors }: { isAllSectors: boolean }) {
           {isAllSectors ? (
             <>
               <p>
-                <span className="text-gray-200 font-medium">All Sectors</span> answers the question:{" "}
-                <span className="text-indigo-300 italic">
-                  "Which 10 stocks, out of 110 large-cap names across all 11 market sectors, have the strongest price momentum right now?"
-                </span>
+                <span className="text-gray-200 font-medium">All Sectors</span> shows the{" "}
+                <span className="text-indigo-300 font-medium">top 5 stocks per sector+industry combination</span>{" "}
+                — so every industry gets fair representation, not just the hottest sector overall.
               </p>
               <p>
                 Every stock is scored 0–100 by comparing its returns against all other stocks in our
                 universe — not against a fixed target. A score of 80 means this stock outperformed
                 roughly 80% of all 110 stocks across multiple timeframes. This is called{" "}
                 <span className="text-gray-300">cross-sectional ranking</span>.
+                Use the <span className="text-gray-300">Sector</span> and{" "}
+                <span className="text-gray-300">Industry</span> filters above the table to drill down.
               </p>
             </>
           ) : (
@@ -393,22 +394,52 @@ interface MomentumGridProps {
 }
 
 export function MomentumGrid({ onAnalyze }: MomentumGridProps) {
-  const { data, isLoading, error, countdown, refresh } = useMomentumSectors(10);
+  const { data, isLoading, error, countdown, refresh } = useMomentumSectors(20);
   const [activeSector, setActiveSector] = useState<string>(ALL_SECTORS_KEY);
   const [sortKey, setSortKey] = useState<SortKey>("__rank__");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [filterSector, setFilterSector] = useState<string>("");
+  const [filterIndustry, setFilterIndustry] = useState<string>("");
 
   const sectors = data?.sectors ?? [];
   const isAllSectors = activeSector === ALL_SECTORS_KEY;
+  const allStocksFlat = sectors.flatMap((s) => s.stocks);
 
-  // All-sectors: flatten → sort by score → top 10 (these become ranks #1–#10)
-  const allSectorsTop10 = sectors
-    .flatMap((s) => s.stocks)
-    .sort((a, b) => (b.momentum_score ?? -1) - (a.momentum_score ?? -1))
-    .slice(0, 10);
+  // All-sectors: top 5 per sector+industry combination, then sorted by score globally
+  const allSectorsByIndustry = (() => {
+    const groups = new Map<string, MomentumStockRow[]>();
+    for (const stock of allStocksFlat) {
+      const key = `${stock.sector ?? ""}||${stock.industry ?? ""}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(stock);
+    }
+    return Array.from(groups.values())
+      .flatMap((stocks) =>
+        [...stocks]
+          .sort((a, b) => (b.momentum_score ?? -1) - (a.momentum_score ?? -1))
+          .slice(0, 5)
+      )
+      .sort((a, b) => (b.momentum_score ?? -1) - (a.momentum_score ?? -1));
+  })();
 
   const sectorData = sectors.find((s) => s.sector === activeSector);
-  const baseRows = isAllSectors ? allSectorsTop10 : (sectorData?.stocks ?? []);
+
+  // Filter options derived from all available data
+  const uniqueSectors = Array.from(new Set(allStocksFlat.map((r) => r.sector).filter(Boolean) as string[])).sort();
+  const uniqueIndustries = Array.from(new Set(
+    allStocksFlat
+      .filter((r) => !filterSector || r.sector === filterSector)
+      .map((r) => r.industry)
+      .filter(Boolean) as string[]
+  )).sort();
+
+  // Base rows: apply sector+industry filters
+  const unfilteredRows = isAllSectors ? allSectorsByIndustry : (sectorData?.stocks ?? []);
+  const baseRows = unfilteredRows.filter((r) => {
+    if (filterSector && r.sector !== filterSector) return false;
+    if (filterIndustry && r.industry !== filterIndustry) return false;
+    return true;
+  });
 
   // Preserve original rank position across re-sorts
   const rankedRows = baseRows.map((row, i) => ({ row, rank: i + 1 }));
@@ -440,8 +471,8 @@ export function MomentumGrid({ onAnalyze }: MomentumGridProps) {
     ? new Date(data.fetched_at_utc).toLocaleTimeString()
     : null;
 
-  // Unique sectors represented in the All Sectors top 10
-  const representedSectors = allSectorsTop10
+  // Unique sectors represented in the All Sectors view
+  const representedSectors = allSectorsByIndustry
     .map((r) => r.sector)
     .filter((s, i, arr): s is string => s != null && arr.indexOf(s) === i);
 
@@ -453,7 +484,7 @@ export function MomentumGrid({ onAnalyze }: MomentumGridProps) {
           <h2 className="text-base font-semibold text-gray-100">Momentum Sectors</h2>
           <p className="text-xs text-gray-500 mt-0.5">
             {isAllSectors
-              ? "Top 10 momentum stocks right now — ranked across all 110 large-caps in 11 GICS sectors"
+              ? `Top 5 per sector+industry — ${allSectorsByIndustry.length} stocks across all 11 GICS sectors`
               : `Top 10 momentum stocks in the ${activeSector} sector`}
           </p>
         </div>
@@ -495,7 +526,7 @@ export function MomentumGrid({ onAnalyze }: MomentumGridProps) {
         <div className="flex flex-wrap gap-1.5">
           <button
             type="button"
-            onClick={() => { setActiveSector(ALL_SECTORS_KEY); setSortKey("__rank__"); setSortDir("asc"); }}
+            onClick={() => { setActiveSector(ALL_SECTORS_KEY); setSortKey("__rank__"); setSortDir("asc"); setFilterSector(""); setFilterIndustry(""); }}
             className={[
               "px-3 py-1 text-xs rounded-full border transition-colors font-medium",
               isAllSectors
@@ -509,7 +540,7 @@ export function MomentumGrid({ onAnalyze }: MomentumGridProps) {
             <button
               key={s.sector}
               type="button"
-              onClick={() => { setActiveSector(s.sector); setSortKey("__rank__"); setSortDir("asc"); }}
+              onClick={() => { setActiveSector(s.sector); setSortKey("__rank__"); setSortDir("asc"); setFilterSector(""); setFilterIndustry(""); }}
               className={[
                 "px-3 py-1 text-xs rounded-full border transition-colors",
                 s.sector === activeSector
@@ -528,7 +559,7 @@ export function MomentumGrid({ onAnalyze }: MomentumGridProps) {
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs text-gray-500">Sectors in top 10:</span>
           {representedSectors.map((s) => {
-            const count = allSectorsTop10.filter((r) => r.sector === s).length;
+            const count = allSectorsByIndustry.filter((r) => r.sector === s).length;
             return (
               <span
                 key={s}
@@ -544,6 +575,45 @@ export function MomentumGrid({ onAnalyze }: MomentumGridProps) {
 
       {/* ── Info panel ── */}
       <InfoPanel isAllSectors={isAllSectors} />
+
+      {/* ── Filters ── */}
+      {!isLoading && allStocksFlat.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-gray-500">Filter:</span>
+          {isAllSectors && (
+            <select
+              value={filterSector}
+              onChange={(e) => { setFilterSector(e.target.value); setFilterIndustry(""); }}
+              className="text-xs bg-gray-800 border border-gray-700 text-gray-300 rounded px-2 py-1.5 focus:outline-none focus:border-indigo-500 cursor-pointer"
+            >
+              <option value="">All Sectors</option>
+              {uniqueSectors.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          )}
+          <select
+            value={filterIndustry}
+            onChange={(e) => setFilterIndustry(e.target.value)}
+            className="text-xs bg-gray-800 border border-gray-700 text-gray-300 rounded px-2 py-1.5 focus:outline-none focus:border-indigo-500 cursor-pointer"
+          >
+            <option value="">All Industries</option>
+            {uniqueIndustries.map((i) => <option key={i} value={i}>{i}</option>)}
+          </select>
+          {(filterSector || filterIndustry) && (
+            <>
+              <button
+                type="button"
+                onClick={() => { setFilterSector(""); setFilterIndustry(""); }}
+                className="text-xs text-gray-500 hover:text-gray-200 px-2 py-1 rounded border border-gray-700 hover:border-gray-500 transition-colors"
+              >
+                ✕ Clear
+              </button>
+              <span className="text-xs text-gray-600">
+                {baseRows.length} stock{baseRows.length !== 1 ? "s" : ""}
+              </span>
+            </>
+          )}
+        </div>
+      )}
 
       {/* ── Table ── */}
       <div className="rounded-lg border border-gray-800 overflow-hidden">

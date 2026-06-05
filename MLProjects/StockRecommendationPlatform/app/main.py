@@ -759,6 +759,7 @@ def _fetch_stock_raw(sym: str) -> dict:
             "week_52_low": info.get("fiftyTwoWeekLow"),
             "sma50": info.get("fiftyDayAverage"),
             "sma200": info.get("twoHundredDayAverage"),
+            "market_cap": info.get("marketCap"),
         }
     except Exception:
         return {"symbol": sym}
@@ -865,6 +866,7 @@ async def get_momentum_sectors(
                         day_change_pct=d.get("day_change_pct"),
                         week_52_high=d.get("week_52_high"),
                         week_52_low=d.get("week_52_low"),
+                        market_cap=d.get("market_cap"),
                         momentum_score=score,
                         return_1m=h.get("return_1m"),
                         return_3m=h.get("return_3m"),

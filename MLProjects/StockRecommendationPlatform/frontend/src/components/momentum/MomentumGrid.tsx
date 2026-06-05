@@ -7,10 +7,10 @@ import type { MomentumStockRow } from "@/types/api";
 
 // ── Skeleton loading ──────────────────────────────────────────────────────────
 
-// All Sectors: #, Symbol, Score, Company, Sector, Industry, Price, 52W High, 52W Low, 1M%, 3M%, 6M%, vs S&P, RSI, Day%
-const SKELETON_ALL    = ["w-6","w-12","w-20","w-28","w-20","w-20","w-14","w-14","w-14","w-12","w-12","w-12","w-12","w-10","w-12"];
-// Per-sector:   #, Symbol, Score, Company, Industry, Price, 52W High, 52W Low, 1M%, 3M%, 6M%, vs S&P, RSI, Day%
-const SKELETON_SECTOR = ["w-6","w-12","w-20","w-28","w-20","w-14","w-14","w-14","w-12","w-12","w-12","w-12","w-10","w-12"];
+// All Sectors: #, Symbol, Score, Company, Sector, Industry, Mkt Cap, Price, 52W High, 52W Low, 1M%, 3M%, 6M%, vs S&P, RSI, Day%
+const SKELETON_ALL    = ["w-6","w-12","w-20","w-28","w-20","w-20","w-14","w-14","w-14","w-14","w-12","w-12","w-12","w-12","w-10","w-12"];
+// Per-sector:   #, Symbol, Score, Company, Industry, Mkt Cap, Price, 52W High, 52W Low, 1M%, 3M%, 6M%, vs S&P, RSI, Day%
+const SKELETON_SECTOR = ["w-6","w-12","w-20","w-28","w-20","w-14","w-14","w-14","w-14","w-12","w-12","w-12","w-12","w-10","w-12"];
 
 function SkeletonRow({ showSector }: { showSector: boolean }) {
   const widths = showSector ? SKELETON_ALL : SKELETON_SECTOR;
@@ -46,6 +46,14 @@ function fmtPrice(v: number | null): string {
 function fmtPct(v: number | null): string {
   if (v == null) return "--";
   return (v >= 0 ? "+" : "") + v.toFixed(2) + "%";
+}
+
+function fmtMarketCap(v: number | null): string {
+  if (v == null) return "--";
+  if (v >= 1e12) return "$" + (v / 1e12).toFixed(1) + "T";
+  if (v >= 1e9)  return "$" + (v / 1e9).toFixed(1) + "B";
+  if (v >= 1e6)  return "$" + (v / 1e6).toFixed(0) + "M";
+  return "$" + v.toLocaleString();
 }
 
 function fmtReturn(v: number | null): string {
@@ -103,7 +111,7 @@ type SortDir = "asc" | "desc";
 
 const NUMERIC_STOCK_COLS: (keyof MomentumStockRow)[] = [
   "pre_market","open_price","close_price","post_market",
-  "momentum_score","day_change_pct","week_52_high","week_52_low",
+  "momentum_score","day_change_pct","week_52_high","week_52_low","market_cap",
   "return_1m","return_3m","return_6m","vs_spy_6m","rsi_14",
 ];
 
@@ -156,6 +164,7 @@ const SECTOR_COL: ColDef = {
 
 const DETAIL_COLS: ColDef[] = [
   { key: "industry",       label: "Industry",  title: "Industry sub-group within the sector" },
+  { key: "market_cap",     label: "Mkt Cap",   numeric: true, title: "Market capitalisation — total market value of all outstanding shares" },
   { key: "close_price",    label: "Price",     numeric: true, title: "Latest closing price (USD)" },
   { key: "week_52_high",   label: "52W High",  numeric: true, title: "Highest closing price over the past 52 weeks — proximity to this level signals strong momentum" },
   { key: "week_52_low",    label: "52W Low",   numeric: true, title: "Lowest closing price over the past 52 weeks — distance from this level shows recovery strength" },
@@ -194,7 +203,7 @@ function Th({ col, sortKey, sortDir, onSort }: {
       onClick={() => onSort(col.key)}
       title={col.title}
       className={[
-        "px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap",
+        "px-2 py-2 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap",
         "select-none cursor-pointer transition-colors",
         active
           ? "text-indigo-300 bg-gray-800/60"
@@ -210,7 +219,7 @@ function Th({ col, sortKey, sortDir, onSort }: {
 
 // ── Table row ─────────────────────────────────────────────────────────────────
 
-const TD = "px-3 py-2 text-xs whitespace-nowrap";
+const TD = "px-2 py-1.5 text-xs whitespace-nowrap";
 
 const RANK_COLORS: Record<number, string> = {
   1: "text-yellow-400 font-bold",
@@ -243,19 +252,21 @@ function StockRow({ row, rank, showSector, onAnalyze }: {
         <ScoreBar score={row.momentum_score} />
       </td>
       {/* Company */}
-      <td className={`${TD} text-gray-300 max-w-[160px] truncate`} title={row.company_name ?? ""}>
+      <td className={`${TD} text-gray-300 max-w-[140px] truncate`} title={row.company_name ?? ""}>
         {row.company_name ?? "--"}
       </td>
       {/* Sector (All Sectors only) */}
       {showSector && (
-        <td className={`${TD} text-gray-400 max-w-[130px] truncate`} title={row.sector ?? ""}>
+        <td className={`${TD} text-gray-400 max-w-[110px] truncate`} title={row.sector ?? ""}>
           {row.sector ?? "--"}
         </td>
       )}
       {/* Industry */}
-      <td className={`${TD} text-gray-500 max-w-[130px] truncate`} title={row.industry ?? ""}>
+      <td className={`${TD} text-gray-500 max-w-[120px] truncate`} title={row.industry ?? ""}>
         {row.industry ?? "--"}
       </td>
+      {/* Market Cap */}
+      <td className={`${TD} font-mono text-gray-300`}>{fmtMarketCap(row.market_cap)}</td>
       {/* Price */}
       <td className={`${TD} font-mono font-semibold text-white`}>
         {fmtPrice(row.close_price)}
@@ -480,7 +491,7 @@ export function MomentumGrid({ onAnalyze }: MomentumGridProps) {
     .filter((s, i, arr): s is string => s != null && arr.indexOf(s) === i);
 
   return (
-    <div className="space-y-4">
+    <div className="-mx-4 px-2 space-y-4">
       {/* ── Header ── */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>

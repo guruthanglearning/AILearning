@@ -323,6 +323,7 @@ class MomentumStockRow(BaseModel):
     day_change_pct: float | None = None
     week_52_high: float | None = None
     week_52_low: float | None = None
+    market_cap: float | None = None
     # Professional momentum factors
     return_1m: float | None = None   # 1-month price return
     return_3m: float | None = None   # 3-month price return

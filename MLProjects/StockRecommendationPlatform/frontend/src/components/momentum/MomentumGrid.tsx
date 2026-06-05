@@ -75,7 +75,7 @@ function ScoreBar({ score }: { score: number | null }) {
   const color = pct >= 70 ? "bg-green-500" : pct >= 40 ? "bg-amber-500" : "bg-red-500";
   const label = pct >= 70 ? "text-green-300" : pct >= 40 ? "text-amber-300" : "text-red-300";
   return (
-    <div className="flex items-center gap-2 min-w-[90px]">
+    <div className="flex items-center gap-2 min-w-[80px]">
       <div className="flex-1 h-1.5 bg-gray-700 rounded-full overflow-hidden">
         <div className={`h-full ${color} rounded-full`} style={{ width: `${pct}%` }} />
       </div>
@@ -143,42 +143,43 @@ interface ColDef {
   title: string;
   sticky?: boolean;
   numeric?: boolean;
+  w: number; // fixed column width in px for table-layout:fixed
 }
 
 const RANK_COL: ColDef = {
-  key: "__rank__", label: "#", numeric: true,
+  key: "__rank__", label: "#", numeric: true, w: 32,
   title: "Rank by composite momentum score (1 = strongest momentum)",
 };
 
 const BASE_COLS: ColDef[] = [
-  { key: "symbol",         label: "Symbol",  sticky: true, title: "Click to run AI analysis on this stock" },
-  { key: "momentum_score", label: "Score",   numeric: true,
+  { key: "symbol",         label: "Symbol",  sticky: true, w: 68,  title: "Click to run AI analysis on this stock" },
+  { key: "momentum_score", label: "Score",   numeric: true, w: 100,
     title: "Composite score 0–100. Combines how this stock's 1M/3M/6M returns rank against the other 110 stocks in our universe, plus SMA trend confirmation and 52-week high proximity." },
-  { key: "company_name",   label: "Company", title: "Company name" },
+  { key: "company_name",   label: "Company", w: 140, title: "Company name" },
 ];
 
 const SECTOR_COL: ColDef = {
-  key: "sector", label: "Sector",
+  key: "sector", label: "Sector", w: 105,
   title: "GICS sector — tells you which part of the economy this company operates in",
 };
 
 const DETAIL_COLS: ColDef[] = [
-  { key: "industry",       label: "Industry",  title: "Industry sub-group within the sector" },
-  { key: "market_cap",     label: "Mkt Cap",   numeric: true, title: "Market capitalisation — total market value of all outstanding shares" },
-  { key: "close_price",    label: "Price",     numeric: true, title: "Latest closing price (USD)" },
-  { key: "week_52_high",   label: "52W High",  numeric: true, title: "Highest closing price over the past 52 weeks — proximity to this level signals strong momentum" },
-  { key: "week_52_low",    label: "52W Low",   numeric: true, title: "Lowest closing price over the past 52 weeks — distance from this level shows recovery strength" },
-  { key: "return_1m",      label: "1-Month",   numeric: true,
+  { key: "industry",       label: "Industry",  w: 110, title: "Industry sub-group within the sector" },
+  { key: "market_cap",     label: "Mkt Cap",   numeric: true, w: 72,  title: "Market capitalisation — total market value of all outstanding shares" },
+  { key: "close_price",    label: "Price",     numeric: true, w: 68,  title: "Latest closing price (USD)" },
+  { key: "week_52_high",   label: "52W High",  numeric: true, w: 74,  title: "Highest closing price over the past 52 weeks — proximity to this level signals strong momentum" },
+  { key: "week_52_low",    label: "52W Low",   numeric: true, w: 72,  title: "Lowest closing price over the past 52 weeks — distance from this level shows recovery strength" },
+  { key: "return_1m",      label: "1M%",       numeric: true, w: 62,
     title: "Price return over the past 1 month (~21 trading days). Shows recent momentum." },
-  { key: "return_3m",      label: "3-Month",  numeric: true,
+  { key: "return_3m",      label: "3M%",       numeric: true, w: 62,
     title: "Price return over the past 3 months (~63 trading days). The core momentum signal." },
-  { key: "return_6m",      label: "6-Month",  numeric: true,
+  { key: "return_6m",      label: "6M%",       numeric: true, w: 62,
     title: "Price return over the past 6 months (~126 trading days). The strongest predictor of continued momentum per academic research." },
-  { key: "vs_spy_6m",      label: "vs S&P",   numeric: true,
+  { key: "vs_spy_6m",      label: "vs S&P",   numeric: true, w: 62,
     title: "6-month return minus the S&P 500 return over the same period. Positive means this stock beat the market (excess return / alpha)." },
-  { key: "rsi_14",         label: "RSI",      numeric: true,
+  { key: "rsi_14",         label: "RSI",      numeric: true, w: 52,
     title: "14-day Relative Strength Index. 50–70 = healthy uptrend (green). >80 = potentially overbought, momentum may stall (red). <30 = oversold (red)." },
-  { key: "day_change_pct", label: "Today",    numeric: true, title: "Today's price change %" },
+  { key: "day_change_pct", label: "Today",    numeric: true, w: 62,  title: "Today's price change %" },
 ];
 
 function getColumns(showSector: boolean): ColDef[] {
@@ -202,6 +203,7 @@ function Th({ col, sortKey, sortDir, onSort }: {
     <th
       onClick={() => onSort(col.key)}
       title={col.title}
+      style={{ width: col.w }}
       className={[
         "px-2 py-2 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap",
         "select-none cursor-pointer transition-colors",
@@ -252,18 +254,18 @@ function StockRow({ row, rank, showSector, onAnalyze }: {
         <ScoreBar score={row.momentum_score} />
       </td>
       {/* Company */}
-      <td className={`${TD} text-gray-300 max-w-[140px] truncate`} title={row.company_name ?? ""}>
-        {row.company_name ?? "--"}
+      <td className={TD} title={row.company_name ?? ""}>
+        <div className="text-gray-300 truncate" style={{ maxWidth: 140 }}>{row.company_name ?? "--"}</div>
       </td>
       {/* Sector (All Sectors only) */}
       {showSector && (
-        <td className={`${TD} text-gray-400 max-w-[110px] truncate`} title={row.sector ?? ""}>
-          {row.sector ?? "--"}
+        <td className={TD} title={row.sector ?? ""}>
+          <div className="text-gray-400 truncate" style={{ maxWidth: 110 }}>{row.sector ?? "--"}</div>
         </td>
       )}
       {/* Industry */}
-      <td className={`${TD} text-gray-500 max-w-[120px] truncate`} title={row.industry ?? ""}>
-        {row.industry ?? "--"}
+      <td className={TD} title={row.industry ?? ""}>
+        <div className="text-gray-500 truncate" style={{ maxWidth: 120 }}>{row.industry ?? "--"}</div>
       </td>
       {/* Market Cap */}
       <td className={`${TD} font-mono text-gray-300`}>{fmtMarketCap(row.market_cap)}</td>
@@ -491,7 +493,10 @@ export function MomentumGrid({ onAnalyze }: MomentumGridProps) {
     .filter((s, i, arr): s is string => s != null && arr.indexOf(s) === i);
 
   return (
-    <div className="-mx-4 px-2 space-y-4">
+    <div
+      className="space-y-4"
+      style={{ width: "100vw", position: "relative", left: "50%", transform: "translateX(-50%)", paddingLeft: 16, paddingRight: 16 }}
+    >
       {/* ── Header ── */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
@@ -632,7 +637,7 @@ export function MomentumGrid({ onAnalyze }: MomentumGridProps) {
       {/* ── Table ── */}
       <div className="rounded-lg border border-gray-800 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left">
+          <table className="text-left min-w-[1150px] w-max">
             <thead className="bg-gray-900 border-b border-gray-700">
               <tr>
                 {columns.map((col) => (

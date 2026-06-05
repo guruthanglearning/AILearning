@@ -403,7 +403,10 @@ export function MomentumGrid({ onAnalyze }: MomentumGridProps) {
 
   const sectors = data?.sectors ?? [];
   const isAllSectors = activeSector === ALL_SECTORS_KEY;
-  const allStocksFlat = sectors.flatMap((s) => s.stocks);
+  // Inherit sector name from parent group when the stock's own field is null
+  const allStocksFlat = sectors.flatMap((s) =>
+    s.stocks.map((stock) => ({ ...stock, sector: stock.sector ?? s.sector }))
+  );
 
   // All-sectors: top 5 per sector+industry combination, then sorted by score globally
   const allSectorsByIndustry = (() => {

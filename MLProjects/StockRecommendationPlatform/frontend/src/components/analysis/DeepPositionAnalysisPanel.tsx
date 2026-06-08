@@ -3,9 +3,7 @@
 import { useState } from "react";
 
 import type {
-  DecisionChecklistItem,
   FundamentalsSnapshot,
-  PositionSizingHint,
   SupervisorVerdict,
   TechnicalsSnapshot,
 } from "@/types/api";
@@ -376,116 +374,6 @@ function SentimentSection({ verdict }: { verdict: SupervisorVerdict }) {
   );
 }
 
-// ─── Section: Checklist ──────────────────────────────────────────────────────
-
-function ChecklistSection({ items }: { items: DecisionChecklistItem[] }) {
-  const passed = items.filter((i) => i.state === "pass");
-  const failed = items.filter((i) => i.state === "fail");
-  const neutral = items.filter((i) => i.state !== "pass" && i.state !== "fail");
-  if (items.length === 0) return null;
-
-  return (
-    <div>
-      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-        Decision Checklist ({passed.length}/{items.length} passed)
-      </p>
-      <div className="space-y-1">
-        {passed.map((item) => (
-          <div key={item.id} className="flex items-start gap-2 text-xs">
-            <span className="text-green-400 mt-0.5 shrink-0">✓</span>
-            <div>
-              <span className="text-gray-300">{item.label}</span>
-              {item.explanation && (
-                <span className="text-gray-600 ml-1">— {item.explanation}</span>
-              )}
-            </div>
-          </div>
-        ))}
-        {failed.map((item) => (
-          <div key={item.id} className="flex items-start gap-2 text-xs">
-            <span className="text-red-400 mt-0.5 shrink-0">✗</span>
-            <div>
-              <span className="text-gray-400">{item.label}</span>
-              {item.explanation && (
-                <span className="text-gray-600 ml-1">— {item.explanation}</span>
-              )}
-            </div>
-          </div>
-        ))}
-        {neutral.map((item) => (
-          <div key={item.id} className="flex items-start gap-2 text-xs">
-            <span className="text-gray-600 mt-0.5 shrink-0">–</span>
-            <span className="text-gray-600">{item.label}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── Section: Position sizing ─────────────────────────────────────────────────
-
-function PositionSizingSection({ hints }: { hints: PositionSizingHint[] }) {
-  if (hints.length === 0) return null;
-  return (
-    <div>
-      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-        Position Sizing Guidance
-      </p>
-      <div className="space-y-2">
-        {hints.map((h, i) => (
-          <div key={i} className="text-xs">
-            <span className="text-gray-300 font-medium">{h.instrument_type}: </span>
-            <span className="text-gray-400">{h.note}</span>
-            <span className="text-gray-600 ml-1">
-              ({h.suggested_risk_budget_pct_range[0]}–{h.suggested_risk_budget_pct_range[1]}% risk)
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── Section: Volatility ─────────────────────────────────────────────────────
-
-function VolatilitySection({ verdict }: { verdict: SupervisorVerdict }) {
-  const vol = verdict.decision_aids?.volatility;
-  if (!vol) return null;
-
-  const rows: [string, string, string][] = [];
-  rows.push(["Regime", vol.regime, "text-gray-200"]);
-  if (vol.iv_rank_52w != null)
-    rows.push([
-      "IV Rank (52w)",
-      `${vol.iv_rank_52w.toFixed(0)}%${vol.iv_rank_52w > 50 ? " — elevated" : " — low"}`,
-      vol.iv_rank_52w > 50 ? "text-amber-400" : "text-gray-300",
-    ]);
-  if (vol.implied_move_1d_pct != null)
-    rows.push([
-      "Implied Move 1d",
-      `±${(vol.implied_move_1d_pct * 100).toFixed(2)}%`,
-      vol.implied_move_1d_pct > 0.02 ? "text-amber-400" : "text-gray-300",
-    ]);
-  if (vol.iv_vs_hv_note) rows.push(["IV vs HV", vol.iv_vs_hv_note, "text-gray-400"]);
-
-  return (
-    <div>
-      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-        Volatility Environment
-      </p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
-        {rows.map(([label, value, cls]) => (
-          <div key={label} className="flex justify-between text-xs gap-2">
-            <span className="text-gray-500 shrink-0">{label}</span>
-            <span className={`${cls} text-right`}>{value}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function DeepPositionAnalysisPanel({ verdict, symbol }: Props) {
@@ -495,9 +383,6 @@ export function DeepPositionAnalysisPanel({ verdict, symbol }: Props) {
   const hasTechnicals = !!verdict.technicals;
   const hasFundamentals = !!verdict.fundamentals;
   const hasSentiment = verdict.sentiment_score != null || !!verdict.sentiment_forecast;
-  const hasChecklist = (verdict.decision_aids?.checklist?.length ?? 0) > 0;
-  const hasSizing = (verdict.decision_aids?.position_sizing?.length ?? 0) > 0;
-  const hasVolatility = !!verdict.decision_aids?.volatility;
 
   return (
     <div className="rounded-lg border border-gray-800 overflow-hidden">
@@ -530,17 +415,6 @@ export function DeepPositionAnalysisPanel({ verdict, symbol }: Props) {
           {hasTechnicals && <TechnicalsSection t={verdict.technicals!} />}
           {hasFundamentals && <FundamentalsSection f={verdict.fundamentals!} />}
           {hasSentiment && <SentimentSection verdict={verdict} />}
-          {hasVolatility && <VolatilitySection verdict={verdict} />}
-
-          {(hasTechnicals || hasFundamentals || hasSentiment || hasVolatility) &&
-            (hasChecklist || hasSizing) && <div className="border-t border-gray-800/60" />}
-
-          {hasChecklist && (
-            <ChecklistSection items={verdict.decision_aids!.checklist} />
-          )}
-          {hasSizing && (
-            <PositionSizingSection hints={verdict.decision_aids!.position_sizing} />
-          )}
         </div>
       )}
     </div>

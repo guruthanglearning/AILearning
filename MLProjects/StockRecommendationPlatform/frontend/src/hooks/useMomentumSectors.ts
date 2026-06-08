@@ -28,5 +28,5 @@ export function useMomentumSectors(limit = 10) {
     return () => { if (cdRef.current) clearInterval(cdRef.current); };
   }, [result.dataUpdatedAt]);
 
-  return { ...result, countdown, refresh: result.refetch };
+  return { ...result, isRefreshing: result.isFetching && !!result.data, countdown, refresh: result.refetch };
 }

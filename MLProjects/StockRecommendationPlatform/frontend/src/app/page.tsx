@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef } from "react";
 
 import { AgentStatusGrid } from "@/components/analysis/AgentStatusGrid";
+import { DeepPositionAnalysisPanel } from "@/components/analysis/DeepPositionAnalysisPanel";
 import { AnalysisForm } from "@/components/analysis/AnalysisForm";
 import { AnalysisHistory } from "@/components/analysis/AnalysisHistory";
 import { AnalysisLoader } from "@/components/analysis/AnalysisLoader";
@@ -227,6 +228,10 @@ function HomePage() {
 
       {showGrid && (
         <AgentStatusGrid contributions={gridContributions} streaming={isFetching} />
+      )}
+
+      {verdict && !isFetching && (
+        <DeepPositionAnalysisPanel verdict={verdict} symbol={req?.symbol ?? ""} />
       )}
 
       {verdict && !isFetching && verdict.has_upcoming_earnings && (

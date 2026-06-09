@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     # Phase 2 — batch concurrency
     batch_concurrency: int = 5
 
+    # Phase 11 — Claude LLM decision engine
+    anthropic_api_key: str | None = None
+
     # Phase 6 — API hardening
     cors_origins: str = "*"                  # CORS_ORIGINS env var; "*" = dev wildcard; comma-separated for prod
     rate_limit_default: str = "200/minute"   # global fallback for all routes

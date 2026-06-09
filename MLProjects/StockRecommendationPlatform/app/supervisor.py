@@ -20,6 +20,7 @@ from app.config import settings
 from app.db.models import AgentArtifact, AnalysisRun
 from app.db.session import get_session
 from app.decision_support import build_decision_aids
+from app.services.claude_service import get_claude_verdict
 from app.observability import agent_latency_histogram, get_correlation_id, get_tracer
 from app.providers.factory import build_provider
 from app.schemas.agents import (
@@ -238,10 +239,22 @@ class Supervisor:
             ml_forecast_signal=sent.forecast_signal,
         )
 
-        verdict, options_guidance, note = self._merge(
-            m, tech, opt, risk, decision_aids.stock_vs_options_score,
-            vol_regime=decision_aids.volatility.regime if decision_aids.volatility else "unknown",
-        )
+        # --- Claude LLM verdict (falls back to rule-based _merge on failure) ---
+        claude = await get_claude_verdict(symbol, m, f, tech, opt, risk, sent, decision_aids)
+        if claude is not None:
+            verdict = claude.instrument_recommendation
+            options_guidance = claude.options_guidance
+            note = claude.confidence_note
+            decision_aids.summary_headline = claude.summary_headline
+            if claude.user_answers:
+                decision_aids.user_answers = claude.user_answers
+            log.info("claude_verdict_applied", symbol=symbol, recommendation=verdict.value)
+        else:
+            verdict, options_guidance, note = self._merge(
+                m, tech, opt, risk, decision_aids.stock_vs_options_score,
+                vol_regime=decision_aids.volatility.regime if decision_aids.volatility else "unknown",
+            )
+            log.info("rule_based_verdict_applied", symbol=symbol, recommendation=verdict.value)
 
         result = SupervisorVerdict(
             instrument_recommendation=verdict,
@@ -385,10 +398,22 @@ class Supervisor:
             ml_forecast_signal=sent.forecast_signal,  # type: ignore[attr-defined]
         )
 
-        verdict, options_guidance, note = self._merge(
-            m, tech, opt, risk, decision_aids.stock_vs_options_score,
-            vol_regime=decision_aids.volatility.regime if decision_aids.volatility else "unknown",
-        )
+        # --- Claude LLM verdict (falls back to rule-based _merge on failure) ---
+        claude = await get_claude_verdict(symbol, m, f, tech, opt, risk, sent, decision_aids)
+        if claude is not None:
+            verdict = claude.instrument_recommendation
+            options_guidance = claude.options_guidance
+            note = claude.confidence_note
+            decision_aids.summary_headline = claude.summary_headline
+            if claude.user_answers:
+                decision_aids.user_answers = claude.user_answers
+            log.info("claude_verdict_applied", symbol=symbol, recommendation=verdict.value)
+        else:
+            verdict, options_guidance, note = self._merge(
+                m, tech, opt, risk, decision_aids.stock_vs_options_score,
+                vol_regime=decision_aids.volatility.regime if decision_aids.volatility else "unknown",
+            )
+            log.info("rule_based_verdict_applied", symbol=symbol, recommendation=verdict.value)
 
         result = SupervisorVerdict(
             instrument_recommendation=verdict,

@@ -27,6 +27,8 @@ export function ErrorMessage({ error }: ErrorMessageProps) {
       message = "Rate limit reached — wait a moment before retrying.";
     } else if (error.statusCode === 422) {
       message = `Validation error: ${error.message}`;
+    } else if (error.statusCode === 502) {
+      message = error.message;
     } else {
       message = `Error ${error.statusCode}: ${error.message}`;
     }

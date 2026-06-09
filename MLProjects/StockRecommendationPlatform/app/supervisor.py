@@ -253,7 +253,7 @@ class Supervisor:
                 error_log.record(
                     symbol=symbol,
                     agent="ClaudeDecisionEngine",
-                    status="failed",
+                    status="claude_failed",
                     message=str(exc),
                     detail=traceback.format_exc(),
                 )
@@ -423,7 +423,7 @@ class Supervisor:
                 error_log.record(
                     symbol=symbol,
                     agent="ClaudeDecisionEngine",
-                    status="failed",
+                    status="claude_failed",
                     message=str(exc),
                     detail=traceback.format_exc(),
                 )

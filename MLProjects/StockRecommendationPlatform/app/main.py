@@ -21,7 +21,7 @@ from fastapi import (
     WebSocketDisconnect,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -56,6 +56,7 @@ from app.schemas.agents import (
     SupervisorVerdict,
 )
 from app.schemas.batch import BatchJobRequest, BatchJobResponse, BatchJobStatus
+from app.services.claude_service import ClaudeServiceError
 from app.supervisor import Supervisor
 from app.universe import COMPOSITION_AS_OF, TOP_10, TOP_100, get_sp500
 
@@ -109,6 +110,13 @@ app = FastAPI(
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+async def _claude_service_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    return JSONResponse(status_code=502, content={"detail": str(exc)})
+
+
+app.add_exception_handler(ClaudeServiceError, _claude_service_error_handler)
 
 # Registered first = innermost = last to see request (Starlette LIFO)
 app.add_middleware(

@@ -10,14 +10,16 @@ _lock = Lock()
 _buffer: deque[dict[str, Any]] = deque(maxlen=_MAX_ENTRIES)
 
 
-def record(*, symbol: str, agent: str, status: str, message: str) -> None:
-    entry = {
+def record(*, symbol: str, agent: str, status: str, message: str, detail: str | None = None) -> None:
+    entry: dict[str, Any] = {
         "ts": datetime.now(tz=UTC).isoformat(),
         "symbol": symbol.upper(),
         "agent": agent,
         "status": status,
         "message": message,
     }
+    if detail is not None:
+        entry["detail"] = detail
     with _lock:
         _buffer.appendleft(entry)
 

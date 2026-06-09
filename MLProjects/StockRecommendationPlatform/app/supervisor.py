@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import traceback
 import uuid
 from datetime import UTC, datetime
 
@@ -239,22 +240,27 @@ class Supervisor:
             ml_forecast_signal=sent.forecast_signal,
         )
 
-        # --- Claude LLM verdict (falls back to rule-based _merge on failure) ---
-        claude = await get_claude_verdict(symbol, m, f, tech, opt, risk, sent, decision_aids)
-        if claude is not None:
-            verdict = claude.instrument_recommendation
-            options_guidance = claude.options_guidance
-            note = claude.confidence_note
-            decision_aids.summary_headline = claude.summary_headline
-            if claude.user_answers:
-                decision_aids.user_answers = claude.user_answers
-            log.info("claude_verdict_applied", symbol=symbol, recommendation=verdict.value)
-        else:
-            verdict, options_guidance, note = self._merge(
-                m, tech, opt, risk, decision_aids.stock_vs_options_score,
-                vol_regime=decision_aids.volatility.regime if decision_aids.volatility else "unknown",
+        # --- Claude LLM verdict (no fallback — failure surfaces to the caller) ---
+        try:
+            claude = await get_claude_verdict(symbol, m, f, tech, opt, risk, sent, decision_aids)
+        except Exception as exc:
+            error_log.record(
+                symbol=symbol,
+                agent="ClaudeDecisionEngine",
+                status="failed",
+                message=str(exc),
+                detail=traceback.format_exc(),
             )
-            log.info("rule_based_verdict_applied", symbol=symbol, recommendation=verdict.value)
+            log.error("claude_verdict_failed", symbol=symbol, error=str(exc))
+            raise
+
+        verdict = claude.instrument_recommendation
+        options_guidance = claude.options_guidance
+        note = claude.confidence_note
+        decision_aids.summary_headline = claude.summary_headline
+        if claude.user_answers:
+            decision_aids.user_answers = claude.user_answers
+        log.info("claude_verdict_applied", symbol=symbol, recommendation=verdict.value)
 
         result = SupervisorVerdict(
             instrument_recommendation=verdict,
@@ -398,22 +404,27 @@ class Supervisor:
             ml_forecast_signal=sent.forecast_signal,  # type: ignore[attr-defined]
         )
 
-        # --- Claude LLM verdict (falls back to rule-based _merge on failure) ---
-        claude = await get_claude_verdict(symbol, m, f, tech, opt, risk, sent, decision_aids)
-        if claude is not None:
-            verdict = claude.instrument_recommendation
-            options_guidance = claude.options_guidance
-            note = claude.confidence_note
-            decision_aids.summary_headline = claude.summary_headline
-            if claude.user_answers:
-                decision_aids.user_answers = claude.user_answers
-            log.info("claude_verdict_applied", symbol=symbol, recommendation=verdict.value)
-        else:
-            verdict, options_guidance, note = self._merge(
-                m, tech, opt, risk, decision_aids.stock_vs_options_score,
-                vol_regime=decision_aids.volatility.regime if decision_aids.volatility else "unknown",
+        # --- Claude LLM verdict (no fallback — failure surfaces to the caller) ---
+        try:
+            claude = await get_claude_verdict(symbol, m, f, tech, opt, risk, sent, decision_aids)
+        except Exception as exc:
+            error_log.record(
+                symbol=symbol,
+                agent="ClaudeDecisionEngine",
+                status="failed",
+                message=str(exc),
+                detail=traceback.format_exc(),
             )
-            log.info("rule_based_verdict_applied", symbol=symbol, recommendation=verdict.value)
+            log.error("claude_verdict_failed", symbol=symbol, error=str(exc))
+            raise
+
+        verdict = claude.instrument_recommendation
+        options_guidance = claude.options_guidance
+        note = claude.confidence_note
+        decision_aids.summary_headline = claude.summary_headline
+        if claude.user_answers:
+            decision_aids.user_answers = claude.user_answers
+        log.info("claude_verdict_applied", symbol=symbol, recommendation=verdict.value)
 
         result = SupervisorVerdict(
             instrument_recommendation=verdict,

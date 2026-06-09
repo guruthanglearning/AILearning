@@ -22,6 +22,10 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger(__name__)
 
+
+class ClaudeServiceError(RuntimeError):
+    """Raised when the Claude decision engine fails and analysis cannot continue."""
+
 _SYSTEM_PROMPT = """\
 You are an expert stock market analyst and options strategist with deep knowledge of \
 technical analysis, fundamental analysis, and options pricing theory.
@@ -329,23 +333,27 @@ async def get_claude_verdict(
     risk: RiskProOutput,
     sent: SentimentMLOutput,
     decision_aids: DecisionAids,
-) -> ClaudeVerdict | None:
+) -> ClaudeVerdict:
     """Call Claude to synthesize all agent outputs into a trading verdict.
 
-    Returns None on any failure so the caller can fall back to rule-based logic.
+    Raises ClaudeServiceError on any failure — no fallback is provided.
     """
+    import traceback
+
+    import anthropic
+
     from app.config import settings
+    from app.schemas.agents import InstrumentRecommendation, OptionsGuidance
 
     api_key = (settings.anthropic_api_key or "").strip()
     if not api_key:
-        log.info("claude_verdict_skipped", reason="ANTHROPIC_API_KEY not configured in .env")
-        return None
+        raise ClaudeServiceError(
+            "ANTHROPIC_API_KEY is not configured. "
+            "Add your Anthropic API key to the .env file (ANTHROPIC_API_KEY=sk-ant-...) "
+            "and restart the server to enable AI-powered analysis."
+        )
 
     try:
-        import anthropic
-
-        from app.schemas.agents import InstrumentRecommendation, OptionsGuidance
-
         client = anthropic.AsyncAnthropic(api_key=api_key)
 
         user_msg = _fmt_agents_prompt(symbol, m, f, tech, opt, risk, sent, decision_aids)
@@ -370,57 +378,81 @@ async def get_claude_verdict(
             messages=[{"role": "user", "content": user_msg}],
         )
 
-        tool_block = next(
-            (b for b in response.content if getattr(b, "type", None) == "tool_use"),
-            None,
-        )
-        if tool_block is None:
-            log.warning("claude_verdict_no_tool_block", symbol=symbol)
-            return None
-
-        inp: dict[str, Any] = tool_block.input  # type: ignore[attr-defined]
-        rec_str: str = inp["instrument_recommendation"]
-
-        options_guidance: OptionsGuidance | None = None
-        if rec_str == "options" and inp.get("options_strategy_family"):
-            options_guidance = OptionsGuidance(
-                strategy_family=inp["options_strategy_family"],
-                rationale_codes=inp.get("options_rationale_codes", []),
-                strike_guidance=inp.get(
-                    "options_strike_guidance",
-                    "Use your broker chain to identify appropriate strikes.",
-                ),
-                max_loss_scenario=inp.get(
-                    "options_max_loss_scenario",
-                    "Define max loss before entry.",
-                ),
-                profit_targets_scenario=inp.get(
-                    "options_profit_targets",
-                    ["Take profits at 50% of max credit or target; exit before expiry."],
-                ),
-            )
-
-        log.info(
-            "claude_verdict_ok",
-            symbol=symbol,
-            recommendation=rec_str,
-            input_tokens=response.usage.input_tokens,
-            output_tokens=response.usage.output_tokens,
-        )
-
-        return ClaudeVerdict(
-            instrument_recommendation=InstrumentRecommendation(rec_str),
-            confidence_note=inp["confidence_note"],
-            options_guidance=options_guidance,
-            summary_headline=inp["summary_headline"],
-            user_answers=[
-                inp["q1_thesis_answer"],
-                inp["q2_invalidation_answer"],
-                inp["q3_max_loss_answer"],
-                inp["q4_assignment_answer"],
-            ],
-        )
-
+    except anthropic.AuthenticationError as exc:
+        raise ClaudeServiceError(
+            f"Anthropic API authentication failed — check that ANTHROPIC_API_KEY is correct. "
+            f"Detail: {exc}"
+        ) from exc
+    except anthropic.RateLimitError as exc:
+        raise ClaudeServiceError(
+            f"Anthropic API rate limit reached — too many requests. "
+            f"Wait a moment and retry. Detail: {exc}"
+        ) from exc
+    except anthropic.APIConnectionError as exc:
+        raise ClaudeServiceError(
+            f"Could not connect to Anthropic API — check network connectivity. "
+            f"Detail: {exc}"
+        ) from exc
+    except anthropic.APIStatusError as exc:
+        raise ClaudeServiceError(
+            f"Anthropic API returned status {exc.status_code}. Detail: {exc.message}"
+        ) from exc
     except Exception as exc:
-        log.warning("claude_verdict_failed", symbol=symbol, error=str(exc))
-        return None
+        tb = traceback.format_exc()
+        raise ClaudeServiceError(
+            f"Unexpected error calling Claude ({type(exc).__name__}): {exc}\n\n{tb}"
+        ) from exc
+
+    tool_block = next(
+        (b for b in response.content if getattr(b, "type", None) == "tool_use"),
+        None,
+    )
+    if tool_block is None:
+        raise ClaudeServiceError(
+            "Claude returned a response with no tool-use block — "
+            "the model did not call submit_analysis_verdict as expected. "
+            f"Response stop_reason: {response.stop_reason}"
+        )
+
+    inp: dict[str, Any] = tool_block.input  # type: ignore[attr-defined]
+    rec_str: str = inp["instrument_recommendation"]
+
+    options_guidance: OptionsGuidance | None = None
+    if rec_str == "options" and inp.get("options_strategy_family"):
+        options_guidance = OptionsGuidance(
+            strategy_family=inp["options_strategy_family"],
+            rationale_codes=inp.get("options_rationale_codes", []),
+            strike_guidance=inp.get(
+                "options_strike_guidance",
+                "Use your broker chain to identify appropriate strikes.",
+            ),
+            max_loss_scenario=inp.get(
+                "options_max_loss_scenario",
+                "Define max loss before entry.",
+            ),
+            profit_targets_scenario=inp.get(
+                "options_profit_targets",
+                ["Take profits at 50% of max credit or target; exit before expiry."],
+            ),
+        )
+
+    log.info(
+        "claude_verdict_ok",
+        symbol=symbol,
+        recommendation=rec_str,
+        input_tokens=response.usage.input_tokens,
+        output_tokens=response.usage.output_tokens,
+    )
+
+    return ClaudeVerdict(
+        instrument_recommendation=InstrumentRecommendation(rec_str),
+        confidence_note=inp["confidence_note"],
+        options_guidance=options_guidance,
+        summary_headline=inp["summary_headline"],
+        user_answers=[
+            inp["q1_thesis_answer"],
+            inp["q2_invalidation_answer"],
+            inp["q3_max_loss_answer"],
+            inp["q4_assignment_answer"],
+        ],
+    )

@@ -371,6 +371,7 @@ export interface ErrorLogEntry {
   agent: string;
   status: string;
   message: string;
+  detail?: string;
 }
 
 // ─── SSE streaming event types ───────────────────────────────────────────────

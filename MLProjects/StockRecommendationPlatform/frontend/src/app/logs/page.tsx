@@ -6,9 +6,10 @@ import { clearErrorLogs, getErrorLogs } from "@/lib/api";
 import type { ErrorLogEntry } from "@/types/api";
 
 const STATUS_COLOR: Record<string, string> = {
-  degraded: "text-amber-400 bg-amber-900/30 border-amber-700/40",
-  failed:   "text-red-400 bg-red-900/30 border-red-700/40",
-  complete: "text-green-400 bg-green-900/30 border-green-700/40",
+  degraded:      "text-amber-400 bg-amber-900/30 border-amber-700/40",
+  failed:        "text-red-400 bg-red-900/30 border-red-700/40",
+  complete:      "text-green-400 bg-green-900/30 border-green-700/40",
+  claude_failed: "text-purple-300 bg-purple-900/30 border-purple-700/40",
 };
 
 function statusBadge(s: string) {
@@ -17,6 +18,43 @@ function statusBadge(s: string) {
     <span className={`inline-block px-1.5 py-0.5 text-xs rounded border ${cls}`}>
       {s}
     </span>
+  );
+}
+
+function LogRow({ e, i }: { e: ErrorLogEntry; i: number }) {
+  const [expanded, setExpanded] = useState(false);
+  const isClaudeAgent = e.agent === "ClaudeDecisionEngine";
+  return (
+    <>
+      <tr
+        className={`hover:bg-gray-800/30 transition-colors ${e.detail ? "cursor-pointer" : ""}`}
+        onClick={() => e.detail && setExpanded((v) => !v)}
+      >
+        <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap font-mono">{fmt(e.ts)}</td>
+        <td className="px-3 py-2 text-xs font-bold text-indigo-400 whitespace-nowrap">{e.symbol}</td>
+        <td className="px-3 py-2 text-xs whitespace-nowrap">
+          <span className={isClaudeAgent ? "text-purple-300 font-semibold" : "text-gray-300"}>
+            {e.agent}
+          </span>
+        </td>
+        <td className="px-3 py-2 text-xs whitespace-nowrap">{statusBadge(e.status)}</td>
+        <td className="px-3 py-2 text-xs text-gray-400 max-w-xl">
+          <span className="break-words">{e.message.split("\n")[0]}</span>
+          {e.detail && (
+            <span className="ml-2 text-gray-600 text-xs">{expanded ? "▲ hide trace" : "▼ show trace"}</span>
+          )}
+        </td>
+      </tr>
+      {expanded && e.detail && (
+        <tr className="bg-gray-950">
+          <td colSpan={5} className="px-3 pb-3 pt-0">
+            <pre className="text-xs text-gray-500 bg-gray-900 border border-gray-800 rounded p-3 overflow-x-auto whitespace-pre-wrap break-words max-h-64">
+              {e.detail}
+            </pre>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
@@ -130,10 +168,11 @@ export default function LogsPage() {
       <div className="flex flex-wrap gap-3">
         {[
           { label: "Total errors", value: entries.length },
-          { label: "Degraded", value: entries.filter((e) => e.status === "degraded").length, color: "text-amber-400" },
-          { label: "Failed",   value: entries.filter((e) => e.status === "failed").length,   color: "text-red-400"   },
-          { label: "Agents affected", value: Array.from(new Set(entries.map((e) => e.agent))).length },
-          { label: "Symbols",  value: Array.from(new Set(entries.map((e) => e.symbol))).length },
+          { label: "Degraded",     value: entries.filter((e) => e.status === "degraded").length, color: "text-amber-400" },
+          { label: "Failed",       value: entries.filter((e) => e.status === "failed").length,   color: "text-red-400"   },
+          { label: "Claude AI",    value: entries.filter((e) => e.agent === "ClaudeDecisionEngine").length, color: "text-purple-300" },
+          { label: "Agents",       value: Array.from(new Set(entries.map((e) => e.agent))).length },
+          { label: "Symbols",      value: Array.from(new Set(entries.map((e) => e.symbol))).length },
         ].map(({ label, value, color }) => (
           <div key={label} className="bg-gray-900 border border-gray-800 rounded-lg px-4 py-2 min-w-[110px]">
             <p className={`text-lg font-semibold ${color ?? "text-white"}`}>{value}</p>
@@ -189,7 +228,7 @@ export default function LogsPage() {
           <table className="w-full text-left">
             <thead className="bg-gray-900 border-b border-gray-700">
               <tr>
-                {["Timestamp", "Symbol", "Agent", "Status", "Error Message"].map((h) => (
+                {["Timestamp", "Symbol", "Agent", "Status", "Error Message (click row for trace)"].map((h) => (
                   <th key={h} className="px-3 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap">
                     {h}
                   </th>
@@ -207,13 +246,7 @@ export default function LogsPage() {
                 </tr>
               )}
               {filtered.map((e, i) => (
-                <tr key={i} className="hover:bg-gray-800/30 transition-colors">
-                  <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap font-mono">{fmt(e.ts)}</td>
-                  <td className="px-3 py-2 text-xs font-bold text-indigo-400 whitespace-nowrap">{e.symbol}</td>
-                  <td className="px-3 py-2 text-xs text-gray-300 whitespace-nowrap">{e.agent}</td>
-                  <td className="px-3 py-2 text-xs whitespace-nowrap">{statusBadge(e.status)}</td>
-                  <td className="px-3 py-2 text-xs text-gray-400 max-w-xl break-words">{e.message}</td>
-                </tr>
+                <LogRow key={i} e={e} i={i} />
               ))}
             </tbody>
           </table>

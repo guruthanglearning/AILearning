@@ -176,7 +176,7 @@ def _fmt_agents_prompt(
 
     # --- Market data ---
     price_str = f"${m.last_price:.2f}" if m.last_price else "unavailable"
-    lines += [f"MARKET DATA:", f"  Last price: {price_str}", ""]
+    lines += ["MARKET DATA:", f"  Last price: {price_str}", ""]
 
     # --- Fundamentals ---
     if f.status == AgentStatus.complete:
@@ -343,6 +343,7 @@ async def get_claude_verdict(
 
     try:
         import anthropic
+
         from app.schemas.agents import InstrumentRecommendation, OptionsGuidance
 
         client = anthropic.AsyncAnthropic(api_key=api_key)

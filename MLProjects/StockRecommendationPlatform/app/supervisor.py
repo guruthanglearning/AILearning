@@ -20,7 +20,6 @@ from app.config import settings
 from app.db.models import AgentArtifact, AnalysisRun
 from app.db.session import get_session
 from app.decision_support import build_decision_aids
-from app.services.claude_service import get_claude_verdict
 from app.observability import agent_latency_histogram, get_correlation_id, get_tracer
 from app.providers.factory import build_provider
 from app.schemas.agents import (
@@ -41,6 +40,7 @@ from app.schemas.agents import (
     SupervisorVerdict,
     TechnicalsOutput,
 )
+from app.services.claude_service import get_claude_verdict
 
 log = structlog.get_logger(__name__)
 _tracer = get_tracer("app.supervisor")

@@ -22,6 +22,52 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger(__name__)
 
+# ── Available models and their pricing ───────────────────────────────────────
+CLAUDE_MODELS: dict[str, dict] = {
+    "claude-opus-4-7": {
+        "label": "Opus 4.7",
+        "tier": "Professional",
+        "description": "Deepest reasoning — best quality",
+        "input_price_per_m": 5.0,
+        "output_price_per_m": 25.0,
+        "supports_thinking": True,
+        "est_cost_per_analysis": 0.05,
+    },
+    "claude-sonnet-4-6": {
+        "label": "Sonnet 4.6",
+        "tier": "Balanced",
+        "description": "Good quality, lower cost",
+        "input_price_per_m": 3.0,
+        "output_price_per_m": 15.0,
+        "supports_thinking": True,
+        "est_cost_per_analysis": 0.02,
+    },
+    "claude-haiku-4-5-20251001": {
+        "label": "Haiku 4.5",
+        "tier": "Dev/Fast",
+        "description": "Cheapest — use for testing",
+        "input_price_per_m": 1.0,
+        "output_price_per_m": 5.0,
+        "supports_thinking": False,
+        "est_cost_per_analysis": 0.004,
+    },
+}
+DEFAULT_MODEL = "claude-opus-4-7"
+
+# ── Session usage tracker (resets on server restart) ─────────────────────────
+_session_usage: dict[str, dict] = {}
+
+
+def get_session_usage() -> dict:
+    """Return cumulative token usage and estimated cost for this server session."""
+    total_cost = sum(v.get("estimated_cost_usd", 0.0) for v in _session_usage.values())
+    total_analyses = sum(v.get("analyses", 0) for v in _session_usage.values())
+    return {
+        "total_analyses": total_analyses,
+        "total_estimated_cost_usd": round(total_cost, 4),
+        "models_used": _session_usage,
+    }
+
 
 class ClaudeServiceError(RuntimeError):
     """Raised when the Claude decision engine fails and analysis cannot continue."""
@@ -333,6 +379,7 @@ async def get_claude_verdict(
     risk: RiskProOutput,
     sent: SentimentMLOutput,
     decision_aids: DecisionAids,
+    model: str | None = None,
 ) -> ClaudeVerdict:
     """Call Claude to synthesize all agent outputs into a trading verdict.
 
@@ -344,6 +391,9 @@ async def get_claude_verdict(
 
     from app.config import settings
     from app.schemas.agents import InstrumentRecommendation, OptionsGuidance
+
+    chosen_model = model if model in CLAUDE_MODELS else DEFAULT_MODEL
+    model_cfg = CLAUDE_MODELS[chosen_model]
 
     api_key = (settings.anthropic_api_key or "").strip()
     if not api_key:
@@ -362,21 +412,24 @@ async def get_claude_verdict(
             "Be specific and cite actual numbers from the data."
         )
 
-        response = await client.messages.create(
-            model="claude-opus-4-7",
-            max_tokens=2048,
-            thinking={"type": "adaptive"},
-            system=[
+        create_kwargs: dict = {
+            "model": chosen_model,
+            "max_tokens": 4096,
+            "system": [
                 {
                     "type": "text",
                     "text": _SYSTEM_PROMPT,
                     "cache_control": {"type": "ephemeral"},
                 }
             ],
-            tools=[_VERDICT_TOOL],
-            tool_choice={"type": "tool", "name": "submit_analysis_verdict"},
-            messages=[{"role": "user", "content": user_msg}],
-        )
+            "tools": [_VERDICT_TOOL],
+            "tool_choice": {"type": "tool", "name": "submit_analysis_verdict"},
+            "messages": [{"role": "user", "content": user_msg}],
+        }
+        if model_cfg["supports_thinking"]:
+            create_kwargs["thinking"] = {"type": "adaptive"}
+
+        response = await client.messages.create(**create_kwargs)
 
     except anthropic.AuthenticationError as exc:
         raise ClaudeServiceError(
@@ -436,12 +489,26 @@ async def get_claude_verdict(
             ),
         )
 
+    # Track session usage
+    entry = _session_usage.setdefault(
+        chosen_model,
+        {"analyses": 0, "input_tokens": 0, "output_tokens": 0, "estimated_cost_usd": 0.0},
+    )
+    entry["analyses"] += 1
+    entry["input_tokens"] += response.usage.input_tokens
+    entry["output_tokens"] += response.usage.output_tokens
+    input_cost = response.usage.input_tokens * model_cfg["input_price_per_m"] / 1_000_000
+    output_cost = response.usage.output_tokens * model_cfg["output_price_per_m"] / 1_000_000
+    entry["estimated_cost_usd"] = round(entry["estimated_cost_usd"] + input_cost + output_cost, 4)
+
     log.info(
         "claude_verdict_ok",
         symbol=symbol,
+        model=chosen_model,
         recommendation=rec_str,
         input_tokens=response.usage.input_tokens,
         output_tokens=response.usage.output_tokens,
+        est_cost_usd=round(input_cost + output_cost, 4),
     )
 
     return ClaudeVerdict(

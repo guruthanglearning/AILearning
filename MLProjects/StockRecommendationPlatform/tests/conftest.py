@@ -30,7 +30,7 @@ def _build_claude_verdict(
 def mock_claude_verdict(monkeypatch):
     """Replace get_claude_verdict with a rule-based mock so tests never hit the real API."""
 
-    async def _mock(symbol, m, f, tech, opt, risk, sent, decision_aids):
+    async def _mock(symbol, m, f, tech, opt, risk, sent, decision_aids, model=None):
         # Earnings imminent + trend not clearly bullish/bearish → options (defined risk)
         trend = getattr(tech, "trend_hint", None) or "mixed"
         if risk.has_upcoming_earnings and trend not in ("bullish", "bearish"):

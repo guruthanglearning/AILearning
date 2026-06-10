@@ -56,7 +56,7 @@ from app.schemas.agents import (
     SupervisorVerdict,
 )
 from app.schemas.batch import BatchJobRequest, BatchJobResponse, BatchJobStatus
-from app.services.claude_service import ClaudeServiceError
+from app.services.claude_service import CLAUDE_MODELS, ClaudeServiceError, get_session_usage
 from app.supervisor import Supervisor
 from app.universe import COMPOSITION_AS_OF, TOP_10, TOP_100, get_sp500
 
@@ -572,6 +572,18 @@ async def get_error_logs(
 async def clear_error_logs(request: Request) -> None:
     """Clear the in-memory error log buffer."""
     error_log.clear()
+
+
+@app.get("/v1/claude/models")
+async def list_claude_models():
+    """Return available Claude model options with pricing metadata."""
+    return {"models": CLAUDE_MODELS}
+
+
+@app.get("/v1/claude/usage")
+async def get_claude_usage():
+    """Return cumulative token usage and estimated cost for this server session."""
+    return get_session_usage()
 
 
 @app.post("/v1/ingest/warm", status_code=202)

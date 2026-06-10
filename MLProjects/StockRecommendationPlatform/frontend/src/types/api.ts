@@ -223,6 +223,30 @@ export interface AnalysisRunRequest {
   symbol: string;
   portfolio_value_usd?: number | null;
   max_risk_per_trade_pct?: number | null;
+  claude_model?: string | null;
+}
+
+export interface ClaudeModelInfo {
+  label: string;
+  tier: string;
+  description: string;
+  input_price_per_m: number;
+  output_price_per_m: number;
+  supports_thinking: boolean;
+  est_cost_per_analysis: number;
+}
+
+export interface ClaudeModelUsage {
+  analyses: number;
+  input_tokens: number;
+  output_tokens: number;
+  estimated_cost_usd: number;
+}
+
+export interface ClaudeUsage {
+  total_analyses: number;
+  total_estimated_cost_usd: number;
+  models_used: Record<string, ClaudeModelUsage>;
 }
 
 // ─── Batch schemas ────────────────────────────────────────────────────────────

@@ -248,7 +248,7 @@ class Supervisor:
         else:
             # --- Claude LLM verdict (no fallback — failure surfaces to the caller) ---
             try:
-                claude = await get_claude_verdict(symbol, m, f, tech, opt, risk, sent, decision_aids)
+                claude = await get_claude_verdict(symbol, m, f, tech, opt, risk, sent, decision_aids, model=req.claude_model)
             except Exception as exc:
                 error_log.record(
                     symbol=symbol,
@@ -418,7 +418,7 @@ class Supervisor:
         else:
             # --- Claude LLM verdict (no fallback — failure surfaces to the caller) ---
             try:
-                claude = await get_claude_verdict(symbol, m, f, tech, opt, risk, sent, decision_aids)
+                claude = await get_claude_verdict(symbol, m, f, tech, opt, risk, sent, decision_aids, model=req.claude_model)
             except Exception as exc:
                 error_log.record(
                     symbol=symbol,

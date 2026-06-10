@@ -265,6 +265,7 @@ class AnalysisRunRequest(BaseModel):
         description="Optional; used for position-sizing hints only",
     )
     batch_job_id: uuid.UUID | None = None
+    claude_model: str | None = None
 
 
 class LiveQuote(BaseModel):

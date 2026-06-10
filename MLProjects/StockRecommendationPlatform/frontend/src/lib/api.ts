@@ -7,6 +7,8 @@ import type {
   ApiKeyResponse,
   BatchJobRequest,
   BatchJobResponse,
+  ClaudeModelInfo,
+  ClaudeUsage,
   ErrorLogEntry,
   LiveQuote,
   MarketQuoteRow,
@@ -388,4 +390,17 @@ export async function deleteAlert(
     headers: headers(apiKey),
   });
   await checkResponse(res);
+}
+
+export async function getClaudeModels(): Promise<Record<string, ClaudeModelInfo>> {
+  const res = await fetch(`${API_URL}/v1/claude/models`);
+  await checkResponse(res);
+  const data = await res.json();
+  return data.models as Record<string, ClaudeModelInfo>;
+}
+
+export async function getClaudeUsage(): Promise<ClaudeUsage> {
+  const res = await fetch(`${API_URL}/v1/claude/usage`);
+  await checkResponse(res);
+  return res.json();
 }

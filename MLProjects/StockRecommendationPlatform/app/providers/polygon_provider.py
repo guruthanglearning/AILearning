@@ -187,8 +187,11 @@ class PolygonProvider(MarketDataProvider):
                 greeks = c.get("greeks", {})
                 if det.get("expiration_date") != chosen:
                     continue
+                strike = det.get("strike_price")
+                if strike is None:
+                    continue  # skip contracts without a valid strike price
                 row = {
-                    "strike": det.get("strike_price"),
+                    "strike": float(strike),
                     "bid": day.get("close"),
                     "ask": day.get("close"),
                     "lastPrice": day.get("last_quote", {}).get("ask") or day.get("close"),

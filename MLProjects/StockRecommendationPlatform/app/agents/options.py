@@ -72,10 +72,39 @@ class OptionsAgent(BaseAgent[OptionsOutput]):
 
             calls = calls.copy()
             puts = puts.copy()
+
+            # Drop rows with missing strikes — prevents idxmin() returning NaN
+            calls = calls.dropna(subset=["strike"])
+            puts = puts.dropna(subset=["strike"])
+            if calls.empty or puts.empty:
+                return OptionsOutput(
+                    agent_name=self.name,
+                    status=AgentStatus.degraded,
+                    provenance=self._prov(source, t0),
+                    nearest_expiry=chosen,
+                    error_message="No valid strike prices in chain",
+                    chain_liquidity_hint="unknown",
+                    raw_artifact={},
+                )
+
             calls["dist"] = (calls["strike"] - spot).abs()
             puts["dist"] = (puts["strike"] - spot).abs()
-            atm_c = calls.loc[calls["dist"].idxmin()]
-            atm_p = puts.loc[puts["dist"].idxmin()]
+
+            c_idx = calls["dist"].idxmin()
+            p_idx = puts["dist"].idxmin()
+            if pd.isna(c_idx) or pd.isna(p_idx):
+                return OptionsOutput(
+                    agent_name=self.name,
+                    status=AgentStatus.degraded,
+                    provenance=self._prov(source, t0),
+                    nearest_expiry=chosen,
+                    error_message="Could not locate ATM strike (all distances are NaN)",
+                    chain_liquidity_hint="unknown",
+                    raw_artifact={},
+                )
+
+            atm_c = calls.loc[c_idx]
+            atm_p = puts.loc[p_idx]
 
             iv_c = atm_c["impliedVolatility"] if "impliedVolatility" in atm_c.index else np.nan
             iv_p = atm_p["impliedVolatility"] if "impliedVolatility" in atm_p.index else np.nan

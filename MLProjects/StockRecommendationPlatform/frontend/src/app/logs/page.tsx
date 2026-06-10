@@ -39,7 +39,11 @@ function LogRow({ e, i }: { e: ErrorLogEntry; i: number }) {
         </td>
         <td className="px-3 py-2 text-xs whitespace-nowrap">{statusBadge(e.status)}</td>
         <td className="px-3 py-2 text-xs text-gray-400 max-w-xl">
-          <span className="break-words">{e.message.split("\n")[0]}</span>
+          <span className="break-words">
+            {e.message === "nan" || e.message === ""
+              ? <span className="text-amber-500 italic">NaN error — invalid/missing value in chain data (see trace)</span>
+              : e.message.split("\n")[0]}
+          </span>
           {e.detail && (
             <span className="ml-2 text-gray-600 text-xs">{expanded ? "▲ hide trace" : "▼ show trace"}</span>
           )}

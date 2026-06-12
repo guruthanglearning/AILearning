@@ -24,8 +24,8 @@ log = structlog.get_logger(__name__)
 
 # ── Available models and their pricing ───────────────────────────────────────
 CLAUDE_MODELS: dict[str, dict] = {
-    "claude-opus-4-7": {
-        "label": "Opus 4.7",
+    "claude-opus-4-8": {
+        "label": "Opus 4.8",
         "tier": "Professional",
         "description": "Deepest reasoning — best quality",
         "input_price_per_m": 5.0,
@@ -52,7 +52,7 @@ CLAUDE_MODELS: dict[str, dict] = {
         "est_cost_per_analysis": 0.004,
     },
 }
-DEFAULT_MODEL = "claude-opus-4-7"
+DEFAULT_MODEL = "claude-opus-4-8"
 
 # ── Session usage tracker (resets on server restart) ─────────────────────────
 _session_usage: dict[str, dict] = {}
@@ -423,7 +423,7 @@ async def get_claude_verdict(
                 }
             ],
             "tools": [_VERDICT_TOOL],
-            "tool_choice": {"type": "tool", "name": "submit_analysis_verdict"},
+            "tool_choice": {"type": "auto"},
             "messages": [{"role": "user", "content": user_msg}],
         }
         if model_cfg["supports_thinking"]:

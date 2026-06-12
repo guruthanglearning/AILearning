@@ -34,8 +34,8 @@ const MODEL_OPTIONS = [
     activeBorder: "border-sky-500",
   },
   {
-    id: "claude-opus-4-7",
-    label: "Opus 4.7",
+    id: "claude-opus-4-8",
+    label: "Opus 4.8",
     tier: "Professional",
     cost: "~$0.05",
     color: "text-violet-400",
@@ -45,7 +45,7 @@ const MODEL_OPTIONS = [
   },
 ] as const;
 
-const DEFAULT_MODEL = "claude-opus-4-7";
+const DEFAULT_MODEL = "claude-opus-4-8";
 const STORAGE_KEY = "claude_selected_model";
 
 export function AnalysisForm({ onSubmit, isLoading, defaultSymbol = "" }: AnalysisFormProps) {

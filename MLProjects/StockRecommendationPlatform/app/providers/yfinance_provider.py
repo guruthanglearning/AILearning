@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import partial
 from typing import Any
 
@@ -92,7 +92,7 @@ class YFinanceProvider(MarketDataProvider):
             chosen = expiries[0]
             for e in expiries[:12]:
                 try:
-                    if (datetime.strptime(e, "%Y-%m-%d") - datetime.now(timezone.utc).replace(tzinfo=None)).days >= 5:
+                    if (datetime.strptime(e, "%Y-%m-%d") - datetime.now(UTC).replace(tzinfo=None)).days >= 5:
                         chosen = e
                         break
                 except ValueError:

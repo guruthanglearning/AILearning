@@ -286,24 +286,45 @@ async def get_market_quotes(
     request: Request,
     symbols: str = Query(..., description="Comma-separated symbols, max 50"),
 ) -> list[MarketQuoteRow]:
-    """Batch quote fetch for the market-grid UI. Returns live data for up to 50 symbols."""
+    """Batch quote fetch for the market-grid UI.
+
+    Prices come from Polygon batch snapshot (reliable, one API call).
+    Supplementary fields (earnings, dividends, 52-wk, market cap) come from yfinance.
+    """
     sym_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
     if not sym_list:
         return []
     if len(sym_list) > 50:
         raise HTTPException(status_code=422, detail="Maximum 50 symbols per request")
 
-    def _fetch_one(sym: str) -> MarketQuoteRow:
+    # ── Step 1: Polygon batch snapshot for reliable price data ────────────────
+    polygon_prices: dict[str, dict] = {}
+    if settings.polygon_api_key:
+        try:
+            from app.providers.polygon_provider import PolygonProvider
+            _poly = PolygonProvider(api_key=settings.polygon_api_key)
+            raw = await _poly._get(
+                "/v2/snapshot/locale/us/markets/stocks/tickers",
+                tickers=",".join(sym_list),
+            )
+            for t in raw.get("tickers") or []:
+                sym = t.get("ticker", "")
+                day  = t.get("day") or {}
+                lt   = t.get("lastTrade") or {}
+                prev = t.get("prevDay") or {}
+                polygon_prices[sym] = {
+                    "last_price": lt.get("p") or day.get("c"),
+                    "change":     t.get("todaysChange"),
+                    "prev_close": prev.get("c"),
+                }
+            await _poly.aclose()
+        except Exception:
+            pass  # fall through to yfinance prices below
+
+    # ── Step 2: yfinance for supplementary fields Polygon doesn't carry ───────
+    def _fetch_supplementary(sym: str) -> dict:
         try:
             info = yf.Ticker(sym).info or {}
-            now = datetime.now(tz=UTC)
-            current = info.get("regularMarketPrice") or info.get("currentPrice")
-            prev_close = info.get("regularMarketPreviousClose") or info.get("previousClose")
-            raw_change = info.get("regularMarketChange")
-            if raw_change is None and current and prev_close and prev_close > 0:
-                raw_change = current - prev_close
-
-            # Earnings date — try multiple yfinance field names
             earnings_date: str | None = None
             for key in ("earningsTimestamp", "earningsDate"):
                 val = info.get(key)
@@ -313,37 +334,62 @@ async def get_market_quotes(
                 if isinstance(ts, (int, float)) and ts > 0:
                     earnings_date = datetime.fromtimestamp(ts, tz=UTC).strftime("%Y/%m/%d")
                     break
-
-            # Dividend payment date
             div_payment_date: str | None = None
             dd = info.get("dividendDate")
             if isinstance(dd, (int, float)) and dd > 0:
                 div_payment_date = datetime.fromtimestamp(dd, tz=UTC).strftime("%Y-%m-%d")
-
-            return MarketQuoteRow(
-                symbol=sym,
-                pre_mkt_price=info.get("preMarketPrice"),
-                pre_mkt_change=info.get("preMarketChange"),
-                last_price=current,
-                change=raw_change,
-                post_mkt_price=info.get("postMarketPrice"),
-                post_mkt_change=info.get("postMarketChange"),
-                earnings_date=earnings_date,
-                market_cap=info.get("marketCap"),
-                div_payment_date=div_payment_date,
-                exchange=info.get("exchange"),
-                week_52_high=info.get("fiftyTwoWeekHigh"),
-                week_52_low=info.get("fiftyTwoWeekLow"),
-                shares_outstanding=info.get("sharesOutstanding"),
-                fetched_at_utc=now,
-            )
+            yf_price = info.get("regularMarketPrice") or info.get("currentPrice")
+            yf_prev  = info.get("regularMarketPreviousClose") or info.get("previousClose")
+            yf_chg   = info.get("regularMarketChange")
+            if yf_chg is None and yf_price and yf_prev and yf_prev > 0:
+                yf_chg = yf_price - yf_prev
+            return {
+                "yf_last_price":   yf_price,
+                "yf_change":       yf_chg,
+                "pre_mkt_price":   info.get("preMarketPrice"),
+                "pre_mkt_change":  info.get("preMarketChange"),
+                "post_mkt_price":  info.get("postMarketPrice"),
+                "post_mkt_change": info.get("postMarketChange"),
+                "earnings_date":   earnings_date,
+                "market_cap":      info.get("marketCap"),
+                "div_payment_date": div_payment_date,
+                "exchange":        info.get("exchange"),
+                "week_52_high":    info.get("fiftyTwoWeekHigh"),
+                "week_52_low":     info.get("fiftyTwoWeekLow"),
+                "shares_outstanding": info.get("sharesOutstanding"),
+            }
         except Exception:
-            return MarketQuoteRow(symbol=sym, fetched_at_utc=datetime.now(tz=UTC))
+            return {}
 
     loop = asyncio.get_event_loop()
-    tasks = [loop.run_in_executor(None, _fetch_one, s) for s in sym_list]
-    results = await asyncio.gather(*tasks)
-    return list(results)
+    supp_tasks = [loop.run_in_executor(None, _fetch_supplementary, s) for s in sym_list]
+    supp_list  = await asyncio.gather(*supp_tasks)
+    supp_map   = {sym: data for sym, data in zip(sym_list, supp_list)}
+
+    # ── Step 3: Merge — Polygon prices take priority over yfinance ────────────
+    now = datetime.now(tz=UTC)
+    results = []
+    for sym in sym_list:
+        poly = polygon_prices.get(sym, {})
+        supp = supp_map.get(sym, {})
+        results.append(MarketQuoteRow(
+            symbol=sym,
+            last_price=poly.get("last_price") or supp.get("yf_last_price"),
+            change=poly.get("change") or supp.get("yf_change"),
+            pre_mkt_price=supp.get("pre_mkt_price"),
+            pre_mkt_change=supp.get("pre_mkt_change"),
+            post_mkt_price=supp.get("post_mkt_price"),
+            post_mkt_change=supp.get("post_mkt_change"),
+            earnings_date=supp.get("earnings_date"),
+            market_cap=supp.get("market_cap"),
+            div_payment_date=supp.get("div_payment_date"),
+            exchange=supp.get("exchange"),
+            week_52_high=supp.get("week_52_high"),
+            week_52_low=supp.get("week_52_low"),
+            shares_outstanding=supp.get("shares_outstanding"),
+            fetched_at_utc=now,
+        ))
+    return results
 
 
 @app.post("/v1/analysis/batch", response_model=BatchJobResponse, status_code=202)

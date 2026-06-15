@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, date, datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, PropertyMock
 
 import pytest
 from fastapi import HTTPException
@@ -557,6 +557,16 @@ def test_get_market_quotes_success(monkeypatch):
     mock_ticker.info = mock_info
     monkeypatch.setattr("app.main.yf.Ticker", lambda sym: mock_ticker)
 
+    # Stub Polygon so no real HTTP call is made; polygon_prices stays empty and
+    # yfinance becomes the sole price source, keeping the assertion deterministic.
+    mock_poly = AsyncMock()
+    mock_poly._get = AsyncMock(side_effect=RuntimeError("stubbed"))
+    mock_poly.aclose = AsyncMock()
+    monkeypatch.setattr(
+        "app.providers.polygon_provider.PolygonProvider",
+        lambda api_key: mock_poly,
+    )
+
     with TestClient(app) as client:
         resp = client.get("/v1/market/quotes?symbols=AAPL")
 
@@ -583,8 +593,18 @@ def test_get_market_quotes_empty_symbols():
 
 def test_get_market_quotes_ticker_error_returns_empty_row(monkeypatch):
     mock_ticker = MagicMock()
-    mock_ticker.info = MagicMock(side_effect=RuntimeError("network error"))
+    # Use PropertyMock so accessing .info raises (not just calling it)
+    type(mock_ticker).info = PropertyMock(side_effect=RuntimeError("network error"))
     monkeypatch.setattr("app.main.yf.Ticker", lambda sym: mock_ticker)
+
+    # Stub Polygon so no real HTTP call is made and polygon_prices stays empty
+    mock_poly = AsyncMock()
+    mock_poly._get = AsyncMock(side_effect=RuntimeError("stubbed"))
+    mock_poly.aclose = AsyncMock()
+    monkeypatch.setattr(
+        "app.providers.polygon_provider.PolygonProvider",
+        lambda api_key: mock_poly,
+    )
 
     with TestClient(app) as client:
         resp = client.get("/v1/market/quotes?symbols=BADTICKER")

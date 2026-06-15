@@ -21,7 +21,7 @@ function statusBadge(s: string) {
   );
 }
 
-function LogRow({ e, i }: { e: ErrorLogEntry; i: number }) {
+function LogRow({ e }: { e: ErrorLogEntry; i?: number }) {
   const [expanded, setExpanded] = useState(false);
   const isClaudeAgent = e.agent === "ClaudeDecisionEngine";
   return (

@@ -121,6 +121,7 @@ function getValue(row: MomentumStockRow, key: keyof MomentumStockRow): string | 
   return v as string | number;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function sortRows(rows: MomentumStockRow[], key: SortKey, dir: SortDir): MomentumStockRow[] {
   if (key === "__rank__") return dir === "asc" ? [...rows] : [...rows].reverse();
   const k = key as keyof MomentumStockRow;
@@ -348,7 +349,7 @@ function InfoPanel({ isAllSectors }: { isAllSectors: boolean }) {
             <p>
               <span className="text-gray-200 font-medium">Single Sector</span> shows the top 10
               momentum stocks within the selected GICS sector, ranked the same way — by how each
-              stock's returns compare against the full 110-stock universe.
+              stock&apos;s returns compare against the full 110-stock universe.
             </p>
           )}
 
@@ -360,7 +361,7 @@ function InfoPanel({ isAllSectors }: { isAllSectors: boolean }) {
               <div><span className="text-indigo-300 font-mono">1-Month</span> — Price return over the last ~1 month</div>
               <div><span className="text-indigo-300 font-mono">3-Month</span> — Price return over the last ~3 months</div>
               <div><span className="text-indigo-300 font-mono">6-Month</span> — Price return over the last ~6 months (heaviest weight in score)</div>
-              <div><span className="text-indigo-300 font-mono">vs S&P</span> — 6M return minus S&P 500's 6M return; shows if the stock <em>beat the market</em></div>
+              <div><span className="text-indigo-300 font-mono">vs S&P</span> — 6M return minus S&P 500&apos;s 6M return; shows if the stock <em>beat the market</em></div>
               <div>
                 <span className="text-indigo-300 font-mono">RSI</span> — Relative Strength Index (14-day):{" "}
                 <span className="text-green-400">50–70 = healthy uptrend</span>,{" "}

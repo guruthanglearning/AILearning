@@ -62,14 +62,15 @@ from app.universe import COMPOSITION_AS_OF, TOP_10, TOP_100, get_sp500
 
 log = structlog.get_logger(__name__)
 
-# ── Simple TTL cache for expensive yfinance lookups ───────────────────────────
+# ── Simple TTL cache for expensive provider lookups ───────────────────────────
 _TTL_CACHE: dict[str, tuple[float, Any]] = {}
-_CACHE_TTL_SECS = 300  # 5 minutes
+_CACHE_TTL_SECS = 300        # 5 minutes (default: peers, momentum)
+_PRICE_HISTORY_TTL_SECS = 60  # 1 minute (price charts — fresher data per analysis)
 
 
-def _cache_get(key: str) -> Any | None:
+def _cache_get(key: str, ttl: float = _CACHE_TTL_SECS) -> Any | None:
     entry = _TTL_CACHE.get(key)
-    if entry and time.monotonic() - entry[0] < _CACHE_TTL_SECS:
+    if entry and time.monotonic() - entry[0] < ttl:
         return entry[1]
     _TTL_CACHE.pop(key, None)
     return None
@@ -461,7 +462,7 @@ async def get_price_history(
     """OHLCV price history for a symbol, used by the mini price chart."""
     sym = symbol.upper().strip()
     cache_key = f"price_history:{sym}:{period}"
-    cached = _cache_get(cache_key)
+    cached = _cache_get(cache_key, ttl=_PRICE_HISTORY_TTL_SECS)
     if cached is not None:
         return cached
 

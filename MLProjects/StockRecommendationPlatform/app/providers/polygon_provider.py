@@ -41,8 +41,8 @@ class PolygonProvider(MarketDataProvider):
             r = await self._client.get(path, params=params)
         except httpx.RequestError as exc:
             raise ProviderError(f"Polygon network error: {exc}") from exc
-        if r.status_code == 403:
-            raise ProviderError("Polygon API key invalid or unauthorised (403)")
+        if r.status_code in (401, 403):
+            raise ProviderError(f"Polygon API key invalid or unauthorised ({r.status_code})")
         if r.status_code == 429:
             raise ProviderError("Polygon rate limit exceeded (429)")
         r.raise_for_status()
@@ -78,7 +78,18 @@ class PolygonProvider(MarketDataProvider):
                 "source":         self.SOURCE,
             }
         except ProviderError:
-            raise
+            # Polygon snapshot requires a paid plan; fall back to yfinance for quotes
+            return await self._yf_quote_fallback(symbol)
+        except Exception:
+            return self._empty_quote()
+
+    async def _yf_quote_fallback(self, symbol: str) -> dict[str, Any]:
+        """Fall back to yfinance when Polygon snapshot endpoint is unavailable."""
+        try:
+            from app.providers.yfinance_provider import YFinanceProvider
+            data = await YFinanceProvider().get_quote(symbol)
+            data["source"] = f"{self.SOURCE}+yfinance_quote"
+            return data
         except Exception:
             return self._empty_quote()
 
@@ -111,7 +122,16 @@ class PolygonProvider(MarketDataProvider):
             )
             return df[["Open", "High", "Low", "Close", "Volume"]].sort_index()
         except ProviderError:
-            raise
+            # Polygon aggs unavailable (bad/free-tier key); fall back to yfinance
+            return await self._yf_price_history_fallback(symbol, period)
+        except Exception:
+            return pd.DataFrame()
+
+    async def _yf_price_history_fallback(self, symbol: str, period: str) -> pd.DataFrame:
+        """Fall back to yfinance for OHLCV history when Polygon aggs are unavailable."""
+        try:
+            from app.providers.yfinance_provider import YFinanceProvider
+            return await YFinanceProvider().get_price_history(symbol, period)
         except Exception:
             return pd.DataFrame()
 
@@ -140,7 +160,8 @@ class PolygonProvider(MarketDataProvider):
                 "source": self.SOURCE,
             }
         except ProviderError:
-            raise
+            # Polygon snapshot requires a paid plan; fall back to yfinance
+            return await self._yf_fundamentals_fallback(symbol)
         except Exception:
             return await self._yf_fundamentals_fallback(symbol)
 
@@ -227,7 +248,8 @@ class PolygonProvider(MarketDataProvider):
                 "source": self.SOURCE,
             }
         except ProviderError:
-            raise
+            # Polygon options snapshot requires a paid plan; fall back to yfinance
+            return await self._yf_chain_fallback(symbol)
         except Exception:
             return await self._yf_chain_fallback(symbol)
 

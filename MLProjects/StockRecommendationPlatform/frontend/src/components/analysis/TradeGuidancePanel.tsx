@@ -193,6 +193,7 @@ interface IndicatorSignal {
 const fmt  = (v: number | null, d = 2) => v == null ? "—" : v.toFixed(d);
 const fmtP = (v: number | null, d = 2) => v == null ? "—" : `${v.toFixed(d)}%`;
 const fmtD = (v: number | null, d = 2, pre = "$") => v == null ? "—" : `${pre}${v.toFixed(d)}`;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const fmtObv = (v: number | null) => {
   if (v == null) return "—";
   const abs = Math.abs(v);

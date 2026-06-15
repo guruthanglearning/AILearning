@@ -259,11 +259,17 @@ class TestPolygonProviderImpl:
         assert q["day_change_pct"] is None
 
     @pytest.mark.asyncio
-    async def test_get_quote_provider_error_propagates(self):
+    async def test_get_quote_provider_error_uses_yfinance_fallback(self):
         p = self._prov()
-        p._get = AsyncMock(side_effect=ProviderError("403"))
-        with pytest.raises(ProviderError):
-            await p.get_quote("AAPL")
+        p._get = AsyncMock(side_effect=ProviderError("401"))
+        fallback_data = {"last_price": 195.0, "previous_close": 190.0, "day_change_pct": 2.6,
+                         "volume": 50_000_000, "open_price": 191.0, "market_state": "REGULAR",
+                         "source": "polygon+yfinance_quote"}
+        p._yf_quote_fallback = AsyncMock(return_value=fallback_data)
+        q = await p.get_quote("AAPL")
+        p._yf_quote_fallback.assert_awaited_once_with("AAPL")
+        assert q["last_price"] == pytest.approx(195.0)
+        assert q["source"] == "polygon+yfinance_quote"
 
     @pytest.mark.asyncio
     async def test_get_quote_generic_exception_returns_empty(self):
@@ -299,11 +305,16 @@ class TestPolygonProviderImpl:
         assert df.empty
 
     @pytest.mark.asyncio
-    async def test_get_price_history_provider_error_propagates(self):
+    async def test_get_price_history_provider_error_uses_yfinance_fallback(self):
+        import pandas as pd
         p = self._prov()
-        p._get = AsyncMock(side_effect=ProviderError("429"))
-        with pytest.raises(ProviderError):
-            await p.get_price_history("AAPL", "1y")
+        p._get = AsyncMock(side_effect=ProviderError("401"))
+        fallback_df = pd.DataFrame({"Open": [100.0], "High": [102.0], "Low": [99.0],
+                                    "Close": [101.0], "Volume": [1_000_000]})
+        p._yf_price_history_fallback = AsyncMock(return_value=fallback_df)
+        df = await p.get_price_history("AAPL", "1y")
+        p._yf_price_history_fallback.assert_awaited_once_with("AAPL", "1y")
+        assert not df.empty
 
     @pytest.mark.asyncio
     async def test_get_price_history_generic_exception_returns_empty(self):
@@ -344,11 +355,16 @@ class TestPolygonProviderImpl:
         assert f["market_cap"] is None
 
     @pytest.mark.asyncio
-    async def test_get_fundamentals_provider_error_propagates(self):
+    async def test_get_fundamentals_provider_error_uses_yfinance_fallback(self):
         p = self._prov()
-        p._get = AsyncMock(side_effect=ProviderError("403"))
-        with pytest.raises(ProviderError):
-            await p.get_fundamentals("AAPL")
+        p._get = AsyncMock(side_effect=ProviderError("401"))
+        _empty = {"company_name": "Apple Inc.", "sector": "Technology", "market_cap": 3e12,
+                  "pe_ratio": 28.5, "forward_pe": 26.0, "revenue_growth": 0.08,
+                  "avg_volume": None, "earnings_dates": None, "source": "polygon+yfinance_fundamentals"}
+        p._yf_fundamentals_fallback = AsyncMock(return_value=_empty)
+        f = await p.get_fundamentals("AAPL")
+        p._yf_fundamentals_fallback.assert_awaited_once_with("AAPL")
+        assert f["company_name"] == "Apple Inc."
 
     @pytest.mark.asyncio
     async def test_get_fundamentals_generic_exception_returns_empty(self):
@@ -415,11 +431,17 @@ class TestPolygonProviderImpl:
         assert chain["chosen_expiry"] is None
 
     @pytest.mark.asyncio
-    async def test_get_option_chain_provider_error_propagates(self):
+    async def test_get_option_chain_provider_error_uses_yfinance_fallback(self):
         p = self._prov()
-        p._get = AsyncMock(side_effect=ProviderError("403"))
-        with pytest.raises(ProviderError):
-            await p.get_option_chain("AAPL")
+        p._get = AsyncMock(side_effect=ProviderError("401"))
+        fallback_chain = {"expiries": ["2025-01-17"], "chosen_expiry": "2025-01-17",
+                          "spot": 195.0, "calls": None, "puts": None,
+                          "atm_iv": 0.25, "chain_liquidity_hint": "thin",
+                          "implied_move_1d_pct": None, "source": "polygon+yfinance_chain"}
+        p._yf_chain_fallback = AsyncMock(return_value=fallback_chain)
+        chain = await p.get_option_chain("AAPL")
+        p._yf_chain_fallback.assert_awaited_once_with("AAPL")
+        assert chain["source"] == "polygon+yfinance_chain"
 
     @pytest.mark.asyncio
     async def test_get_option_chain_generic_exception_falls_back(self):

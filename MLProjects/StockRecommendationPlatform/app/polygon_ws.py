@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-_WS_URL = "wss://socket.polygon.io/stocks"
+_WS_URL = "wss://delayed.polygon.io/stocks"
 _RECONNECT_DELAY_S = 5
 
 

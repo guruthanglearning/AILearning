@@ -280,6 +280,42 @@ async def ws_live_quote(websocket: WebSocket, symbol: str) -> None:
         await manager.unsubscribe(sym, websocket)
 
 
+@app.websocket("/v1/ws/market-grid")
+async def ws_market_grid(
+    websocket: WebSocket,
+    symbols: str = Query(default=""),
+) -> None:
+    """Real-time price updates for multiple symbols in one WebSocket connection.
+
+    Subscribes the client to all requested symbols via the Polygon relay.
+    Each price event has the same shape as /v1/ws/quote/{symbol}.
+    Requires POLYGON_API_KEY (Starter plan = 15-min delayed feed).
+    """
+    if not settings.polygon_api_key:
+        await websocket.close(code=1013, reason="Polygon API key not configured")
+        return
+    from app.polygon_ws import get_ws_manager
+    manager = get_ws_manager()
+    if manager is None:
+        await websocket.close(code=1013, reason="WS manager not initialised")
+        return
+    sym_list = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    if not sym_list:
+        await websocket.close(code=1008, reason="No symbols provided")
+        return
+    await websocket.accept()
+    for sym in sym_list:
+        await manager.subscribe(sym, websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        for sym in sym_list:
+            await manager.unsubscribe(sym, websocket)
+
+
 @app.get("/v1/market/quotes", response_model=list[MarketQuoteRow])
 @limiter.limit("120/minute")
 async def get_market_quotes(

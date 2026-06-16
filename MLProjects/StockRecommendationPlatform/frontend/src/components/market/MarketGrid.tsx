@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { useMarketGridWs, type LivePriceUpdate } from "@/hooks/useMarketGridWs";
 import { getMarketQuotes } from "@/lib/api";
 import type { MarketQuoteRow } from "@/types/api";
 
@@ -101,6 +102,46 @@ const COLUMNS: ColDef[] = [
   { key: "shares_outstanding", label: "Shares Out"                   },
 ];
 
+// ── Live price cell (flashes green/red when WS price changes) ────────────────
+
+function LivePriceCell({
+  live,
+  fallback,
+}: {
+  live: LivePriceUpdate | null;
+  fallback: number | null;
+}) {
+  const [flashClass, setFlashClass] = useState("");
+  const prevTsRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (!live || live.ts === prevTsRef.current) return;
+    prevTsRef.current = live.ts;
+    if (live.prevPrice == null) return;
+    const dir =
+      live.price > live.prevPrice ? "up" : live.price < live.prevPrice ? "down" : "";
+    if (!dir) return;
+    setFlashClass(
+      dir === "up"
+        ? "bg-emerald-900/50 text-emerald-300"
+        : "bg-red-900/50 text-red-300",
+    );
+    const t = setTimeout(() => setFlashClass(""), 900);
+    return () => clearTimeout(t);
+  }, [live]);
+
+  const price = live?.price ?? fallback;
+  return (
+    <span
+      className={`font-mono font-semibold transition-colors duration-500 rounded px-0.5 ${
+        flashClass || "text-white"
+      }`}
+    >
+      {fmtPrice(price)}
+    </span>
+  );
+}
+
 // ── Shared cell classes ───────────────────────────────────────────────────────
 
 const TD = "px-3 py-2 text-xs whitespace-nowrap";
@@ -143,7 +184,15 @@ function Th({ col, sortKey, sortDir, onSort }: ThProps) {
 
 // ── Row ───────────────────────────────────────────────────────────────────────
 
-function Row({ row, onAnalyze }: { row: MarketQuoteRow; onAnalyze: (s: string) => void }) {
+function Row({
+  row,
+  onAnalyze,
+  liveInfo,
+}: {
+  row: MarketQuoteRow;
+  onAnalyze: (s: string) => void;
+  liveInfo?: LivePriceUpdate | null;
+}) {
   return (
     <tr className="border-b border-gray-800/70 hover:bg-gray-800/30 transition-colors">
       <td className={`${TD} font-bold sticky left-0 bg-gray-950 z-10`}>
@@ -158,7 +207,17 @@ function Row({ row, onAnalyze }: { row: MarketQuoteRow; onAnalyze: (s: string) =
       </td>
       <td className={`${TD} font-mono text-gray-300`}>{fmtPrice(row.pre_mkt_price)}</td>
       <td className={`${TD} font-mono font-semibold ${chgColor(row.pre_mkt_change)}`}>{fmtChange(row.pre_mkt_change)}</td>
-      <td className={`${TD} font-mono font-semibold text-white`}>{fmtPrice(row.last_price)}</td>
+      <td className={`${TD}`}>
+        <span className="flex items-center gap-1">
+          <LivePriceCell live={liveInfo ?? null} fallback={row.last_price} />
+          {liveInfo && (
+            <span
+              className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0"
+              title="Live price (Polygon delayed feed)"
+            />
+          )}
+        </span>
+      </td>
       <td className={`${TD} font-mono font-semibold ${chgColor(row.change)}`}>{fmtChange(row.change)}</td>
       <td className={`${TD} font-mono text-gray-300`}>{fmtPrice(row.post_mkt_price)}</td>
       <td className={`${TD} font-mono ${chgColor(row.post_mkt_change)}`}>{fmtChange(row.post_mkt_change)}</td>
@@ -203,9 +262,9 @@ export function MarketGrid({ onAnalyze }: MarketGridProps) {
   const [addInput, setAddInput]       = useState("");
   const [intervalInput, setIntervalInput] = useState(String(intervalSec));
 
-  // Sort state — default: symbol ascending (original list order)
-  const [sortKey, setSortKey] = useState<SortKey>("symbol");
-  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  // Sort state — default: market_cap descending (largest first)
+  const [sortKey, setSortKey] = useState<SortKey>("market_cap");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const cdRef    = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -275,6 +334,8 @@ export function MarketGrid({ onAnalyze }: MarketGridProps) {
     if (!isNaN(v) && v >= 5 && v <= 300) setIntervalSec(v);
   }
 
+  const { livePrices, connected: wsConnected } = useMarketGridWs(symbols);
+
   const sortedRows = sortRows(rows, sortKey, sortDir);
 
   return (
@@ -324,21 +385,34 @@ export function MarketGrid({ onAnalyze }: MarketGridProps) {
         </button>
 
         {/* Active sort indicator */}
-        {sortKey !== "symbol" && (
+        {sortKey !== "market_cap" && (
           <span className="text-xs text-gray-500 bg-gray-800 px-2 py-1.5 rounded border border-gray-700">
             Sorted by <span className="text-indigo-400">
               {COLUMNS.find((c) => c.key === sortKey)?.label}
             </span> {sortDir === "asc" ? "↑" : "↓"}
             <button
               type="button"
-              onClick={() => { setSortKey("symbol"); setSortDir("asc"); }}
+              onClick={() => { setSortKey("market_cap"); setSortDir("desc"); }}
               className="ml-2 text-gray-600 hover:text-red-400 transition-colors"
-              title="Clear sort"
+              title="Reset to Market Cap"
             >
               ✕
             </button>
           </span>
         )}
+
+        {/* WebSocket status */}
+        <span
+          className={`flex items-center gap-1.5 text-xs px-2 py-1.5 rounded border ${
+            wsConnected
+              ? "text-emerald-400 border-emerald-800/50 bg-emerald-950/30"
+              : "text-gray-600 border-gray-800 bg-gray-900"
+          }`}
+          title={wsConnected ? "Live price feed connected (Polygon 15-min delayed)" : "Live feed disconnected"}
+        >
+          <span className={`w-1.5 h-1.5 rounded-full ${wsConnected ? "bg-emerald-400 animate-pulse" : "bg-gray-700"}`} />
+          {wsConnected ? "Live" : "Offline"}
+        </span>
 
         <div className="ml-auto text-right">
           {lastUpdated && (
@@ -390,7 +464,12 @@ export function MarketGrid({ onAnalyze }: MarketGridProps) {
                 </tr>
               )}
               {sortedRows.map((row) => (
-                <Row key={row.symbol} row={row} onAnalyze={onAnalyze ?? (() => {})} />
+                <Row
+                  key={row.symbol}
+                  row={row}
+                  onAnalyze={onAnalyze ?? (() => {})}
+                  liveInfo={livePrices[row.symbol]}
+                />
               ))}
             </tbody>
           </table>
@@ -399,7 +478,7 @@ export function MarketGrid({ onAnalyze }: MarketGridProps) {
       </div>
 
       <p className="text-xs text-gray-700 italic">
-        Data via yfinance. Pre/post-market fields only available during those sessions. Not investment advice.
+        Snapshot data via Polygon.io (15-min delayed). Live price feed via Polygon WebSocket (15-min delayed). Pre/post-market fields only available during those sessions. Not investment advice.
       </p>
     </div>
   );

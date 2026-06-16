@@ -18,6 +18,11 @@ env/
 .env
 *.env.local
 
+# Runtime logs
+*.log
+backend.log
+frontend/dev.log
+
 # pytest
 .pytest_cache/
 .coverage

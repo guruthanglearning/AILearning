@@ -14,13 +14,14 @@ A **production-oriented multi-agent research platform** that runs 7 specialist A
 4. [Agent Pipeline](#agent-pipeline)
 5. [Database Schema](#database-schema)
 6. [Frontend Pages](#frontend-pages)
-7. [API Reference](#api-reference)
-8. [Technology Stack](#technology-stack)
-9. [Configuration](#configuration)
-10. [Quick Start](#quick-start)
-11. [Running Tests](#running-tests)
-12. [Docker Setup](#docker-setup)
-13. [Project Structure](#project-structure)
+7. [UI Guide — How Each Page Works](#ui-guide--how-each-page-works)
+8. [API Reference](#api-reference)
+9. [Technology Stack](#technology-stack)
+10. [Configuration](#configuration)
+11. [Quick Start](#quick-start)
+12. [Running Tests](#running-tests)
+13. [Docker Setup](#docker-setup)
+14. [Project Structure](#project-structure)
 
 ---
 
@@ -430,7 +431,289 @@ src/
 
 ---
 
-## API Reference
+## UI Guide — How Each Page Works
+
+### 1. Analysis Page (`/`)
+
+The main page is where you research a single stock and get a full AI-driven recommendation.
+
+#### How to run an analysis
+
+1. Type a US ticker symbol in the search box (e.g. `NVDA`, `AAPL`, `TSLA`).
+2. Optionally set **Portfolio Value ($)** and **Max Risk % per trade** — these are used to size positions.
+3. Click **Analyse** (or press Enter). The 7 agent cards immediately start lighting up as each agent finishes (SSE streaming — no page reload).
+
+#### Agent Status Grid (7 cards)
+
+Each card represents one specialist agent running in parallel. Cards transition through three states:
+
+| State | Visual | Meaning |
+|-------|--------|---------|
+| **Pending** | Grey pulsing dot | Agent has not yet returned |
+| **Complete** | Green dot + headline | Agent succeeded; headline shows key output |
+| **Degraded / Failed** | Amber / Red dot | Agent timed out or errored; downstream still runs |
+
+| Agent | What it returns |
+|-------|----------------|
+| **MarketDataAgent** | Last price, day change %, volume |
+| **FundamentalsAgent** | Company name, sector, market cap, P/E, forward P/E, revenue growth |
+| **TechnicalsAgent** | Trend hint, RSI-14, SMA20/50, EMA20, ATR — all computed from 252 daily bars |
+| **FinancialsAgent** | Confirms price history bar count; flags if data is thin |
+| **OptionsAgent** | ATM implied volatility, implied 1-day move %, nearest expiry, chain liquidity |
+| **RiskProWorkflowAgent** | Earnings date, days-to-earnings, binary event risk flag |
+| **SentimentMLAgent** | ML sentiment forecast (Bullish / Bearish), score, top headlines |
+
+#### Live Price Bar
+
+Sits at the top of the page. Shows a pulsing **LIVE** indicator (green) when the Polygon WebSocket is connected and streaming per-second price ticks. Falls back to REST poll when the market is closed or Polygon is unavailable.
+
+#### Verdict Card
+
+The main recommendation badge appears after all 7 agents complete:
+
+| Badge | Meaning |
+|-------|---------|
+| **Long Stock** | Buy and hold the underlying — cleaner risk profile than options in this regime |
+| **Options** | Options structures offer a better risk/reward — see the Options panel for the specific strategy |
+| **No Trade** | Signals conflict or risk too high — pass for now |
+| **Insufficient Data** | Too few data points to make a reliable recommendation |
+
+Below the badge:
+- **Confidence note** — Claude's plain-English reasoning (1–2 sentences)
+- **Summary headline** — one-line trading thesis
+
+#### Stock-vs-Options Score Meter
+
+A number from **–1.0 to +1.0**:
+- `+1.0` → strongly favours long stock
+- `–1.0` → strongly favours options
+- Near `0` → borderline; read the checklist for tie-breakers
+
+#### Decision Checklist (5 items)
+
+Each row is a pass/warn indicator:
+
+| Item | Pass means | Warn means |
+|------|-----------|------------|
+| **Directional clarity** | Technicals lean clearly bullish or bearish | Mixed signals — size down or use defined-risk options |
+| **Earnings window** | No earnings in the next ~2 weeks | Earnings imminent — avoid undefined-risk positions |
+| **Options liquidity** | Chain is readable and spread is acceptable | Thin chain — wider bid/ask, harder to execute |
+| **ML vs technicals** | ML signal agrees with technical trend | Divergence — treat ML as a secondary input only |
+| **Volatility regime** | IV is cheap (long structures less penalised) or rich (premium-selling favoured) | IV regime unclear |
+
+#### Technical Indicators Panel
+
+Key values to read:
+
+| Indicator | How to read it |
+|-----------|---------------|
+| **SMA20 / SMA50** | Price above both → uptrend. Price below SMA50 → bearish structure |
+| **EMA20** | Short-term momentum. Crossing above SMA20 → momentum building |
+| **RSI-14** | Below 30 = oversold, above 70 = overbought, 40–60 = neutral |
+| **MACD histogram** | Positive and rising = bullish momentum, negative = weakening |
+| **ATR-14 %** | Daily range as % of price — use as stop-distance guide (e.g. 1–2× ATR) |
+| **OBV slope** | Positive = accumulation (buyers in control), negative = distribution |
+| **52-wk High / Low** | Price near the high = momentum; near the low = mean-reversion candidate |
+| **Trend hint** | `bullish` / `bearish` / `mixed` — derived from SMA stack and RSI |
+
+#### Volatility Panel
+
+| Field | How to read it |
+|-------|---------------|
+| **IV Regime** | `iv_cheap` = options cheaper than recent realized vol (good for long vol); `iv_rich` = premium-selling favoured |
+| **ATM IV** | Annualised implied vol of the at-the-money option |
+| **HV-20d** | Realized vol over last 20 days — compare to IV to gauge richness |
+| **IV Rank 52w** | 0–100 percentile vs past year. Above 50 = IV rich; below 30 = IV cheap |
+| **Implied move 1d %** | What the options market prices as the expected 1-day move |
+
+#### Options Metrics Table
+
+Only appears when options are relevant. Shows two pre-computed strategies with real chain strikes:
+
+| Column | Meaning |
+|--------|---------|
+| **Strategy** | Bull Call Spread (debit) or Short Put Spread (credit) |
+| **Legs** | Exact strikes and rights from the live chain |
+| **Net Debit / Credit** | What you pay (debit) or receive (credit) per share × 100 |
+| **Max Profit / Max Loss** | Best and worst case per contract |
+| **Breakeven** | Price at expiry where you break even |
+| **DTE** | Days to expiration |
+| **Trend alignment** | Whether the structure direction matches the technical trend |
+| **30% / 60% rule** | Standard exit targets — close at 30% of max profit (early/quick) or 60% (standard) |
+| **Management rules** | When to close, defend, or roll |
+
+#### Options Guidance Card
+
+When Claude recommends options, this card shows:
+- **Chain Verified** badge (green) — strikes were cross-checked against the real options chain
+- **Verified strikes** — exact legs (e.g. `Buy $300 call / Sell $302.5 call exp 2026-06-22`)
+- **Estimated** badge (amber) — Claude's guidance couldn't be verified against live chain data
+
+#### 4 Pre-answered Questions (Q&A Panel)
+
+Claude answers four standard risk-management questions for the specific symbol:
+1. Is this speculative or a multi-month thesis?
+2. What price level, time, or event invalidates the trade?
+3. What is max loss in dollars?
+4. Is option assignment acceptable?
+
+Read these before entering any position — they encode the stop-loss logic and trade sizing context.
+
+#### Analysis History
+
+Below the main result, past analyses for the same symbol are listed (most recent first) with the verdict and price at the time. Useful for tracking how the recommendation changed over time.
+
+---
+
+### 2. Market Grid (`/market-grid`)
+
+A live scrollable table of up to 40 symbols with 14 columns, sorted by market cap (largest first) by default.
+
+#### Controls
+
+| Control | What it does |
+|---------|-------------|
+| **Add Symbol** | Type a ticker and press Enter or click Add — appends to the grid and persists in localStorage |
+| **× chip** | Remove a symbol from the grid |
+| **Refresh (sec)** | Set auto-refresh interval (5–300s). Default 10s. Price data is re-fetched on each cycle |
+| **↻ Refresh now** | Immediately re-fetch all prices |
+| **Live / Offline dot** | Green pulsing = Polygon WebSocket connected and streaming per-second ticks. Grey = disconnected (after hours or no Polygon key) |
+| **Sort headers** | Click any column header to sort. Numeric columns default to descending (highest first) |
+
+#### Column Reference
+
+| Column | What it shows | How to read it |
+|--------|--------------|---------------|
+| **Symbol** | Ticker — click to run full analysis | Blue = clickable |
+| **Pre-Mkt Price** | Price from the pre-market session | Only populated during pre-market hours (4–9:30 AM ET) |
+| **Pre-Mkt Change** | % change during pre-market | Green = up, red = down |
+| **Last Price** | Most recent price | Flashes **green** (price ticked up) or **red** (price ticked down) during market hours via WebSocket. Small pulsing dot = live feed active for this row |
+| **Change** | Day change % from prior close | Green = up, red = down |
+| **Post-Mkt Price** | Price from after-hours session | Only populated during after-hours (4–8 PM ET) |
+| **Post-Mkt Change** | % change after hours | |
+| **Earnings Date** | Next reported earnings date | Use to avoid holding through an earnings event |
+| **Market Cap** | Total market capitalisation | T = trillion, B = billion, M = million |
+| **Div Payment Date** | Next dividend payment date | Relevant for covered call / cash-secured put holders |
+| **Exchange** | Listing exchange (NMS = Nasdaq, NYQ = NYSE) | |
+| **52-Wk High** | Highest price in the last 52 weeks | Price near high = momentum; far below = potential value or breakdown |
+| **52-Wk Low** | Lowest price in the last 52 weeks | |
+| **Shares Out** | Shares outstanding | Large float = easier to trade; used with volume to gauge liquidity |
+
+#### Live Price Updates
+
+During market hours (9:30 AM – 4:00 PM ET):
+- Each Last Price cell **flashes green** when a price tick arrives above the previous price, or **red** if below.
+- The flash lasts 900ms then fades back to white.
+- A small pulsing **emerald dot** appears next to the price while that symbol is receiving live ticks.
+- Data is sourced from Polygon.io (15-minute delayed on the Starter plan).
+
+After market hours the WebSocket remains connected but no ticks flow — prices show the last known close.
+
+---
+
+### 3. Momentum Page (`/momentum`)
+
+Shows cross-sectional momentum scores for top stocks grouped by GICS sector.
+
+#### How to use it
+
+- Use the **Top N per sector** control to limit results (default 5).
+- Sort by **1M**, **3M**, or **6M return**, **RSI**, or **vs SPY** to find leaders vs laggards.
+- Stocks with high scores across multiple timeframes are momentum leaders — likely showing sustained institutional interest.
+- **vs SPY** column shows relative outperformance — positive = beating the market.
+
+#### How to read momentum scores
+
+| Score range | Meaning |
+|------------|---------|
+| High positive momentum + RSI 50–70 | Healthy trend, not yet overbought — potential entry |
+| High positive momentum + RSI > 70 | Extended — wait for a pullback or use options to sell premium |
+| Negative momentum across timeframes | Avoid or consider short-side plays if directional |
+
+---
+
+### 4. Watchlists (`/watchlists`)
+
+Organise symbols into named lists for faster tracking.
+
+#### How to use it
+
+1. Click **New Watchlist** → give it a name (e.g. "Tech Core", "Dividend Income").
+2. Click into a watchlist → **Add Symbol** → type a ticker.
+3. Click a symbol to jump directly to its analysis page.
+4. Delete a symbol with the **×** button, or delete the entire list with **Delete watchlist**.
+
+Watchlists are scoped to your **API key** — each key has its own set.
+
+---
+
+### 5. Alerts (`/alerts`)
+
+Set automatic triggers on price levels or recommendation changes.
+
+#### Alert types
+
+| Type | Triggers when |
+|------|--------------|
+| **price_above** | Last price crosses above your threshold |
+| **price_below** | Last price falls below your threshold |
+| **verdict_changes_to** | Analysis recommendation changes to a specified value (e.g. `stock`, `options`, `no_trade`) |
+
+#### How to create an alert
+
+1. Click **New Alert**.
+2. Enter a symbol, select condition type, and enter the threshold value.
+3. Click **Save**. The alert is active immediately.
+
+#### Reading triggered alerts
+
+The **Triggered** tab shows alerts that have fired, with the timestamp. Triggered alerts are marked inactive — create a new one to re-arm.
+
+---
+
+### 6. API Keys (`/keys`)
+
+Manage authentication keys for the platform API.
+
+#### How to use it
+
+1. Click **Create Key** → give it a name.
+2. **Copy the key immediately** — it is only shown once in full.
+3. Paste the key into the **API Key** field shown in the top-right of the UI, or set the `X-API-Key` HTTP header when calling the API directly.
+4. Revoke a key with **Delete** — all watchlists and alerts associated with it are removed.
+
+The key prefix (first 8 chars) is shown in the list so you can identify which key is which.
+
+---
+
+### 7. Logs Page (`/logs`)
+
+Real-time error log viewer for diagnosing agent failures.
+
+#### How to read it
+
+Each row shows:
+
+| Column | Meaning |
+|--------|---------|
+| **Time** | When the error occurred (local time) |
+| **Symbol** | The ticker that was being analysed |
+| **Agent** | Which of the 7 agents failed |
+| **Status** | `degraded` (partial data returned) or `failed` (no data) |
+| **Error** | The exception message or timeout reason |
+
+#### Common errors and what they mean
+
+| Error message | Likely cause |
+|--------------|-------------|
+| `timeout` | Agent exceeded the `AGENT_TIMEOUT_SECONDS` limit (default 45s) — data provider was slow |
+| `network error` | yfinance or Polygon couldn't reach the data source |
+| `insufficient_data` | Less than 60 price bars returned — technicals will be degraded |
+| `chain empty` | Options chain returned no strikes — OptionsAgent degraded |
+
+A degraded agent does **not** stop the analysis — the Supervisor proceeds with whatever data is available and Claude works with what it has.
+
+---
 
 ### Analysis
 

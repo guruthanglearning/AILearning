@@ -37,6 +37,8 @@ The platform accepts a stock symbol (e.g. `AAPL`) and concurrently runs 7 specia
 
 Results are **streamed in real time** via SSE so each agent card lights up the moment that agent finishes — no waiting for the slowest agent.
 
+The Analysis page also opens a **WebSocket** connection (`/v1/ws/quote/{symbol}`) for per-second live price updates. The backend relays Polygon.io's `wss://delayed.polygon.io/stocks` aggregates (Starter plan) to the browser — the `LivePriceBar` component shows a pulsing green **LIVE** indicator when connected and falls back to HTTP REST price when the WebSocket is unavailable.
+
 ---
 
 ## Technical Architecture
@@ -193,17 +195,29 @@ Results are **streamed in real time** via SSE so each agent card lights up the m
                     └──────────────┬──────────────┘
                                    │
                     ┌──────────────▼──────────────┐
-                    │  Supervisor._merge()         │
+                    │  Claude LLM Decision Engine  │
+                    │  (claude-opus-4-8 default)   │
                     │                              │
-                    │  market data OK?             │
-                    │  ├─ No  → insufficient_data  │
-                    │  earnings imminent?          │
-                    │  ├─ Yes + mixed → options   │
-                    │  IV elevated (>35%)?         │
-                    │  ├─ Yes → options (credit)  │
-                    │  directional clarity?        │
-                    │  ├─ Yes + low IV → stock    │
-                    │  └─ balanced → score-driven │
+                    │  All 7 agent outputs fed as  │
+                    │  structured prompt context   │
+                    │                              │
+                    │  Returns:                    │
+                    │  • instrument_recommendation │
+                    │  • confidence_note           │
+                    │  • options_guidance          │
+                    │  • summary_headline          │
+                    │  • user_answers (4 Q&A)      │
+                    └──────────────┬──────────────┘
+                                   │
+                    ┌──────────────▼──────────────┐
+                    │  _validate_strike_guidance() │
+                    │                              │
+                    │  Cross-checks Claude's       │
+                    │  options strikes against     │
+                    │  real chain data; stamps     │
+                    │  chain_validated + verified  │
+                    │  leg strikes when quality=   │
+                    │  "full"                      │
                     └──────────────┬──────────────┘
                                    │
                     ┌──────────────▼──────────────┐
@@ -359,10 +373,12 @@ Results are **streamed in real time** via SSE so each agent card lights up the m
 | Route | Description |
 |---|---|
 | `/` | **Analysis** — symbol input, SSE-streamed agent grid, verdict card, technicals, trade guidance, price forecast, options panels, decision aids, history |
-| `/market-grid` | **Market Grid** — live auto-refreshing table of 40 symbols with 14 columns; add/remove symbols; configurable refresh interval |
+| `/market-grid` | **Market Grid** — live auto-refreshing table of 40 symbols with 14 columns; prices sourced from Polygon batch snapshot, supplementary fields from yfinance |
+| `/momentum` | **Momentum** — cross-sectional momentum scores per GICS sector; sortable by 1M/3M/6M return, RSI, vs SPY; configurable top-N per sector |
 | `/watchlists` | **Watchlists** — create named lists, add/remove symbols, click-through to analysis |
 | `/alerts` | **Alerts** — set price-above / price-below / verdict-changes-to triggers per symbol |
 | `/keys` | **API Keys** — create, list, and revoke API keys |
+| `/logs` | **Logs** — real-time error log viewer showing per-agent failures with symbol, agent name, status, and stack detail |
 
 ### Key Frontend Components
 
@@ -483,6 +499,18 @@ src/
 | `GET`    | `/v1/auth/keys` | List all API keys |
 | `DELETE` | `/v1/auth/keys/{id}` | Revoke a key |
 
+### Momentum
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/v1/momentum/sectors?top_n=5` | Top-N momentum stocks per GICS sector (cross-sectional scoring) |
+
+### WebSocket
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `WS` | `/v1/ws/quote/{symbol}` | Real-time per-second price updates via Polygon WebSocket relay (`wss://delayed.polygon.io/stocks`). Requires `POLYGON_API_KEY`. Falls back to HTTP REST when unavailable. |
+
 ### Utility
 
 | Method | Endpoint | Description |
@@ -491,6 +519,8 @@ src/
 | `GET`  | `/v1/quote/live/{symbol}` | Lightweight live quote |
 | `POST` | `/v1/ingest/warm` | Pre-warm Redis cache for a symbol list |
 | `GET`  | `/metrics` | Prometheus metrics endpoint |
+| `GET`  | `/v1/claude/models` | List available Claude models with pricing |
+| `GET`  | `/v1/claude/usage` | Session token usage and estimated cost per model |
 
 ---
 
@@ -507,11 +537,12 @@ src/
 | Migrations | Alembic |
 | Database | PostgreSQL 16 (asyncpg driver) |
 | Cache | Redis 7 (optional) |
-| Market data | yfinance (default), Polygon.io (optional) |
+| Market data | yfinance (default), Polygon.io REST + WebSocket (optional) |
+| LLM decision engine | Anthropic Claude (Opus 4.8 default; Sonnet 4.6 / Haiku 4.5 selectable per-analysis from UI) |
 | ML sentiment | FinBERT via HuggingFace Transformers / external StockPrediction API |
 | Rate limiting | SlowAPI (redis-backed in prod) |
 | Observability | structlog · OpenTelemetry · Prometheus |
-| Testing | pytest + pytest-asyncio · 217 tests · ≥ 80% coverage |
+| Testing | pytest + pytest-asyncio · 325 tests · ≥ 80% coverage |
 | Linting | Ruff |
 
 ### Frontend
@@ -560,6 +591,7 @@ All settings can be overridden via environment variables or a `.env` file in the
 | `OTEL_ENDPOINT` | *(empty)* | OTLP gRPC endpoint (empty → console exporter) |
 | `LOG_LEVEL` | `INFO` | structlog log level |
 | `BATCH_CONCURRENCY` | `5` | Concurrent symbols per batch job |
+| `ANTHROPIC_API_KEY` | *(required)* | Claude API key — needed for the LLM decision engine |
 
 ---
 
@@ -646,7 +678,7 @@ pytest -q --cov=app --cov-report=term-missing
 pytest tests/test_agents.py -v
 ```
 
-**Test suite:** 217 tests across 15 test files covering agents, supervisor, providers (yfinance, Polygon, Redis cache), watchlists router, alerts trigger, batch jobs, API hardening, observability, and options metrics.
+**Test suite:** 325 tests across 20 test files covering agents, supervisor, providers (yfinance, Polygon, Redis cache), watchlists router, alerts trigger, batch jobs, API hardening, observability, options metrics, Polygon WebSocket relay, decision support extras, and main cache/endpoints.
 
 ---
 
@@ -724,16 +756,20 @@ StockRecommendationPlatform/
 ├── frontend/
 │   └── src/  (Next.js 14 app)
 ├── tests/
+│   ├── conftest.py
 │   ├── test_agents.py
 │   ├── test_alerts_trigger.py
 │   ├── test_api_hardening.py
 │   ├── test_auth_watchlists_alerts.py
 │   ├── test_batch.py
 │   ├── test_batch_run.py
+│   ├── test_decision_support_extras.py
 │   ├── test_ingest.py
+│   ├── test_main_cache_and_endpoints.py
 │   ├── test_main_endpoints.py
 │   ├── test_observability.py
 │   ├── test_options_metrics.py
+│   ├── test_polygon_ws.py
 │   ├── test_providers.py
 │   ├── test_providers_impl.py
 │   ├── test_supervisor_and_decision.py
@@ -761,16 +797,36 @@ StockRecommendationPlatform/
     "strategy_family": "premium_selling_or_covered_call",
     "rationale_codes": ["iv_elevated", "no_imminent_earnings_flag"],
     "strike_guidance": "OTM calls for covered calls or OTM credit spreads vs support/resistance.",
-    "max_loss_scenario": "For credit spreads: width minus credit."
+    "max_loss_scenario": "For credit spreads: width minus credit.",
+    "chain_validated": true,
+    "chain_verified_strikes": "Sell $215 put / Buy $210 put exp 2026-07-18",
+    "validated_legs": [
+      {"right": "put", "strike": 215.0, "quantity_signed": -1, "leg_type": "short"},
+      {"right": "put", "strike": 210.0, "quantity_signed": 1,  "leg_type": "long"}
+    ]
   },
   "decision_aids": {
     "stock_vs_options_score": -0.42,
     "checklist": [...],
     "volatility": {
-      "regime": "elevated",
+      "regime": "iv_rich",
       "atm_iv": 0.38,
+      "hv_20d_annualized": 0.28,
+      "iv_rank_52w": 72,
       "implied_move_1d_pct": 2.4
     },
+    "options_metrics_table": [
+      {
+        "template_id": "short_put_spread",
+        "strategy_label": "Short Put Spread (Credit Vertical)",
+        "expiration": "2026-07-18",
+        "legs": [...],
+        "net_debit_credit": 0.85,
+        "max_profit": 0.85,
+        "max_loss": 4.15,
+        "row_data_quality": "full"
+      }
+    ],
     "position_sizing": [...]
   },
   "technicals": {

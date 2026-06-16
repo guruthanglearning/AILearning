@@ -29,11 +29,13 @@ from app.schemas.agents import (
     AgentStatus,
     AnalysisRunRequest,
     DataFreshness,
+    DecisionAids,
     FinancialsOutput,
     FundamentalsOutput,
     FundamentalsSnapshot,
     InstrumentRecommendation,
     MarketDataOutput,
+    OptionLegType,
     OptionsGuidance,
     OptionsOutput,
     RiskProOutput,
@@ -55,6 +57,49 @@ def _fmt_cap(cap: float | None) -> str:
     if cap >= 1e9:
         return f"${cap/1e9:.1f}B"
     return f"${cap/1e6:.0f}M"
+
+
+_FAMILY_TO_TEMPLATE: dict[str, str] = {
+    "long_stock_or_long_diagonal":    "bull_call_spread",
+    "debit_vertical_or_long_put_call": "bull_call_spread",
+    "debit_spread_or_stock":           "bull_call_spread",
+    "premium_selling_or_covered_call": "short_put_spread",
+}
+
+
+def _validate_strike_guidance(
+    og: OptionsGuidance | None,
+    decision_aids: DecisionAids,
+) -> OptionsGuidance | None:
+    """Enrich OptionsGuidance with real strikes from the computed chain rows.
+
+    Finds the OptionsMetricRow whose template_id matches the strategy family,
+    and when it has quality=='full' (real chain data), stamps chain_validated=True
+    and populates chain_verified_strikes with a human-readable leg description.
+    The original strike_guidance text is preserved unchanged.
+    """
+    if og is None:
+        return None
+    template_id = _FAMILY_TO_TEMPLATE.get(og.strategy_family or "", "bull_call_spread")
+    row = next(
+        (r for r in decision_aids.options_metrics_table if r.template_id == template_id),
+        None,
+    )
+    if row is None or row.row_data_quality != "full" or not row.legs:
+        return og
+
+    leg_parts: list[str] = []
+    for leg in row.legs:
+        action = "Buy" if leg.leg_type == OptionLegType.long else "Sell"
+        leg_parts.append(f"{action} ${leg.strike:.0f} {leg.right}")
+    expiry_note = f" exp {row.expiration}" if row.expiration else ""
+    verified_str = " / ".join(leg_parts) + expiry_note
+
+    return og.model_copy(update={
+        "chain_validated": True,
+        "chain_verified_strikes": verified_str,
+        "validated_legs": list(row.legs),
+    })
 
 
 def _agent_summary(a: AgentResultBase) -> tuple[str, str | None]:
@@ -268,6 +313,8 @@ class Supervisor:
                 decision_aids.user_answers = claude.user_answers
             log.info("claude_verdict_applied", symbol=symbol, recommendation=verdict.value)
 
+        options_guidance = _validate_strike_guidance(options_guidance, decision_aids)
+
         result = SupervisorVerdict(
             instrument_recommendation=verdict,
             confidence_note=note,
@@ -437,6 +484,8 @@ class Supervisor:
             if claude.user_answers:
                 decision_aids.user_answers = claude.user_answers
             log.info("claude_verdict_applied", symbol=symbol, recommendation=verdict.value)
+
+        options_guidance = _validate_strike_guidance(options_guidance, decision_aids)
 
         result = SupervisorVerdict(
             instrument_recommendation=verdict,

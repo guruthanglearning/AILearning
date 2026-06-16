@@ -156,6 +156,10 @@ class OptionsGuidance(BaseModel):
     max_loss_scenario: str | None = None
     profit_targets_scenario: list[str] = Field(default_factory=list)
     disclaimer: str = "Hypothetical scenarios only; not investment advice."
+    # Strike validation — populated after cross-checking against the live chain
+    chain_validated: bool = False
+    chain_verified_strikes: str | None = None  # e.g. "Buy $185 call / Sell $190 call exp 2026-07-18"
+    validated_legs: list[OptionLeg] = Field(default_factory=list)
 
 
 class DataFreshness(BaseModel):

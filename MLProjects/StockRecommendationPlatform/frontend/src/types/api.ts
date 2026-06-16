@@ -60,6 +60,9 @@ export interface OptionsGuidance {
   max_loss_scenario: string | null;
   profit_targets_scenario: string[];
   disclaimer: string;
+  chain_validated: boolean;
+  chain_verified_strikes: string | null;
+  validated_legs: OptionLeg[];
 }
 
 export interface DataFreshness {

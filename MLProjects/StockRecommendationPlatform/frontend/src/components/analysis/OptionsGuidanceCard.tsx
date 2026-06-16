@@ -23,12 +23,36 @@ export function OptionsGuidanceCard({ guidance }: { guidance: OptionsGuidance })
             ))}
           </div>
         )}
-        {guidance.strike_guidance && (
+
+        {/* Chain-verified strikes — highest confidence, shown before generic guidance */}
+        {guidance.chain_validated && guidance.chain_verified_strikes ? (
           <div>
-            <span className="text-xs text-gray-500 uppercase tracking-wide">Strike Guidance</span>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs text-gray-500 uppercase tracking-wide">Strike Guidance</span>
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-400 bg-emerald-950 border border-emerald-700 rounded px-1.5 py-0.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
+                Chain Verified
+              </span>
+            </div>
+            <p className="font-mono text-emerald-300 bg-gray-900 rounded px-2 py-1 text-xs">
+              {guidance.chain_verified_strikes}
+            </p>
+            {guidance.strike_guidance && (
+              <p className="text-gray-500 mt-1 text-xs italic">{guidance.strike_guidance}</p>
+            )}
+          </div>
+        ) : guidance.strike_guidance ? (
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs text-gray-500 uppercase tracking-wide">Strike Guidance</span>
+              <span className="text-xs text-amber-500 bg-amber-950 border border-amber-700 rounded px-1.5 py-0.5">
+                Estimated
+              </span>
+            </div>
             <p className="text-gray-300 mt-0.5">{guidance.strike_guidance}</p>
           </div>
-        )}
+        ) : null}
+
         {guidance.max_loss_scenario && (
           <div>
             <span className="text-xs text-gray-500 uppercase tracking-wide">Max Loss Scenario</span>

@@ -87,12 +87,12 @@ interface ColDef {
 
 const COLUMNS: ColDef[] = [
   { key: "symbol",           label: "Symbol",                 sticky: true },
-  { key: "pre_mkt_price",    label: "Pre-Mkt",  subLabel: "Price"   },
-  { key: "pre_mkt_change",   label: "Pre-Mkt",  subLabel: "Change"  },
+  { key: "pre_mkt_price",    label: "Open/Pre", subLabel: "Price"   },
+  { key: "pre_mkt_change",   label: "Open/Pre", subLabel: "vs Prev" },
   { key: "last_price",       label: "Last Price"                      },
   { key: "change",           label: "Change"                          },
-  { key: "post_mkt_price",   label: "Post-Mkt", subLabel: "Price"   },
-  { key: "post_mkt_change",  label: "Post-Mkt", subLabel: "Change"  },
+  { key: "post_mkt_price",   label: "AH/Post",  subLabel: "Price"   },
+  { key: "post_mkt_change",  label: "AH/Post",  subLabel: "vs Close" },
   { key: "earnings_date",    label: "Earnings Date"                   },
   { key: "market_cap",       label: "Market Cap"                      },
   { key: "div_payment_date", label: "Div Payment", subLabel: "Date" },
@@ -123,17 +123,17 @@ function LivePriceCell({
     if (!dir) return;
     setFlashClass(
       dir === "up"
-        ? "bg-emerald-900/50 text-emerald-300"
-        : "bg-red-900/50 text-red-300",
+        ? "bg-emerald-500/40 text-emerald-200"
+        : "bg-red-500/40 text-red-200",
     );
-    const t = setTimeout(() => setFlashClass(""), 900);
+    const t = setTimeout(() => setFlashClass(""), 1500);
     return () => clearTimeout(t);
   }, [live]);
 
   const price = live?.price ?? fallback;
   return (
     <span
-      className={`font-mono font-semibold transition-colors duration-500 rounded px-0.5 ${
+      className={`font-mono font-semibold transition-colors duration-700 rounded px-1 py-0.5 ${
         flashClass || "text-white"
       }`}
     >

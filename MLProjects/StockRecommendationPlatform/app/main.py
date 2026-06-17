@@ -360,7 +360,8 @@ async def get_market_quotes(
     # ── Step 2: yfinance for supplementary fields Polygon doesn't carry ───────
     def _fetch_supplementary(sym: str) -> dict:
         try:
-            info = yf.Ticker(sym).info or {}
+            _ticker = yf.Ticker(sym)
+            info = _ticker.info or {}
             earnings_date: str | None = None
             for key in ("earningsTimestamp", "earningsDate"):
                 val = info.get(key)
@@ -379,13 +380,41 @@ async def get_market_quotes(
             yf_chg   = info.get("regularMarketChange")
             if yf_chg is None and yf_price and yf_prev and yf_prev > 0:
                 yf_chg = yf_price - yf_prev
+
+            # Pre-market: use live preMarketPrice if available (before 9:30 AM ET).
+            # During regular hours fall back to today's open vs previous close —
+            # this shows the gap that pre-market activity created.
+            pre_mkt_price  = info.get("preMarketPrice")
+            pre_mkt_change = info.get("preMarketChange")
+            if pre_mkt_price is None:
+                open_price = info.get("regularMarketOpen") or info.get("open")
+                if open_price and yf_prev and yf_prev > 0:
+                    pre_mkt_price  = open_price
+                    pre_mkt_change = open_price - yf_prev
+
+            # Post-market: use live postMarketPrice if available (after 4 PM ET).
+            # During regular hours fall back to yesterday's after-hours adjusted
+            # close (fast_info.previous_close) vs the regular session close —
+            # this shows how the stock moved in yesterday's after-hours session.
+            post_mkt_price  = info.get("postMarketPrice")
+            post_mkt_change = info.get("postMarketChange")
+            if post_mkt_price is None:
+                try:
+                    ah_close = _ticker.fast_info.previous_close  # AH-adjusted prev close
+                    reg_close = info.get("regularMarketPreviousClose") or yf_prev
+                    if ah_close and reg_close and reg_close > 0:
+                        post_mkt_price  = ah_close
+                        post_mkt_change = ah_close - reg_close
+                except Exception:
+                    pass
+
             return {
                 "yf_last_price":   yf_price,
                 "yf_change":       yf_chg,
-                "pre_mkt_price":   info.get("preMarketPrice"),
-                "pre_mkt_change":  info.get("preMarketChange"),
-                "post_mkt_price":  info.get("postMarketPrice"),
-                "post_mkt_change": info.get("postMarketChange"),
+                "pre_mkt_price":   pre_mkt_price,
+                "pre_mkt_change":  pre_mkt_change,
+                "post_mkt_price":  post_mkt_price,
+                "post_mkt_change": post_mkt_change,
                 "earnings_date":   earnings_date,
                 "market_cap":      info.get("marketCap"),
                 "div_payment_date": div_payment_date,

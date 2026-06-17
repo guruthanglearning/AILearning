@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import { useMarketGridWs, type LivePriceUpdate } from "@/hooks/useMarketGridWs";
 import { useMomentumSectors } from "@/hooks/useMomentumSectors";
 import type { MomentumStockRow } from "@/types/api";
 
@@ -65,6 +66,31 @@ function fmtReturn(v: number | null): string {
 function pctColor(v: number | null): string {
   if (v == null) return "text-gray-500";
   return v > 0 ? "text-green-400" : v < 0 ? "text-red-400" : "text-gray-400";
+}
+
+// ── Live price cell (flashes green/red on WS tick) ───────────────────────────
+
+function LivePriceCell({ live, fallback }: { live: LivePriceUpdate | null; fallback: number | null }) {
+  const [flashClass, setFlashClass] = useState("");
+  const prevTsRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (!live || live.ts === prevTsRef.current) return;
+    prevTsRef.current = live.ts;
+    if (live.prevPrice == null) return;
+    const dir = live.price > live.prevPrice ? "up" : live.price < live.prevPrice ? "down" : "";
+    if (!dir) return;
+    setFlashClass(dir === "up" ? "bg-emerald-500/40 text-emerald-200" : "bg-red-500/40 text-red-200");
+    const t = setTimeout(() => setFlashClass(""), 1500);
+    return () => clearTimeout(t);
+  }, [live]);
+
+  const price = live?.price ?? fallback;
+  return (
+    <span className={`font-mono font-semibold transition-colors duration-700 rounded px-1 py-0.5 ${flashClass || "text-white"}`}>
+      {fmtPrice(price)}
+    </span>
+  );
 }
 
 // ── Score bar ─────────────────────────────────────────────────────────────────
@@ -230,8 +256,9 @@ const RANK_COLORS: Record<number, string> = {
   3: "text-amber-600 font-bold",
 };
 
-function StockRow({ row, rank, showSector, onAnalyze }: {
+function StockRow({ row, rank, showSector, onAnalyze, liveInfo }: {
   row: MomentumStockRow; rank: number; showSector: boolean; onAnalyze: (s: string) => void;
+  liveInfo?: LivePriceUpdate | null;
 }) {
   return (
     <tr className="border-b border-gray-800/70 hover:bg-gray-800/30 transition-colors">
@@ -270,9 +297,14 @@ function StockRow({ row, rank, showSector, onAnalyze }: {
       </td>
       {/* Market Cap */}
       <td className={`${TD} font-mono text-gray-300`}>{fmtMarketCap(row.market_cap)}</td>
-      {/* Price */}
-      <td className={`${TD} font-mono font-semibold text-white`}>
-        {fmtPrice(row.close_price)}
+      {/* Price — live WS tick if connected, falls back to close_price */}
+      <td className={`${TD}`}>
+        <span className="flex items-center gap-1">
+          <LivePriceCell live={liveInfo ?? null} fallback={row.close_price} />
+          {liveInfo && (
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" title="Live" />
+          )}
+        </span>
       </td>
       {/* 52-week range */}
       <td className={`${TD} font-mono text-gray-400`}>{fmtPrice(row.week_52_high)}</td>
@@ -422,6 +454,10 @@ export function MomentumGrid({ onAnalyze }: MomentumGridProps) {
     s.stocks.map((stock) => ({ ...stock, sector: stock.sector ?? s.sector }))
   );
 
+  // Live WebSocket prices — subscribe to all symbols in the momentum universe
+  const allSymbols = Array.from(new Set(allStocksFlat.map((r) => r.symbol)));
+  const { livePrices, connected: wsConnected } = useMarketGridWs(allSymbols);
+
   // All-sectors: top 5 per sector+industry combination, then sorted by score globally
   const allSectorsByIndustry = (() => {
     const groups = new Map<string, MomentumStockRow[]>();
@@ -524,6 +560,17 @@ export function MomentumGrid({ onAnalyze }: MomentumGridProps) {
                 )}
                 <span className={countdown <= 30 ? "text-amber-500" : ""}>
                   Refreshes in {countdown}s
+                </span>
+                <span
+                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] border ${
+                    wsConnected
+                      ? "text-emerald-400 border-emerald-800/50 bg-emerald-950/30"
+                      : "text-gray-600 border-gray-800"
+                  }`}
+                  title={wsConnected ? "Live price feed connected" : "Live feed offline"}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${wsConnected ? "bg-emerald-400 animate-pulse" : "bg-gray-700"}`} />
+                  {wsConnected ? "Live" : "Offline"}
                 </span>
               </>
             )}
@@ -682,6 +729,7 @@ export function MomentumGrid({ onAnalyze }: MomentumGridProps) {
                     rank={rank}
                     showSector={isAllSectors}
                     onAnalyze={(s) => onAnalyze?.(s)}
+                    liveInfo={livePrices[row.symbol]}
                   />
                 ))
               )}

@@ -21,8 +21,9 @@ export function MomentumPrefetcher() {
     queryClient
       .prefetchQuery({
         queryKey: ["momentum", "sectors", LIMIT],
-        queryFn: () => getMomentumSectors(LIMIT),
+        queryFn: () => getMomentumSectors(LIMIT).catch(() => null),
         staleTime: 4 * 60 * 1000,
+        retry: 0,
       })
       .then(() => {
         const elapsed = Date.now() - startedAt;

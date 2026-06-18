@@ -1,8 +1,12 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 
-import { MarketGrid } from "@/components/market/MarketGrid";
+const MarketGrid = dynamic(
+  () => import("@/components/market/MarketGrid").then((m) => m.MarketGrid),
+  { ssr: false },
+);
 
 export default function MarketGridPage() {
   const router = useRouter();

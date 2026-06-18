@@ -21,7 +21,7 @@ export default function RootLayout({
         <Providers>
           <NavBar />
           <DisclaimerBanner />
-          <main className="max-w-7xl mx-auto px-4 py-6">{children}</main>
+          <main className="max-w-screen-2xl mx-auto px-4 py-6">{children}</main>
         </Providers>
       </body>
     </html>

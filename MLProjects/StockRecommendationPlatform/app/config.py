@@ -15,6 +15,8 @@ class Settings(BaseSettings):
 
     # Phase 0b — Polygon (absent → yfinance fallback)
     polygon_api_key: str | None = None
+    # Set POLYGON_REALTIME=true in .env to use the real-time WebSocket (requires paid Polygon plan)
+    polygon_realtime: bool = False
 
     # Phase 2 — batch concurrency
     batch_concurrency: int = 5

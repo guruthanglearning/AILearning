@@ -36,7 +36,13 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-_WS_URL = "wss://delayed.polygon.io/stocks"
+def _get_ws_url() -> str:
+    from app.config import settings
+    return (
+        "wss://socket.polygon.io/stocks" if settings.polygon_realtime
+        else "wss://delayed.polygon.io/stocks"
+    )
+
 _RECONNECT_DELAY_S = 5
 
 
@@ -92,7 +98,7 @@ class PolygonWsManager:
 
         while True:
             try:
-                async with websockets.connect(_WS_URL) as ws:
+                async with websockets.connect(_get_ws_url()) as ws:
                     self._ws = ws
                     log.info("polygon_ws_connected")
 

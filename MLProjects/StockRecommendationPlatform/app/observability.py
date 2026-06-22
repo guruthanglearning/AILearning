@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import logging
+import re
 import sys
 from contextvars import ContextVar
 from typing import Any
+
+_API_KEY_PATTERN = re.compile(r"(apiKey=)[^&\s\"']+", re.IGNORECASE)
 
 import structlog
 import structlog.contextvars
@@ -59,6 +62,16 @@ def _inject_correlation_id(
     return event_dict
 
 
+def _mask_api_keys(
+    logger: Any, method: str, event_dict: dict[str, Any]
+) -> dict[str, Any]:
+    """Redact API keys from log event strings to prevent credential leakage."""
+    event = event_dict.get("event")
+    if isinstance(event, str):
+        event_dict["event"] = _API_KEY_PATTERN.sub(r"\1[REDACTED]", event)
+    return event_dict
+
+
 _logging_configured = False
 
 
@@ -81,6 +94,7 @@ def configure_logging() -> None:
         structlog.stdlib.add_logger_name,
         structlog.processors.TimeStamper(fmt="iso", utc=True),
         _inject_correlation_id,
+        _mask_api_keys,
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
     ]

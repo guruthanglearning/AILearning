@@ -175,6 +175,18 @@ export function streamAnalysis(
     });
 }
 
+export async function getMarketMode(): Promise<{ realtime: boolean; label: string; ws_status: string; ws_connected: boolean }> {
+  const res = await fetch(`${API_URL}/v1/market/mode`);
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function setMarketMode(realtime: boolean): Promise<{ realtime: boolean; label: string; ws_status: string }> {
+  const res = await fetch(`${API_URL}/v1/market/mode?realtime=${realtime}`, { method: "POST" });
+  await checkResponse(res);
+  return res.json();
+}
+
 export async function getMarketQuotes(symbols: string[]): Promise<MarketQuoteRow[]> {
   if (!symbols.length) return [];
   const res = await fetch(

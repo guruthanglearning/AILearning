@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useMarketGridWs, type LivePriceUpdate } from "@/hooks/useMarketGridWs";
-import { getMarketQuotes } from "@/lib/api";
+import { getMarketMode, getMarketQuotes, setMarketMode } from "@/lib/api";
 import type { MarketQuoteRow } from "@/types/api";
 
 // ── Formatters ────────────────────────────────────────────────────────────────
@@ -77,8 +77,136 @@ export const MARKET_GRID_SYMBOLS_KEY = "market_grid_symbols_v2";
 const INTERVAL_KEY   = "market_grid_interval";
 const HIDDEN_COLS_KEY = "market_grid_hidden_cols_v1";
 
-const DELAY_LABEL =
-  process.env.NEXT_PUBLIC_POLYGON_REALTIME === "true" ? "Real-time" : "15-min delay";
+// ── Polygon mode toggle ───────────────────────────────────────────────────────
+
+function useFeedMode() {
+  const [realtime, setRealtime]               = useState(process.env.NEXT_PUBLIC_POLYGON_REALTIME === "true");
+  const [switching, setSwitching]             = useState(false);
+  const [authFailedPopup, setAuthFailedPopup] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    getMarketMode()
+      .then((r) => setRealtime(r.realtime))
+      .catch(() => {});
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
+
+  async function toggle(next: boolean) {
+    if (next === realtime || switching) return;
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    setSwitching(true);
+    try {
+      await setMarketMode(next);
+      setRealtime(next);
+      if (next) {
+        // Poll for ~10s to detect if the server auto-reverted due to plan limitation
+        let attempts = 0;
+        pollRef.current = setInterval(async () => {
+          attempts++;
+          try {
+            const status = await getMarketMode();
+            if (!status.realtime && next) {
+              // Server reverted to delayed — plan doesn't include real-time WS
+              setRealtime(false);
+              setAuthFailedPopup(true);
+              if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+            } else if (status.ws_connected) {
+              if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+            }
+          } catch { /* ignore poll errors */ }
+          if (attempts >= 5 && pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+        }, 2000);
+      }
+    } catch {
+      // backend unreachable — keep current state
+    } finally {
+      setSwitching(false);
+    }
+  }
+
+  return { realtime, switching, toggle, authFailedPopup, dismissPopup: () => setAuthFailedPopup(false) };
+}
+
+function RealtimeUnavailablePopup({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+      <div className="bg-gray-900 border border-amber-700/60 rounded-xl shadow-2xl p-6 max-w-md w-full mx-4">
+        <div className="flex items-start gap-3">
+          <span className="text-amber-400 text-xl shrink-0">⚠</span>
+          <div>
+            <h3 className="text-sm font-semibold text-amber-300 mb-1">Real-time WebSocket Not Available</h3>
+            <p className="text-xs text-gray-400 leading-relaxed">
+              Your Polygon plan does not include access to{" "}
+              <span className="font-mono text-gray-300">socket.polygon.io</span> (real-time feed).
+              This requires the <span className="text-white font-medium">Polygon Developer plan</span> or higher.
+            </p>
+            <p className="text-xs text-gray-400 mt-2 leading-relaxed">
+              Automatically switched back to{" "}
+              <span className="text-indigo-300 font-medium">15-minute delayed feed</span> via{" "}
+              <span className="font-mono text-gray-300">delayed.polygon.io</span>, which your Stocks Starter plan supports.
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="px-4 py-1.5 bg-amber-700/40 hover:bg-amber-700/70 border border-amber-700/60 text-amber-300 text-xs rounded transition-colors"
+          >
+            Got it — use delayed feed
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ModeToggle({
+  realtime,
+  switching,
+  onSwitch,
+}: {
+  realtime: boolean;
+  switching: boolean;
+  onSwitch: (v: boolean) => void;
+}) {
+  return (
+    <div
+      className="flex items-center text-xs rounded border border-gray-700 overflow-hidden"
+      title={
+        realtime
+          ? "Real-time feed (Polygon Developer plan) — click to switch to 15-min delayed"
+          : "15-min delayed feed (Polygon Starter plan) — click to switch to real-time"
+      }
+    >
+      <button
+        type="button"
+        onClick={() => onSwitch(false)}
+        disabled={switching}
+        className={`px-2.5 py-1.5 transition-colors ${
+          !realtime
+            ? "bg-gray-600 text-white font-medium"
+            : "bg-gray-900 text-gray-500 hover:text-gray-300 hover:bg-gray-800"
+        }`}
+      >
+        15-min delay
+      </button>
+      <button
+        type="button"
+        onClick={() => onSwitch(true)}
+        disabled={switching}
+        className={`px-2.5 py-1.5 transition-colors ${
+          realtime
+            ? "bg-indigo-600 text-white font-medium"
+            : "bg-gray-900 text-gray-500 hover:text-gray-300 hover:bg-gray-800"
+        }`}
+      >
+        {switching ? "…" : "Real-time"}
+      </button>
+    </div>
+  );
+}
 
 // ── Column definitions ────────────────────────────────────────────────────────
 
@@ -168,9 +296,19 @@ function CellContent({
           {liveInfo && (
             <span
               className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0"
-              title={`Live price · ${DELAY_LABEL}`}
+              title="Live price (Polygon WebSocket)"
             />
           )}
+          <span
+            className={`text-[9px] font-mono px-1 py-0.5 rounded leading-none ${
+              row.price_source === "polygon"
+                ? "text-indigo-400 bg-indigo-950/60 border border-indigo-800/50"
+                : "text-gray-600 bg-gray-800/60 border border-gray-700/40"
+            }`}
+            title={row.price_source === "polygon" ? "Price from Polygon.io snapshot" : "Price from Yahoo Finance (Polygon snapshot unavailable)"}
+          >
+            {row.price_source === "polygon" ? "P" : "yf"}
+          </span>
         </span>
       );
     case "pre_mkt_price":    return <span className="font-mono text-gray-300">{fmtPrice(row.pre_mkt_price)}</span>;
@@ -456,11 +594,17 @@ export function MarketGrid({ onAnalyze }: MarketGridProps) {
   }
 
   const { livePrices, connected: wsConnected } = useMarketGridWs(symbols);
+  const { realtime, switching, toggle: toggleMode, authFailedPopup, dismissPopup } = useFeedMode();
   const sortedRows  = sortRows(rows, sortKey, sortDir);
   const visibleCols = COLUMNS.filter((c) => !hiddenCols.has(c.key));
+  const delayLabel  = realtime ? "Real-time" : "15-min delay";
+
+  const polygonCount = rows.filter((r) => r.price_source === "polygon").length;
+  const yfinanceCount = rows.filter((r) => r.price_source === "yfinance").length;
 
   return (
     <div className="space-y-3">
+      {authFailedPopup && <RealtimeUnavailablePopup onDismiss={dismissPopup} />}
       {/* ── Controls ── */}
       <div className="flex flex-wrap gap-3 items-end">
         {/* Add symbol */}
@@ -523,6 +667,9 @@ export function MarketGrid({ onAnalyze }: MarketGridProps) {
           onReset={() => setHiddenCols(new Set())}
         />
 
+        {/* Feed mode toggle */}
+        <ModeToggle realtime={realtime} switching={switching} onSwitch={toggleMode} />
+
         {/* Active sort indicator */}
         {sortKey !== "market_cap" && (
           <span className="text-xs text-gray-500 bg-gray-800 px-2 py-1.5 rounded border border-gray-700">
@@ -549,12 +696,12 @@ export function MarketGrid({ onAnalyze }: MarketGridProps) {
           }`}
           title={
             wsConnected
-              ? `Live WebSocket connected · Polygon ${DELAY_LABEL}`
+              ? `Live WebSocket connected · Polygon ${delayLabel}`
               : "Live price feed disconnected"
           }
         >
           <span className={`w-1.5 h-1.5 rounded-full ${wsConnected ? "bg-emerald-400 animate-pulse" : "bg-gray-700"}`} />
-          {wsConnected ? `Live · ${DELAY_LABEL}` : "Offline"}
+          {wsConnected ? `Live · ${delayLabel}` : "Offline"}
         </span>
 
         {/* Timers */}
@@ -586,6 +733,26 @@ export function MarketGrid({ onAnalyze }: MarketGridProps) {
 
       {error && (
         <p className="text-xs text-red-400 bg-red-900/20 border border-red-800/40 rounded px-3 py-2">{error}</p>
+      )}
+
+      {/* ── Data source summary ── */}
+      {rows.length > 0 && (
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-gray-600">Price source:</span>
+          {polygonCount > 0 && (
+            <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-950/60 border border-indigo-800/50 text-indigo-400">
+              <span className="font-mono font-bold text-[10px]">P</span>
+              Polygon.io — {polygonCount} symbol{polygonCount !== 1 ? "s" : ""}
+            </span>
+          )}
+          {yfinanceCount > 0 && (
+            <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-gray-800/60 border border-gray-700/40 text-gray-500">
+              <span className="font-mono font-bold text-[10px]">yf</span>
+              Yahoo Finance — {yfinanceCount} symbol{yfinanceCount !== 1 ? "s" : ""}
+            </span>
+          )}
+          <span className="text-gray-700 ml-1">· Supplemental (earnings, market cap) always from Yahoo Finance</span>
+        </div>
       )}
 
       {/* ── Table ── */}
@@ -623,8 +790,11 @@ export function MarketGrid({ onAnalyze }: MarketGridProps) {
       </div>
 
       <p className="text-xs text-gray-700 italic">
-        Snapshot prices via Polygon.io ({DELAY_LABEL}) · Live ticks via Polygon WebSocket ({DELAY_LABEL}) ·
-        Pre/post-market via Yahoo Finance (near real-time during those sessions) · Not investment advice.
+        Prices{" "}
+        <span className="font-mono text-indigo-800">P</span> Polygon.io snapshot ({delayLabel}) ·{" "}
+        <span className="font-mono text-gray-600">yf</span> Yahoo Finance fallback ·{" "}
+        Live ticks via Polygon WebSocket ({delayLabel}) ·
+        Pre/post-market &amp; earnings &amp; market cap via Yahoo Finance · Not investment advice.
       </p>
     </div>
   );

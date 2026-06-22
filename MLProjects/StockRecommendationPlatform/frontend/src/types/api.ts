@@ -387,7 +387,16 @@ export interface MarketQuoteRow {
   week_52_high: number | null;
   week_52_low: number | null;
   shares_outstanding: number | null;
+  price_source: string;
   fetched_at_utc: string;
+}
+
+export interface MarketModeResponse {
+  realtime: boolean;
+  label: string;
+  ws_status: string;
+  ws_connected: boolean;
+  ws_url: string | null;
 }
 
 // ─── Error log ───────────────────────────────────────────────────────────────

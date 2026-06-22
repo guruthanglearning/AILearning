@@ -36,23 +36,58 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-def _get_ws_url() -> str:
-    from app.config import settings
-    return (
-        "wss://socket.polygon.io/stocks" if settings.polygon_realtime
-        else "wss://delayed.polygon.io/stocks"
-    )
-
 _RECONNECT_DELAY_S = 5
 
 
 class PolygonWsManager:
-    def __init__(self, api_key: str) -> None:
+    def __init__(self, api_key: str, realtime: bool = False) -> None:
         self._api_key = api_key
+        self._realtime = realtime
         self._subs: dict[str, set[WebSocket]] = defaultdict(set)
         self._ws = None
         self._lock = asyncio.Lock()
         self._runner: asyncio.Task | None = None
+        self._ws_status: str = "offline"
+        self._ws_status_code: str = "offline"
+
+    # ------------------------------------------------------------------
+    # Mode management
+    # ------------------------------------------------------------------
+
+    @property
+    def realtime(self) -> bool:
+        return self._realtime
+
+    @property
+    def ws_status(self) -> str:
+        return self._ws_status
+
+    @property
+    def ws_status_code(self) -> str:
+        return self._ws_status_code
+
+    @property
+    def ws_connected(self) -> bool:
+        return self._ws_status_code in ("auth_success", "success")
+
+    def ws_url(self) -> str:
+        return (
+            "wss://socket.polygon.io/stocks" if self._realtime
+            else "wss://delayed.polygon.io/stocks"
+        )
+
+    async def set_mode(self, realtime: bool) -> None:
+        """Switch between real-time and 15-min-delayed feed at runtime.
+
+        Updates the URL flag then closes the current upstream connection so
+        the reconnect loop re-opens it against the new endpoint.
+        """
+        self._realtime = realtime
+        if self._ws is not None:
+            try:
+                await self._ws.close()
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     # Public API
@@ -98,9 +133,9 @@ class PolygonWsManager:
 
         while True:
             try:
-                async with websockets.connect(_get_ws_url()) as ws:
+                async with websockets.connect(self.ws_url()) as ws:
                     self._ws = ws
-                    log.info("polygon_ws_connected")
+                    log.info("polygon_ws_connected url=%s", self.ws_url())
 
                     await ws.send(json.dumps({"action": "auth", "params": self._api_key}))
 
@@ -118,6 +153,8 @@ class PolygonWsManager:
             except Exception as exc:
                 log.warning("polygon_ws_disconnected: %s", exc)
                 self._ws = None
+                self._ws_status = "disconnected"
+                self._ws_status_code = "disconnected"
 
             await asyncio.sleep(_RECONNECT_DELAY_S)
 
@@ -133,7 +170,20 @@ class PolygonWsManager:
             sym     = ev.get("sym", "")
 
             if ev_type == "status":
-                log.info("polygon_ws_status: %s (%s)", ev.get("message"), ev.get("status"))
+                msg  = ev.get("message", "")
+                code = ev.get("status", "")
+                self._ws_status      = msg
+                self._ws_status_code = code
+                log.info("polygon_ws_status: %s (%s)", msg, code)
+                if code == "auth_failed" and self._realtime:
+                    log.warning("polygon_ws: real-time auth failed — plan doesn't include socket.polygon.io; reverting to 15-min delayed feed")
+                    self._realtime       = False
+                    self._ws_status_code = "auth_failed_reverted"
+                    if self._ws is not None:
+                        try:
+                            await self._ws.close()
+                        except Exception:
+                            pass
                 continue
 
             if ev_type == "A" and sym:
@@ -167,7 +217,8 @@ _manager: PolygonWsManager | None = None
 
 def init_ws_manager(api_key: str) -> PolygonWsManager:
     global _manager
-    _manager = PolygonWsManager(api_key)
+    from app.config import settings
+    _manager = PolygonWsManager(api_key, realtime=settings.polygon_realtime)
     return _manager
 
 

@@ -437,6 +437,7 @@ async def get_market_quotes(
     for sym in sym_list:
         poly = polygon_prices.get(sym, {})
         supp = supp_map.get(sym, {})
+        price_source = "polygon" if sym in polygon_prices and polygon_prices[sym].get("last_price") else "yfinance"
         results.append(MarketQuoteRow(
             symbol=sym,
             last_price=poly.get("last_price") or supp.get("yf_last_price"),
@@ -452,9 +453,47 @@ async def get_market_quotes(
             week_52_high=supp.get("week_52_high"),
             week_52_low=supp.get("week_52_low"),
             shares_outstanding=supp.get("shares_outstanding"),
+            price_source=price_source,
             fetched_at_utc=now,
         ))
     return results
+
+
+@app.get("/v1/market/mode")
+async def get_market_mode() -> dict:
+    """Return the current Polygon WebSocket feed mode and connection status."""
+    from app.polygon_ws import get_ws_manager
+    manager = get_ws_manager()
+    realtime = manager.realtime if manager else False
+    ws_status_code = manager.ws_status_code if manager else "offline"
+    ws_connected   = manager.ws_connected   if manager else False
+    return {
+        "realtime":     realtime,
+        "ws_url":       manager.ws_url() if manager else None,
+        "label":        "Real-time" if realtime else "15-min delay",
+        "ws_status":    ws_status_code,
+        "ws_connected": ws_connected,
+    }
+
+
+@app.post("/v1/market/mode")
+async def set_market_mode(realtime: bool = Query(..., description="true = real-time feed, false = 15-min delayed")) -> dict:
+    """Switch the Polygon WebSocket between real-time and delayed feeds.
+
+    Real-time requires socket.polygon.io access (Polygon Developer plan or higher).
+    If auth fails, the server auto-reverts to delayed feed and sets ws_status=auth_failed_reverted.
+    Delayed works on Stocks Starter plan (delayed.polygon.io).
+    """
+    from app.polygon_ws import get_ws_manager
+    manager = get_ws_manager()
+    if manager:
+        await manager.set_mode(realtime)
+    ws_status_code = manager.ws_status_code if manager else "offline"
+    return {
+        "realtime":  realtime,
+        "label":     "Real-time" if realtime else "15-min delay",
+        "ws_status": ws_status_code,
+    }
 
 
 @app.post("/v1/analysis/batch", response_model=BatchJobResponse, status_code=202)

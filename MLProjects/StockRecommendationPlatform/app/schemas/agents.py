@@ -312,6 +312,7 @@ class MarketQuoteRow(BaseModel):
     week_52_high: float | None = None
     week_52_low: float | None = None
     shares_outstanding: float | None = None
+    price_source: str = "yfinance"
     fetched_at_utc: datetime = Field(default_factory=datetime.utcnow)
 
 

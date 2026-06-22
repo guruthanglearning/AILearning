@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { TechnicalChartDrawer } from "@/components/market/TechnicalChartDrawer";
 import { useMarketGridWs, type LivePriceUpdate } from "@/hooks/useMarketGridWs";
+import { useSparklines } from "@/hooks/useSparklines";
 import { getMarketMode, getMarketQuotes, setMarketMode } from "@/lib/api";
 import type { MarketQuoteRow } from "@/types/api";
 
@@ -44,6 +46,7 @@ function chgColor(v: number | null): string {
 // ── Sort helpers ──────────────────────────────────────────────────────────────
 
 type SortKey = keyof MarketQuoteRow;
+type ColKey  = SortKey | "sparkline";
 type SortDir = "asc" | "desc";
 
 function getValue(row: MarketQuoteRow, key: SortKey): string | number {
@@ -74,8 +77,67 @@ const DEFAULT_SYMBOLS = [
 ];
 
 export const MARKET_GRID_SYMBOLS_KEY = "market_grid_symbols_v2";
-const INTERVAL_KEY   = "market_grid_interval";
+const INTERVAL_KEY    = "market_grid_interval";
 const HIDDEN_COLS_KEY = "market_grid_hidden_cols_v1";
+
+// ── Sparkline inline SVG ──────────────────────────────────────────────────────
+
+function SparklineSvg({
+  prices,
+  onClick,
+}: {
+  prices: number[];
+  onClick: () => void;
+}) {
+  if (prices.length < 2) {
+    return (
+      <span
+        className="inline-flex w-[60px] h-[22px] items-center justify-center text-gray-700 text-[9px] cursor-pointer"
+        onClick={onClick}
+        title="Click to open chart"
+      >
+        —
+      </span>
+    );
+  }
+
+  const W = 60;
+  const H = 22;
+  const PAD = 2;
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  const range = max - min || 1;
+
+  const pts = prices
+    .map((p, i) => {
+      const x = PAD + (i / (prices.length - 1)) * (W - 2 * PAD);
+      const y = H - PAD - ((p - min) / range) * (H - 2 * PAD);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+
+  const trending = prices[prices.length - 1] >= prices[0];
+  const color = trending ? "#34d399" : "#f87171";
+
+  return (
+    <svg
+      width={W}
+      height={H}
+      className="cursor-pointer hover:opacity-70 transition-opacity"
+      onClick={onClick}
+      aria-label="Click to open technical chart"
+    >
+      <polyline
+        points={pts}
+        fill="none"
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
 
 // ── Polygon mode toggle ───────────────────────────────────────────────────────
 
@@ -100,14 +162,12 @@ function useFeedMode() {
       await setMarketMode(next);
       setRealtime(next);
       if (next) {
-        // Poll for ~10s to detect if the server auto-reverted due to plan limitation
         let attempts = 0;
         pollRef.current = setInterval(async () => {
           attempts++;
           try {
             const status = await getMarketMode();
             if (!status.realtime && next) {
-              // Server reverted to delayed — plan doesn't include real-time WS
               setRealtime(false);
               setAuthFailedPopup(true);
               if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
@@ -211,15 +271,16 @@ function ModeToggle({
 // ── Column definitions ────────────────────────────────────────────────────────
 
 interface ColDef {
-  key: SortKey;
+  key: ColKey;
   label: string;
   subLabel?: string;
   sticky?: boolean;
-  required?: boolean;   // cannot be hidden
+  required?: boolean;
 }
 
 const COLUMNS: ColDef[] = [
   { key: "symbol",             label: "Symbol",                  sticky: true, required: true },
+  { key: "sparkline",          label: "30d",                     required: true },
   { key: "pre_mkt_price",      label: "Open/Pre",  subLabel: "Price"    },
   { key: "pre_mkt_change",     label: "Open/Pre",  subLabel: "vs Prev"  },
   { key: "last_price",         label: "Last Price"                        },
@@ -271,11 +332,15 @@ function CellContent({
   row,
   liveInfo,
   onAnalyze,
+  sparklinePrices,
+  onChartOpen,
 }: {
   col: ColDef;
   row: MarketQuoteRow;
   liveInfo: LivePriceUpdate | null;
   onAnalyze: (s: string) => void;
+  sparklinePrices: number[] | undefined;
+  onChartOpen: (s: string) => void;
 }) {
   switch (col.key) {
     case "symbol":
@@ -288,6 +353,13 @@ function CellContent({
         >
           {row.symbol}
         </button>
+      );
+    case "sparkline":
+      return (
+        <SparklineSvg
+          prices={sparklinePrices ?? []}
+          onClick={() => onChartOpen(row.symbol)}
+        />
       );
     case "last_price":
       return (
@@ -335,21 +407,22 @@ function SortArrow({ active, dir }: { active: boolean; dir: SortDir }) {
 }
 
 function Th({ col, sortKey, sortDir, onSort }: {
-  col: ColDef; sortKey: SortKey; sortDir: SortDir; onSort: (k: SortKey) => void;
+  col: ColDef; sortKey: SortKey; sortDir: SortDir; onSort: (k: ColKey) => void;
 }) {
-  const active = sortKey === col.key;
+  const sortable = col.key !== "sparkline";
+  const active = sortable && sortKey === col.key;
   return (
     <th
       onClick={() => onSort(col.key)}
       className={[
         "px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap",
-        "select-none cursor-pointer transition-colors",
-        active ? "text-indigo-300 bg-gray-800/60" : "text-gray-400 hover:text-gray-200 hover:bg-gray-800/30",
+        sortable ? "select-none cursor-pointer transition-colors" : "cursor-default",
+        active ? "text-indigo-300 bg-gray-800/60" : sortable ? "text-gray-400 hover:text-gray-200 hover:bg-gray-800/30" : "text-gray-500",
         col.sticky ? "sticky left-0 bg-gray-900 z-10" : "",
       ].join(" ")}
     >
       {col.subLabel ? <span>{col.label}<br />{col.subLabel}</span> : col.label}
-      <SortArrow active={active} dir={sortDir} />
+      {sortable && <SortArrow active={active} dir={sortDir} />}
     </th>
   );
 }
@@ -361,11 +434,15 @@ function Row({
   onAnalyze,
   liveInfo,
   visibleCols,
+  sparklinePrices,
+  onChartOpen,
 }: {
   row: MarketQuoteRow;
   onAnalyze: (s: string) => void;
   liveInfo?: LivePriceUpdate | null;
   visibleCols: ColDef[];
+  sparklinePrices: number[] | undefined;
+  onChartOpen: (s: string) => void;
 }) {
   return (
     <tr className="border-b border-gray-800/70 hover:bg-gray-800/30 transition-colors">
@@ -374,7 +451,14 @@ function Row({
           key={col.key}
           className={`${TD}${col.sticky ? " sticky left-0 bg-gray-950 z-10" : ""}`}
         >
-          <CellContent col={col} row={row} liveInfo={liveInfo ?? null} onAnalyze={onAnalyze} />
+          <CellContent
+            col={col}
+            row={row}
+            liveInfo={liveInfo ?? null}
+            onAnalyze={onAnalyze}
+            sparklinePrices={sparklinePrices}
+            onChartOpen={onChartOpen}
+          />
         </td>
       ))}
     </tr>
@@ -384,10 +468,11 @@ function Row({
 // ── CSV export ────────────────────────────────────────────────────────────────
 
 function exportCsv(rows: MarketQuoteRow[], cols: ColDef[]): void {
-  const header = cols.map((c) => c.subLabel ? `${c.label} ${c.subLabel}` : c.label).join(",");
+  const dataCols = cols.filter((c) => c.key !== "sparkline");
+  const header = dataCols.map((c) => c.subLabel ? `${c.label} ${c.subLabel}` : c.label).join(",");
   const body = rows.map((row) =>
-    cols.map((col) => {
-      const v = row[col.key as keyof MarketQuoteRow];
+    dataCols.map((col) => {
+      const v = row[col.key as SortKey];
       if (v == null) return "";
       const s = String(v);
       return s.includes(",") || s.includes('"') || s.includes("\n")
@@ -414,8 +499,8 @@ function ColumnPicker({
   onToggle,
   onReset,
 }: {
-  hiddenCols: Set<SortKey>;
-  onToggle: (key: SortKey) => void;
+  hiddenCols: Set<ColKey>;
+  onToggle: (key: ColKey) => void;
   onReset: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -499,11 +584,11 @@ export function MarketGrid({ onAnalyze }: MarketGridProps) {
     return Number(localStorage.getItem(INTERVAL_KEY) ?? "10");
   });
 
-  const [hiddenCols, setHiddenCols] = useState<Set<SortKey>>(() => {
+  const [hiddenCols, setHiddenCols] = useState<Set<ColKey>>(() => {
     try {
       const stored = localStorage.getItem(HIDDEN_COLS_KEY);
-      return stored ? new Set(JSON.parse(stored) as SortKey[]) : new Set<SortKey>();
-    } catch { return new Set<SortKey>(); }
+      return stored ? new Set(JSON.parse(stored) as ColKey[]) : new Set<ColKey>();
+    } catch { return new Set<ColKey>(); }
   });
 
   const [rows, setRows]               = useState<MarketQuoteRow[]>([]);
@@ -515,6 +600,7 @@ export function MarketGrid({ onAnalyze }: MarketGridProps) {
   const [intervalInput, setIntervalInput] = useState(String(intervalSec));
   const [sortKey, setSortKey]         = useState<SortKey>("market_cap");
   const [sortDir, setSortDir]         = useState<SortDir>("desc");
+  const [chartSymbol, setChartSymbol] = useState<string | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const cdRef    = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -554,17 +640,19 @@ export function MarketGrid({ onAnalyze }: MarketGridProps) {
     };
   }, [symbols, intervalSec, fetchQuotes]);
 
-  function handleSort(key: SortKey) {
-    if (key === sortKey) {
+  function handleSort(key: ColKey) {
+    if (key === "sparkline") return;
+    const sk = key as SortKey;
+    if (sk === sortKey) {
       setSortDir((d) => d === "asc" ? "desc" : "asc");
     } else {
-      setSortKey(key);
+      setSortKey(sk);
       const numericCols: SortKey[] = [
         "last_price", "change", "pre_mkt_price", "pre_mkt_change",
         "post_mkt_price", "post_mkt_change", "market_cap",
         "week_52_high", "week_52_low", "shares_outstanding",
       ];
-      setSortDir(numericCols.includes(key) ? "desc" : "asc");
+      setSortDir(numericCols.includes(sk) ? "desc" : "asc");
     }
   }
 
@@ -578,6 +666,7 @@ export function MarketGrid({ onAnalyze }: MarketGridProps) {
   function removeSymbol(sym: string) {
     setSymbols((prev) => prev.filter((s) => s !== sym));
     setRows((prev) => prev.filter((r) => r.symbol !== sym));
+    if (chartSymbol === sym) setChartSymbol(null);
   }
 
   function applyInterval() {
@@ -585,7 +674,7 @@ export function MarketGrid({ onAnalyze }: MarketGridProps) {
     if (!isNaN(v) && v >= 5 && v <= 300) setIntervalSec(v);
   }
 
-  function toggleCol(key: SortKey) {
+  function toggleCol(key: ColKey) {
     setHiddenCols((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key); else next.add(key);
@@ -595,6 +684,10 @@ export function MarketGrid({ onAnalyze }: MarketGridProps) {
 
   const { livePrices, connected: wsConnected } = useMarketGridWs(symbols);
   const { realtime, switching, toggle: toggleMode, authFailedPopup, dismissPopup } = useFeedMode();
+
+  // Load sparklines after first quote fetch completes
+  const sparklines = useSparklines(symbols, rows.length > 0);
+
   const sortedRows  = sortRows(rows, sortKey, sortDir);
   const visibleCols = COLUMNS.filter((c) => !hiddenCols.has(c.key));
   const delayLabel  = realtime ? "Real-time" : "15-min delay";
@@ -752,6 +845,9 @@ export function MarketGrid({ onAnalyze }: MarketGridProps) {
             </span>
           )}
           <span className="text-gray-700 ml-1">· Supplemental (earnings, market cap) always from Yahoo Finance</span>
+          {sparklines.size > 0 && (
+            <span className="text-gray-700 ml-1">· 30d sparklines: {sparklines.size}/{symbols.length} loaded</span>
+          )}
         </div>
       )}
 
@@ -781,6 +877,8 @@ export function MarketGrid({ onAnalyze }: MarketGridProps) {
                   onAnalyze={onAnalyze ?? (() => {})}
                   liveInfo={livePrices[row.symbol]}
                   visibleCols={visibleCols}
+                  sparklinePrices={sparklines.get(row.symbol)}
+                  onChartOpen={(sym) => setChartSymbol((prev) => prev === sym ? null : sym)}
                 />
               ))}
             </tbody>
@@ -789,12 +887,21 @@ export function MarketGrid({ onAnalyze }: MarketGridProps) {
         {loading && <div className="h-0.5 bg-indigo-600/70 animate-pulse" />}
       </div>
 
+      {/* ── Technical chart drawer ── */}
+      {chartSymbol && (
+        <TechnicalChartDrawer
+          symbol={chartSymbol}
+          onClose={() => setChartSymbol(null)}
+        />
+      )}
+
       <p className="text-xs text-gray-700 italic">
         Prices{" "}
         <span className="font-mono text-indigo-800">P</span> Polygon.io snapshot ({delayLabel}) ·{" "}
         <span className="font-mono text-gray-600">yf</span> Yahoo Finance fallback ·{" "}
         Live ticks via Polygon WebSocket ({delayLabel}) ·
-        Pre/post-market &amp; earnings &amp; market cap via Yahoo Finance · Not investment advice.
+        Pre/post-market &amp; earnings &amp; market cap via Yahoo Finance ·
+        30d sparklines &amp; technical charts via Yahoo Finance price history · Not investment advice.
       </p>
     </div>
   );

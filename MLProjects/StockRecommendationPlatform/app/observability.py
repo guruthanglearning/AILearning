@@ -7,8 +7,6 @@ import sys
 from contextvars import ContextVar
 from typing import Any
 
-_API_KEY_PATTERN = re.compile(r"(apiKey=)[^&\s\"']+", re.IGNORECASE)
-
 import structlog
 import structlog.contextvars
 import structlog.processors
@@ -18,6 +16,8 @@ from prometheus_client import Counter, Histogram
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.config import settings
+
+_API_KEY_PATTERN = re.compile(r"(apiKey=)[^&\s\"']+", re.IGNORECASE)
 
 # ---------------------------------------------------------------------------
 # Correlation ID — ContextVar threaded through each request and batch task

@@ -44,6 +44,7 @@ from app.observability import (
 from app.providers.factory import build_provider
 from app.routers import alerts as alerts_router
 from app.routers import auth as auth_router
+from app.routers import portfolio as portfolio_router
 from app.routers import watchlists as watchlists_router
 from app.schemas.agents import (
     AnalysisHistoryItem,
@@ -142,6 +143,7 @@ if settings.metrics_enabled:
 app.include_router(auth_router.router, prefix="/v1/auth/keys", tags=["auth"])
 app.include_router(watchlists_router.router, prefix="/v1/watchlists", tags=["watchlists"])
 app.include_router(alerts_router.router, prefix="/v1/alerts", tags=["alerts"])
+app.include_router(portfolio_router.router, prefix="/v1/portfolio/positions", tags=["portfolio"])
 
 _supervisor = Supervisor()
 
@@ -578,6 +580,44 @@ async def get_analysis_history(
             .limit(limit)
         )
         rows = result.scalars().all()
+        items: list[AnalysisHistoryItem] = []
+        for row in rows:
+            score: float | None = None
+            if row.verdict_json:
+                try:
+                    score = row.verdict_json["decision_aids"]["stock_vs_options_score"]
+                except (KeyError, TypeError):
+                    pass
+            items.append(
+                AnalysisHistoryItem(
+                    run_id=row.id,
+                    symbol=row.symbol,
+                    started_at=row.started_at,
+                    finished_at=row.finished_at,
+                    instrument_recommendation=row.instrument_recommendation,
+                    confidence_note=row.confidence_note,
+                    last_price=row.last_price,
+                    stock_vs_options_score=score,
+                    status=row.status,
+                )
+            )
+        return items
+
+
+@app.get("/v1/analysis/history", response_model=list[AnalysisHistoryItem])
+@limiter.limit(settings.rate_limit_default)
+async def get_all_analysis_history(
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+    symbol: str | None = Query(default=None),
+) -> list[AnalysisHistoryItem]:
+    """Return the N most recent completed analysis runs across all symbols."""
+    async for session in get_session():
+        q = select(AnalysisRun).where(AnalysisRun.status == "complete")
+        if symbol:
+            q = q.where(AnalysisRun.symbol == symbol.upper().strip())
+        q = q.order_by(AnalysisRun.started_at.desc()).limit(limit)
+        rows = (await session.execute(q)).scalars().all()
         items: list[AnalysisHistoryItem] = []
         for row in rows:
             score: float | None = None

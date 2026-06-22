@@ -11,6 +11,8 @@ const NAV_LINKS = [
   { href: "/momentum", label: "Momentum" },
   { href: "/sector-heat", label: "Sector Heat" },
   { href: "/earnings", label: "Earnings" },
+  { href: "/portfolio", label: "Portfolio" },
+  { href: "/history", label: "History" },
   { href: "/watchlists", label: "Watchlists" },
   { href: "/alerts", label: "Alerts" },
   { href: "/logs", label: "Logs" },

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, Field, model_validator
@@ -77,3 +77,29 @@ class AlertResponse(BaseModel):
     is_active: bool
     triggered_at: datetime | None = None
     created_at: datetime
+
+
+class PortfolioPositionCreate(BaseModel):
+    symbol: str = Field(max_length=20)
+    shares: float = Field(gt=0)
+    cost_basis: float = Field(gt=0)
+    entry_date: date | None = None
+    notes: str | None = None
+
+
+class PortfolioPositionUpdate(BaseModel):
+    shares: float | None = Field(default=None, gt=0)
+    cost_basis: float | None = Field(default=None, gt=0)
+    entry_date: date | None = None
+    notes: str | None = None
+
+
+class PortfolioPositionResponse(BaseModel):
+    id: uuid.UUID
+    symbol: str
+    shares: float
+    cost_basis: float
+    entry_date: date | None = None
+    notes: str | None = None
+    created_at: datetime
+    updated_at: datetime

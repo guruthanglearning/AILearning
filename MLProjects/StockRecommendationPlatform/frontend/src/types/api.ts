@@ -450,3 +450,31 @@ export interface AlertResponse {
   triggered_at: string | null;
   created_at: string;
 }
+
+// ─── Portfolio ────────────────────────────────────────────────────────────────
+
+export interface PortfolioPositionCreate {
+  symbol: string;
+  shares: number;
+  cost_basis: number;
+  entry_date?: string | null;
+  notes?: string | null;
+}
+
+export interface PortfolioPositionUpdate {
+  shares?: number | null;
+  cost_basis?: number | null;
+  entry_date?: string | null;
+  notes?: string | null;
+}
+
+export interface PortfolioPositionResponse {
+  id: string;
+  symbol: string;
+  shares: number;
+  cost_basis: number;
+  entry_date: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}

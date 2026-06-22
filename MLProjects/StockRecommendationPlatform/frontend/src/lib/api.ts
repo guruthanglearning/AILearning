@@ -14,6 +14,9 @@ import type {
   MarketQuoteRow,
   MomentumSectorsResponse,
   PeersResponse,
+  PortfolioPositionCreate,
+  PortfolioPositionResponse,
+  PortfolioPositionUpdate,
   PriceHistoryResponse,
   SseEvent,
   SupervisorVerdict,
@@ -103,6 +106,17 @@ export async function getAnalysisHistory(
     `${API_URL}/v1/analysis/history/${encodeURIComponent(symbol)}?limit=${limit}`,
     { headers: headers(apiKey) }
   );
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function getAllAnalysisHistory(
+  limit = 50,
+  symbol?: string
+): Promise<AnalysisHistoryItem[]> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (symbol) params.set("symbol", symbol);
+  const res = await fetch(`${API_URL}/v1/analysis/history?${params}`);
   await checkResponse(res);
   return res.json();
 }
@@ -415,4 +429,52 @@ export async function getClaudeUsage(): Promise<ClaudeUsage> {
   const res = await fetch(`${API_URL}/v1/claude/usage`);
   await checkResponse(res);
   return res.json();
+}
+
+// ─── Portfolio ────────────────────────────────────────────────────────────────
+
+export async function listPositions(apiKey: string): Promise<PortfolioPositionResponse[]> {
+  const res = await fetch(`${API_URL}/v1/portfolio/positions`, {
+    headers: headers(apiKey),
+  });
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function createPosition(
+  apiKey: string,
+  req: PortfolioPositionCreate
+): Promise<PortfolioPositionResponse> {
+  const res = await fetch(`${API_URL}/v1/portfolio/positions`, {
+    method: "POST",
+    headers: headers(apiKey),
+    body: JSON.stringify(req),
+  });
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function updatePosition(
+  apiKey: string,
+  positionId: string,
+  req: PortfolioPositionUpdate
+): Promise<PortfolioPositionResponse> {
+  const res = await fetch(`${API_URL}/v1/portfolio/positions/${positionId}`, {
+    method: "PUT",
+    headers: headers(apiKey),
+    body: JSON.stringify(req),
+  });
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function deletePosition(
+  apiKey: string,
+  positionId: string
+): Promise<void> {
+  const res = await fetch(`${API_URL}/v1/portfolio/positions/${positionId}`, {
+    method: "DELETE",
+    headers: headers(apiKey),
+  });
+  await checkResponse(res);
 }

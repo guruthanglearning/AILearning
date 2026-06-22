@@ -36,6 +36,7 @@ class ApiKey(Base):
 
     watchlists: Mapped[list[Watchlist]] = relationship("Watchlist", back_populates="api_key", cascade="all, delete-orphan")
     alerts: Mapped[list[Alert]] = relationship("Alert", back_populates="api_key", cascade="all, delete-orphan")
+    positions: Mapped[list[PortfolioPosition]] = relationship("PortfolioPosition", back_populates="api_key", cascade="all, delete-orphan")
 
 
 class Watchlist(Base):
@@ -151,3 +152,19 @@ class AgentArtifact(Base):
     )
 
     run: Mapped[AnalysisRun] = relationship("AnalysisRun", back_populates="artifacts")
+
+
+class PortfolioPosition(Base):
+    __tablename__ = "portfolio_position"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    api_key_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("api_key.id", ondelete="CASCADE"), nullable=False, index=True)
+    symbol: Mapped[str] = mapped_column(String(20), nullable=False)
+    shares: Mapped[float] = mapped_column(nullable=False)
+    cost_basis: Mapped[float] = mapped_column(nullable=False)
+    entry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    api_key: Mapped[ApiKey] = relationship("ApiKey", back_populates="positions")

@@ -101,7 +101,14 @@ export function TechnicalChartDrawer({
   };
 
   return (
-    <div className="mt-2 bg-gray-900/80 border border-indigo-900/50 rounded-xl p-4 space-y-1">
+    <div
+      className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+    <div
+      className="bg-gray-900 border border-indigo-900/60 rounded-xl shadow-2xl p-4 space-y-1 w-full max-w-3xl max-h-[88vh] overflow-y-auto"
+      onClick={(e) => e.stopPropagation()}
+    >
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-3 flex-wrap">
@@ -332,6 +339,7 @@ export function TechnicalChartDrawer({
           </p>
         </>
       )}
+    </div>
     </div>
   );
 }

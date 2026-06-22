@@ -887,7 +887,7 @@ export function MarketGrid({ onAnalyze }: MarketGridProps) {
         {loading && <div className="h-0.5 bg-indigo-600/70 animate-pulse" />}
       </div>
 
-      {/* ── Technical chart drawer ── */}
+      {/* ── Technical chart overlay ── */}
       {chartSymbol && (
         <TechnicalChartDrawer
           symbol={chartSymbol}

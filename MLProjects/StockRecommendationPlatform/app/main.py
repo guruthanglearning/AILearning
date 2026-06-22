@@ -956,6 +956,13 @@ def _fetch_stock_raw(sym: str) -> dict:
     try:
         info = yf.Ticker(sym).info
         price = info.get("currentPrice") or info.get("regularMarketPrice")
+
+        day_change_pct = info.get("regularMarketChangePercent")
+        if day_change_pct is None and price is not None:
+            prev = info.get("regularMarketPreviousClose") or info.get("previousClose")
+            if prev and prev > 0:
+                day_change_pct = round((price - prev) / prev * 100.0, 4)
+
         return {
             "symbol": sym,
             "company_name": info.get("shortName") or info.get("longName"),
@@ -965,7 +972,7 @@ def _fetch_stock_raw(sym: str) -> dict:
             "open_price": info.get("regularMarketOpen"),
             "close_price": price,
             "post_market": info.get("postMarketPrice"),
-            "day_change_pct": info.get("regularMarketChangePercent"),
+            "day_change_pct": day_change_pct,
             "week_52_high": info.get("fiftyTwoWeekHigh"),
             "week_52_low": info.get("fiftyTwoWeekLow"),
             "sma50": info.get("fiftyDayAverage"),
@@ -1032,12 +1039,19 @@ async def get_momentum_sectors(
                                 if r6m is not None and spy_6m is not None
                                 else None
                             )
+                            series = close_df[sym].dropna()
+                            day_ret: float | None = None
+                            if len(series) >= 2:
+                                c0, c1 = float(series.iloc[-2]), float(series.iloc[-1])
+                                if c0 > 0:
+                                    day_ret = round((c1 - c0) / c0 * 100.0, 4)
                             hist_map[sym] = {
                                 "return_1m": r1m,
                                 "return_3m": r3m,
                                 "return_6m": r6m,
                                 "vs_spy_6m": vs_spy,
                                 "rsi_14": _rsi(close_df[sym]),
+                                "day_change_pct_hist": day_ret,
                             }
 
                 # ── Phase 3: cross-sectional percentile ranks ─────────────────
@@ -1065,6 +1079,7 @@ async def get_momentum_sectors(
                         d.get("week_52_low"),
                         d.get("week_52_high"),
                     )
+                    day_chg = d.get("day_change_pct") or h.get("day_change_pct_hist")
                     fetched.append(MomentumStockRow(
                         symbol=sym,
                         company_name=d.get("company_name"),
@@ -1074,7 +1089,7 @@ async def get_momentum_sectors(
                         open_price=d.get("open_price"),
                         close_price=d.get("close_price"),
                         post_market=d.get("post_market"),
-                        day_change_pct=d.get("day_change_pct"),
+                        day_change_pct=day_chg,
                         week_52_high=d.get("week_52_high"),
                         week_52_low=d.get("week_52_low"),
                         market_cap=d.get("market_cap"),

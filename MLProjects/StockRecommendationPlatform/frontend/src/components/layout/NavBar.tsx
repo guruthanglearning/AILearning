@@ -16,6 +16,7 @@ const NAV_LINKS = [
   { href: "/watchlists", label: "Watchlists" },
   { href: "/alerts", label: "Alerts" },
   { href: "/logs", label: "Logs" },
+  { href: "/settings", label: "Settings" },
   { href: "/keys", label: "API Keys" },
 ];
 

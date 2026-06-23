@@ -482,3 +482,24 @@ export interface PortfolioPositionResponse {
   created_at: string;
   updated_at: string;
 }
+
+// ─── User settings ────────────────────────────────────────────────────────────
+
+export interface UserSettingsPayload {
+  default_symbol?: string | null;
+  default_portfolio_value?: number | null;
+  default_max_risk_pct?: number | null;
+  preferred_claude_model?: string | null;
+  market_grid_refresh_secs?: number | null;
+  market_grid_symbols?: string[] | null;
+}
+
+export interface UserSettingsResponse {
+  default_symbol: string | null;
+  default_portfolio_value: number | null;
+  default_max_risk_pct: number | null;
+  preferred_claude_model: string | null;
+  market_grid_refresh_secs: number | null;
+  market_grid_symbols: string[] | null;
+  updated_at: string | null;
+}

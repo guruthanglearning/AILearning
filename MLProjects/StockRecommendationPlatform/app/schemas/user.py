@@ -103,3 +103,23 @@ class PortfolioPositionResponse(BaseModel):
     notes: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class UserSettingsPayload(BaseModel):
+    """All fields are optional — PATCH semantics, only provided keys are updated."""
+    default_symbol: str | None = Field(default=None, max_length=20)
+    default_portfolio_value: float | None = Field(default=None, ge=0)
+    default_max_risk_pct: float | None = Field(default=None, ge=0, le=100)
+    preferred_claude_model: str | None = Field(default=None, max_length=60)
+    market_grid_refresh_secs: int | None = Field(default=None, ge=5, le=300)
+    market_grid_symbols: list[str] | None = None
+
+
+class UserSettingsResponse(BaseModel):
+    default_symbol: str | None = None
+    default_portfolio_value: float | None = None
+    default_max_risk_pct: float | None = None
+    preferred_claude_model: str | None = None
+    market_grid_refresh_secs: int | None = None
+    market_grid_symbols: list[str] | None = None
+    updated_at: datetime | None = None

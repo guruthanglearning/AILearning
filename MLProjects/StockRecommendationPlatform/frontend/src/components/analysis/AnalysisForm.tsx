@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { Spinner } from "@/components/ui/Spinner";
+import { useUserSettings } from "@/hooks/useUserSettings";
 import { getClaudeUsage } from "@/lib/api";
 import type { AnalysisRunRequest, ClaudeUsage } from "@/types/api";
 
@@ -49,14 +50,30 @@ const DEFAULT_MODEL = "claude-opus-4-8";
 const STORAGE_KEY = "claude_selected_model";
 
 export function AnalysisForm({ onSubmit, isLoading, defaultSymbol = "" }: AnalysisFormProps) {
-  const [symbol, setSymbol]       = useState(defaultSymbol.toUpperCase());
-  const [model,  setModel]        = useState<string>(() => {
+  const { settings } = useUserSettings();
+
+  const [symbol, setSymbol] = useState(defaultSymbol.toUpperCase());
+  const [model,  setModel]  = useState<string>(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem(STORAGE_KEY) ?? DEFAULT_MODEL;
     }
     return DEFAULT_MODEL;
   });
-  const [usage, setUsage]         = useState<ClaudeUsage | null>(null);
+  const [usage, setUsage] = useState<ClaudeUsage | null>(null);
+
+  // Apply server-side preferred model when settings load (takes precedence over localStorage)
+  useEffect(() => {
+    if (settings.preferred_claude_model) {
+      setModel(settings.preferred_claude_model);
+    }
+  }, [settings.preferred_claude_model]);
+
+  // Apply server-side default symbol only when no explicit defaultSymbol was provided
+  useEffect(() => {
+    if (!defaultSymbol && settings.default_symbol) {
+      setSymbol(settings.default_symbol);
+    }
+  }, [defaultSymbol, settings.default_symbol]);
 
   useEffect(() => {
     getClaudeUsage().then(setUsage).catch(() => {});

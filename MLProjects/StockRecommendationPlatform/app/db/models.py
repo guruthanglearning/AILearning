@@ -37,6 +37,7 @@ class ApiKey(Base):
     watchlists: Mapped[list[Watchlist]] = relationship("Watchlist", back_populates="api_key", cascade="all, delete-orphan")
     alerts: Mapped[list[Alert]] = relationship("Alert", back_populates="api_key", cascade="all, delete-orphan")
     positions: Mapped[list[PortfolioPosition]] = relationship("PortfolioPosition", back_populates="api_key", cascade="all, delete-orphan")
+    settings: Mapped[UserSettings | None] = relationship("UserSettings", back_populates="api_key", cascade="all, delete-orphan", uselist=False)
 
 
 class Watchlist(Base):
@@ -168,3 +169,14 @@ class PortfolioPosition(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     api_key: Mapped[ApiKey] = relationship("ApiKey", back_populates="positions")
+
+
+class UserSettings(Base):
+    __tablename__ = "user_settings"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    api_key_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("api_key.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    settings_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    api_key: Mapped[ApiKey] = relationship("ApiKey", back_populates="settings")

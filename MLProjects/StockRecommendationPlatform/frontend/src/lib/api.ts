@@ -20,6 +20,8 @@ import type {
   PriceHistoryResponse,
   SseEvent,
   SupervisorVerdict,
+  UserSettingsPayload,
+  UserSettingsResponse,
   WatchlistCreate,
   WatchlistResponse,
   WatchlistSymbolAdd,
@@ -477,4 +479,38 @@ export async function deletePosition(
     headers: headers(apiKey),
   });
   await checkResponse(res);
+}
+
+// ─── User settings ────────────────────────────────────────────────────────────
+
+export async function getUserSettings(apiKey: string): Promise<UserSettingsResponse> {
+  const res = await fetch(`${API_URL}/v1/settings`, {
+    headers: headers(apiKey),
+  });
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function saveUserSettings(
+  apiKey: string,
+  payload: UserSettingsPayload
+): Promise<UserSettingsResponse> {
+  const res = await fetch(`${API_URL}/v1/settings`, {
+    method: "PUT",
+    headers: headers(apiKey),
+    body: JSON.stringify(payload),
+  });
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function deleteUserSetting(
+  apiKey: string,
+  key: string
+): Promise<void> {
+  const res = await fetch(`${API_URL}/v1/settings/${encodeURIComponent(key)}`, {
+    method: "DELETE",
+    headers: headers(apiKey),
+  });
+  if (!res.ok && res.status !== 204) await checkResponse(res);
 }

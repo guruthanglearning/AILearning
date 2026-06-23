@@ -45,6 +45,7 @@ from app.providers.factory import build_provider
 from app.routers import alerts as alerts_router
 from app.routers import auth as auth_router
 from app.routers import portfolio as portfolio_router
+from app.routers import settings as settings_router
 from app.routers import watchlists as watchlists_router
 from app.schemas.agents import (
     AnalysisHistoryItem,
@@ -144,6 +145,7 @@ app.include_router(auth_router.router, prefix="/v1/auth/keys", tags=["auth"])
 app.include_router(watchlists_router.router, prefix="/v1/watchlists", tags=["watchlists"])
 app.include_router(alerts_router.router, prefix="/v1/alerts", tags=["alerts"])
 app.include_router(portfolio_router.router, prefix="/v1/portfolio/positions", tags=["portfolio"])
+app.include_router(settings_router.router, prefix="/v1/settings", tags=["settings"])
 
 _supervisor = Supervisor()
 

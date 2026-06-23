@@ -341,6 +341,10 @@ class MomentumStockRow(BaseModel):
 class SectorMomentum(BaseModel):
     sector: str
     stocks: list[MomentumStockRow]
+    etf_symbol: str | None = None
+    etf_price: float | None = None
+    etf_change_pct: float | None = None
+    etf_prev_close: float | None = None
 
 
 class MomentumSectorsResponse(BaseModel):

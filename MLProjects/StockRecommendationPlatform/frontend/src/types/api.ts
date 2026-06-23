@@ -364,6 +364,10 @@ export interface MomentumStockRow {
 export interface SectorMomentum {
   sector: string;
   stocks: MomentumStockRow[];
+  etf_symbol: string | null;
+  etf_price: number | null;
+  etf_change_pct: number | null;
+  etf_prev_close: number | null;
 }
 
 export interface MomentumSectorsResponse {

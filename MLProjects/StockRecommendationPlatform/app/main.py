@@ -811,6 +811,21 @@ _MOMENTUM_UNIVERSE: dict[str, list[str]] = {
     "Utilities":              ["NEE", "DUK", "SO", "D", "AEP", "EXC", "SRE", "PCG", "XEL", "ES"],
 }
 
+# SPDR Select Sector ETFs — the standard benchmark used by Yahoo Finance / Bloomberg
+_SECTOR_ETFS: dict[str, str] = {
+    "Technology":             "XLK",
+    "Consumer Cyclical":      "XLY",
+    "Communication Services": "XLC",
+    "Healthcare":             "XLV",
+    "Financials":             "XLF",
+    "Industrials":            "XLI",
+    "Consumer Defensive":     "XLP",
+    "Energy":                 "XLE",
+    "Basic Materials":        "XLB",
+    "Real Estate":            "XLRE",
+    "Utilities":              "XLU",
+}
+
 
 # ── Professional momentum helpers ─────────────────────────────────────────────
 
@@ -1003,7 +1018,7 @@ async def get_momentum_sectors(
 
     cached = _cache_get(cache_key)
     if cached is not None:
-        all_sector_rows: list[tuple[str, list[MomentumStockRow]]] = cached["rows"]
+        all_sector_rows: list[tuple[str, list[MomentumStockRow], dict]] = cached["rows"]
         fetched_at: datetime = cached["fetched_at"]
     else:
         async with _MOMENTUM_FETCH_LOCK:
@@ -1014,13 +1029,17 @@ async def get_momentum_sectors(
             else:
                 loop = asyncio.get_event_loop()
                 all_syms = [s for syms in _MOMENTUM_UNIVERSE.values() for s in syms]
+                etf_syms = list(_SECTOR_ETFS.values())
 
                 # ── Phase 1: batch history + per-symbol .info in parallel ──────
                 hist_task = loop.run_in_executor(None, _fetch_universe_history)
                 info_tasks = [loop.run_in_executor(None, _fetch_stock_raw, s) for s in all_syms]
-                results = list(await asyncio.gather(hist_task, *info_tasks))
+                etf_tasks  = [loop.run_in_executor(None, _fetch_stock_raw, s) for s in etf_syms]
+                results = list(await asyncio.gather(hist_task, *info_tasks, *etf_tasks))
                 close_df: pd.DataFrame | None = results[0]
-                raw_data: list[dict] = results[1:]
+                raw_data: list[dict] = results[1 : 1 + len(all_syms)]
+                etf_data: list[dict] = results[1 + len(all_syms):]
+                etf_map: dict[str, dict] = {d["symbol"]: d for d in etf_data}
 
                 # ── Phase 2: compute returns + RSI from history ───────────────
                 spy_6m: float | None = None
@@ -1103,20 +1122,33 @@ async def get_momentum_sectors(
 
                 # ── Phase 5: group by sector, sort by score, cache ────────────
                 by_sym = {r.symbol: r for r in fetched}
-                all_sector_rows = []
+                all_sector_rows: list[tuple[str, list[MomentumStockRow], dict]] = []
                 for sector, syms in _MOMENTUM_UNIVERSE.items():
                     sector_rows = [by_sym[s] for s in syms if s in by_sym]
                     sector_rows.sort(
                         key=lambda r: r.momentum_score if r.momentum_score is not None else -1.0,
                         reverse=True,
                     )
-                    all_sector_rows.append((sector, sector_rows))
+                    etf_sym = _SECTOR_ETFS.get(sector)
+                    etf_info = etf_map.get(etf_sym, {}) if etf_sym else {}
+                    all_sector_rows.append((sector, sector_rows, etf_info))
 
                 fetched_at = datetime.now(UTC)
                 _cache_set(cache_key, {"rows": all_sector_rows, "fetched_at": fetched_at})
 
     sectors = [
-        SectorMomentum(sector=sector, stocks=rows[:limit])
-        for sector, rows in all_sector_rows
+        SectorMomentum(
+            sector=sector,
+            stocks=rows[:limit],
+            etf_symbol=_SECTOR_ETFS.get(sector),
+            etf_price=etf_info.get("close_price"),
+            etf_change_pct=etf_info.get("day_change_pct"),
+            etf_prev_close=(
+                etf_info.get("close_price") / (1 + etf_info["day_change_pct"] / 100)
+                if etf_info.get("close_price") and etf_info.get("day_change_pct") is not None
+                else None
+            ),
+        )
+        for sector, rows, etf_info in all_sector_rows
     ]
     return MomentumSectorsResponse(sectors=sectors, limit=limit, fetched_at_utc=fetched_at)

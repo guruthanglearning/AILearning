@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 
 import { getMomentumSectors } from "@/lib/api";
-import type { MomentumSectorsResponse, MomentumStockRow } from "@/types/api";
+import type { MomentumSectorsResponse, MomentumStockRow, SectorMomentum } from "@/types/api";
+
+// ── color helpers ─────────────────────────────────────────────────────────────
 
 function heatBg(pct: number | null): string {
   if (pct == null) return "bg-gray-800 text-gray-500 border-gray-700";
@@ -16,6 +18,21 @@ function heatBg(pct: number | null): string {
   if (pct >= -5) return "bg-red-600 text-white border-red-500";
   return "bg-red-500 text-white border-red-400";
 }
+
+function etfHeaderBg(pct: number | null): string {
+  if (pct == null) return "border-gray-800 text-gray-500";
+  if (pct >= 1)  return "border-green-800/60 text-green-400";
+  if (pct >= 0)  return "border-green-900/40 text-green-600";
+  if (pct >= -1) return "border-red-900/40 text-red-500";
+  return "border-red-800/60 text-red-400";
+}
+
+function fmtPct(pct: number | null): string {
+  if (pct == null) return "—";
+  return (pct >= 0 ? "+" : "") + pct.toFixed(2) + "%";
+}
+
+// ── StockCell ─────────────────────────────────────────────────────────────────
 
 function StockCell({
   stock,
@@ -32,9 +49,7 @@ function StockCell({
       title={[
         stock.company_name ?? stock.symbol,
         stock.industry ? `· ${stock.industry}` : "",
-        chg != null
-          ? `· Day: ${chg > 0 ? "+" : ""}${chg.toFixed(2)}%`
-          : "",
+        chg != null ? `· Day: ${chg > 0 ? "+" : ""}${chg.toFixed(2)}%` : "",
         stock.close_price != null ? `· $${stock.close_price.toFixed(2)}` : "",
       ]
         .filter(Boolean)
@@ -51,6 +66,45 @@ function StockCell({
   );
 }
 
+// ── SectorHeader — matches Yahoo Finance / Bloomberg style ───────────────────
+
+function SectorHeader({ sector }: { sector: SectorMomentum }) {
+  const { etf_symbol, etf_price, etf_change_pct, etf_prev_close } = sector;
+  const colorCls = etfHeaderBg(etf_change_pct);
+
+  return (
+    <div className="flex items-center gap-3 mb-2">
+      {/* Sector name */}
+      <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider shrink-0">
+        {sector.sector}
+      </h3>
+
+      {/* ETF badge — Yahoo Finance standard */}
+      {etf_symbol && (
+        <div className={`flex items-center gap-2 px-2 py-0.5 rounded border text-[10px] font-mono shrink-0 ${colorCls}`}>
+          <span className="font-bold">{etf_symbol}</span>
+          {etf_price != null && (
+            <span className="text-gray-400">${etf_price.toFixed(2)}</span>
+          )}
+          <span className={`font-semibold ${etf_change_pct != null && etf_change_pct >= 0 ? "text-green-400" : "text-red-400"}`}>
+            {fmtPct(etf_change_pct)}
+          </span>
+          {etf_prev_close != null && (
+            <span className="text-gray-600">prev ${etf_prev_close.toFixed(2)}</span>
+          )}
+        </div>
+      )}
+
+      <div className="flex-1 h-px bg-gray-800" />
+      <span className="text-[10px] text-gray-700 shrink-0">
+        {sector.stocks.length} stocks
+      </span>
+    </div>
+  );
+}
+
+// ── Legend ────────────────────────────────────────────────────────────────────
+
 const LEGEND_ITEMS = [
   { label: "≥+5%", cls: "bg-emerald-600 text-white" },
   { label: "+3–5%", cls: "bg-green-600 text-white" },
@@ -60,6 +114,8 @@ const LEGEND_ITEMS = [
   { label: "-3–-1%", cls: "bg-red-700 text-white" },
   { label: "≤-3%", cls: "bg-red-600 text-white" },
 ];
+
+// ── Main ──────────────────────────────────────────────────────────────────────
 
 interface SectorHeatmapProps {
   onAnalyze?: (symbol: string) => void;
@@ -90,13 +146,10 @@ export function SectorHeatmap({ onAnalyze }: SectorHeatmapProps) {
       <div className="space-y-6">
         {Array.from({ length: 6 }).map((_, i) => (
           <div key={i} className="space-y-2">
-            <div className="h-3 w-40 bg-gray-800 rounded animate-pulse" />
+            <div className="h-4 w-52 bg-gray-800 rounded animate-pulse" />
             <div className="flex flex-wrap gap-2">
               {Array.from({ length: 10 }).map((_, j) => (
-                <div
-                  key={j}
-                  className="w-[76px] h-[52px] bg-gray-800 rounded animate-pulse"
-                />
+                <div key={j} className="w-[76px] h-[52px] bg-gray-800 rounded animate-pulse" />
               ))}
             </div>
           </div>
@@ -124,12 +177,9 @@ export function SectorHeatmap({ onAnalyze }: SectorHeatmapProps) {
       {/* Meta row */}
       <div className="flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-gray-500">Day change:</span>
+          <span className="text-xs text-gray-500">Day change (regular session):</span>
           {LEGEND_ITEMS.map(({ label, cls }) => (
-            <span
-              key={label}
-              className={`px-2 py-0.5 rounded text-[10px] font-mono ${cls}`}
-            >
+            <span key={label} className={`px-2 py-0.5 rounded text-[10px] font-mono ${cls}`}>
               {label}
             </span>
           ))}
@@ -148,18 +198,10 @@ export function SectorHeatmap({ onAnalyze }: SectorHeatmapProps) {
         </div>
       </div>
 
-      {/* Heatmap grid */}
+      {/* Sector rows */}
       {data.sectors.map((sector) => (
         <div key={sector.sector}>
-          <div className="flex items-center gap-3 mb-2">
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider shrink-0">
-              {sector.sector}
-            </h3>
-            <div className="flex-1 h-px bg-gray-800" />
-            <span className="text-[10px] text-gray-700 shrink-0">
-              {sector.stocks.length} stocks
-            </span>
-          </div>
+          <SectorHeader sector={sector} />
           <div className="flex flex-wrap gap-2">
             {sector.stocks.map((stock) => (
               <StockCell
@@ -173,8 +215,8 @@ export function SectorHeatmap({ onAnalyze }: SectorHeatmapProps) {
       ))}
 
       <p className="text-[10px] text-gray-700 italic border-t border-gray-800/50 pt-3">
-        Day change % from momentum scanner (15-min delayed). Click any cell to run AI
-        analysis. Not investment advice.
+        Sector ETF (SPDR Select) + stock day change % vs prior regular-session close — same methodology as Yahoo Finance &amp; Bloomberg.
+        15-min delayed. Not investment advice.
       </p>
     </div>
   );

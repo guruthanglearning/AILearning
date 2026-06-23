@@ -682,6 +682,57 @@ async def get_price_history(
     return result
 
 
+@app.get("/v1/correlation")
+@limiter.limit(settings.rate_limit_default)
+async def get_correlation(
+    request: Request,
+    symbols: str = Query(..., description="Comma-separated symbols, max 10"),
+    period: str = Query("3mo", pattern="^(1mo|3mo|6mo|1y)$"),
+) -> dict:
+    """Pairwise Pearson correlation of daily returns for the given symbols."""
+    syms = [s.upper().strip() for s in symbols.split(",") if s.strip()][:10]
+    if len(syms) < 2:
+        raise HTTPException(400, "At least 2 symbols required")
+
+    cache_key = f"correlation:{','.join(sorted(syms))}:{period}"
+    cached = _cache_get(cache_key, ttl=_PRICE_HISTORY_TTL_SECS)
+    if cached is not None:
+        return cached
+
+    loop = asyncio.get_event_loop()
+    try:
+        raw = await loop.run_in_executor(
+            None,
+            lambda: yf.download(
+                syms, period=period, interval="1d",
+                auto_adjust=True, progress=False, threads=True,
+            ),
+        )
+    except Exception as exc:
+        raise HTTPException(500, f"Data fetch failed: {exc}") from exc
+
+    if isinstance(raw.columns, pd.MultiIndex):
+        closes = raw["Close"]
+    else:
+        closes = raw.rename(columns={"Close": syms[0]})[syms[:1]]
+
+    closes = closes[[c for c in syms if c in closes.columns]].dropna(how="all")
+    returns = closes.pct_change().dropna(how="all")
+    corr = returns.corr().round(4)
+
+    matrix: dict[str, dict[str, float | None]] = {}
+    present = [str(s) for s in corr.index]
+    for s1 in present:
+        matrix[s1] = {
+            s2: (float(corr.loc[s1, s2]) if pd.notna(corr.loc[s1, s2]) else None)
+            for s2 in present
+        }
+
+    result = {"symbols": present, "period": period, "matrix": matrix}
+    _cache_set(cache_key, result)
+    return result
+
+
 # Hardcoded sector → representative peer tickers (top liquid names per sector)
 _SECTOR_PEERS: dict[str, list[str]] = {
     "Technology":             ["AAPL", "MSFT", "NVDA", "GOOGL", "META"],

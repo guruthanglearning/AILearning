@@ -514,3 +514,38 @@ export async function deleteUserSetting(
   });
   if (!res.ok && res.status !== 204) await checkResponse(res);
 }
+
+// ─── Correlation ──────────────────────────────────────────────────────────────
+
+export interface CorrelationResult {
+  symbols: string[];
+  period: string;
+  matrix: Record<string, Record<string, number | null>>;
+}
+
+export async function getCorrelation(
+  symbols: string[],
+  period = "3mo"
+): Promise<CorrelationResult> {
+  const res = await fetch(
+    `${API_URL}/v1/correlation?symbols=${encodeURIComponent(symbols.join(","))}&period=${period}`
+  );
+  await checkResponse(res);
+  return res.json();
+}
+
+// ─── Batch (custom symbols) ───────────────────────────────────────────────────
+
+export async function startCustomBatch(
+  apiKey: string,
+  symbols: string[],
+  batchKey?: string
+): Promise<BatchJobResponse> {
+  const res = await fetch(`${API_URL}/v1/analysis/batch`, {
+    method: "POST",
+    headers: headers(apiKey),
+    body: JSON.stringify({ universe: "custom", symbols, batch_key: batchKey }),
+  });
+  await checkResponse(res);
+  return res.json();
+}

@@ -67,6 +67,37 @@ export default function CorrelationPage() {
         <p className="text-sm text-gray-400">Pearson correlation of daily log-returns across symbols.</p>
       </div>
 
+      {/* Description card */}
+      <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">What it measures</p>
+          <p className="text-gray-300 leading-relaxed">
+            Each cell shows the <span className="text-white font-medium">Pearson correlation</span> between the
+            daily log-returns of two symbols over the selected period. Values range from
+            <span className="text-emerald-400"> +1</span> (move in perfect lockstep) to
+            <span className="text-red-400"> −1</span> (move in perfect opposition).
+            The diagonal is always 1 — a symbol is perfectly correlated with itself.
+          </p>
+        </div>
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">How to read it</p>
+          <ul className="space-y-1 text-gray-300 leading-relaxed">
+            <li><span className="text-emerald-400 font-medium">≥ 0.7</span> — Strong positive: assets tend to rise and fall together.</li>
+            <li><span className="text-gray-400 font-medium">−0.1 to 0.1</span> — Near-zero: little linear relationship.</li>
+            <li><span className="text-red-400 font-medium">≤ −0.7</span> — Strong negative: one rises while the other falls.</li>
+          </ul>
+        </div>
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Portfolio use</p>
+          <p className="text-gray-300 leading-relaxed">
+            Low or negative correlations between holdings reduce overall portfolio volatility —
+            diversification only works when assets don&apos;t all move together.
+            Use a longer period (6mo, 1y) for structural relationships; shorter periods (1mo, 3mo)
+            to capture recent regime shifts.
+          </p>
+        </div>
+      </div>
+
       {/* Input */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
         <div className="flex gap-2 flex-wrap">

@@ -18,6 +18,25 @@ _PERIOD_DAYS = {
 }
 
 
+def _choose_expiry(expiries: list[str], target_dte: int = 35, min_dte: int = 7) -> str | None:
+    """Return the expiry closest to target_dte that is at least min_dte days away."""
+    today = date.today()
+    best: str | None = None
+    best_diff = float("inf")
+    for exp in expiries:
+        try:
+            dte = (date.fromisoformat(exp) - today).days
+            if dte < min_dte:
+                continue
+            diff = abs(dte - target_dte)
+            if diff < best_diff:
+                best_diff = diff
+                best = exp
+        except Exception:
+            pass
+    return best
+
+
 class PolygonProvider(MarketDataProvider):
     """
     Polygon.io REST client.
@@ -187,48 +206,81 @@ class PolygonProvider(MarketDataProvider):
 
     async def get_option_chain(self, symbol: str) -> dict[str, Any]:
         try:
+            # Step 1: small sample to discover available expiries and underlying spot
+            sample = await self._get(
+                f"/v3/snapshot/options/{symbol}",
+                limit=50,
+                sort="expiration_date",
+                order="asc",
+            )
+            all_contracts = sample.get("results") or []
+            if not all_contracts:
+                return await self._yf_chain_fallback(symbol)
+
+            # Extract spot from underlying_asset field present on every contract
+            spot: float | None = None
+            ua = all_contracts[0].get("underlying_asset", {})
+            if ua.get("price"):
+                spot = float(ua["price"])
+
+            # Collect available expiries and choose the one closest to 35 DTE (≥7 DTE)
+            expiries = sorted({
+                c["details"]["expiration_date"]
+                for c in all_contracts
+                if c.get("details", {}).get("expiration_date")
+            })
+            if not expiries:
+                return await self._yf_chain_fallback(symbol)
+
+            chosen = _choose_expiry(expiries, target_dte=35, min_dte=7) or expiries[0]
+
+            # Step 2: fetch all contracts for the chosen expiry (up to 500 strikes)
             data = await self._get(
                 f"/v3/snapshot/options/{symbol}",
-                limit=250,
-                sort="expiration_date",
+                expiration_date=chosen,
+                limit=500,
+                sort="strike_price",
                 order="asc",
             )
             contracts = data.get("results") or []
             if not contracts:
                 return await self._yf_chain_fallback(symbol)
 
-            expiries = sorted({c["details"]["expiration_date"] for c in contracts})
-            chosen = expiries[0] if expiries else None
-
-            # Build calls / puts DataFrames in yfinance-compatible column shape
+            # Build calls / puts DataFrames with correct Polygon field paths
             rows_c, rows_p = [], []
             for c in contracts:
                 det = c.get("details", {})
-                day = c.get("day", {})
-                greeks = c.get("greeks", {})
                 if det.get("expiration_date") != chosen:
                     continue
                 strike = det.get("strike_price")
                 if strike is None:
-                    continue  # skip contracts without a valid strike price
+                    continue
+
+                day = c.get("day", {})
+                last_quote = c.get("last_quote", {})
+                last_trade = c.get("last_trade", {})
                 row = {
                     "strike": float(strike),
-                    "bid": day.get("close"),
-                    "ask": day.get("close"),
-                    "lastPrice": day.get("last_quote", {}).get("ask") or day.get("close"),
-                    "impliedVolatility": greeks.get("implied_volatility"),
+                    "bid": last_quote.get("bid"),
+                    "ask": last_quote.get("ask"),
+                    "lastPrice": (
+                        last_trade.get("price")
+                        or last_quote.get("midpoint")
+                        or day.get("close")
+                    ),
+                    "impliedVolatility": c.get("implied_volatility"),  # contract-level, not in greeks
                     "openInterest": c.get("open_interest"),
                 }
-                if det.get("contract_type") == "call":
+                contract_type = det.get("contract_type")
+                if contract_type == "call":
                     rows_c.append(row)
-                elif det.get("contract_type") == "put":
+                elif contract_type == "put":
                     rows_p.append(row)
 
             calls = pd.DataFrame(rows_c) if rows_c else None
             puts = pd.DataFrame(rows_p) if rows_p else None
 
-            # Polygon greeks are empty outside market hours or on certain plan tiers.
-            # Fall back to yfinance (which always computes IV from prices) in that case.
+            # Fall back to yfinance when Polygon IV is unavailable (free tier / after hours)
             has_iv = (
                 calls is not None and not calls.empty
                 and calls["impliedVolatility"].notna().any()
@@ -239,16 +291,15 @@ class PolygonProvider(MarketDataProvider):
             return {
                 "expiries": expiries,
                 "chosen_expiry": chosen,
-                "spot": None,
+                "spot": spot,
                 "calls": calls,
                 "puts": puts,
-                "atm_iv": None,         # computed by OptionsAgent after spot is known
+                "atm_iv": None,
                 "chain_liquidity_hint": "unknown",
                 "implied_move_1d_pct": None,
                 "source": self.SOURCE,
             }
         except ProviderError:
-            # Polygon options snapshot requires a paid plan; fall back to yfinance
             return await self._yf_chain_fallback(symbol)
         except Exception:
             return await self._yf_chain_fallback(symbol)

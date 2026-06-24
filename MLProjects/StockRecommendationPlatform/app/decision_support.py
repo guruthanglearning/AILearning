@@ -282,17 +282,23 @@ async def _build_options_metrics_table(
             _degraded_row("short_put_spread", "Short Put Spread (Credit Vertical)", spot, ["options_data_unavailable"]),
         ]
 
-    try:
-        chain_data = await provider.get_option_chain(symbol)
-        calls: pd.DataFrame | None = chain_data.get("calls")
-        puts: pd.DataFrame | None = chain_data.get("puts")
-        expiry: str = chain_data.get("chosen_expiry") or opt.nearest_expiry
-    except Exception as exc:
-        return [
-            summary,
-            _degraded_row("bull_call_spread", "Bull Call Spread (Debit Vertical)", spot, [f"chain_fetch_failed: {exc}"]),
-            _degraded_row("short_put_spread", "Short Put Spread (Credit Vertical)", spot, [f"chain_fetch_failed: {exc}"]),
-        ]
+    # Use chain data cached by OptionsAgent to avoid a duplicate provider call
+    if opt.chain_calls_records or opt.chain_puts_records:
+        calls: pd.DataFrame | None = pd.DataFrame(opt.chain_calls_records) if opt.chain_calls_records else None
+        puts: pd.DataFrame | None = pd.DataFrame(opt.chain_puts_records) if opt.chain_puts_records else None
+        expiry: str = opt.nearest_expiry
+    else:
+        try:
+            chain_data = await provider.get_option_chain(symbol)
+            calls = chain_data.get("calls")
+            puts = chain_data.get("puts")
+            expiry = chain_data.get("chosen_expiry") or opt.nearest_expiry
+        except Exception as exc:
+            return [
+                summary,
+                _degraded_row("bull_call_spread", "Bull Call Spread (Debit Vertical)", spot, [f"chain_fetch_failed: {exc}"]),
+                _degraded_row("short_put_spread", "Short Put Spread (Credit Vertical)", spot, [f"chain_fetch_failed: {exc}"]),
+            ]
 
     dte = _calc_dte(expiry)
     trend = tech.trend_hint

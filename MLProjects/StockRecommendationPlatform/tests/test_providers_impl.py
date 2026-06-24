@@ -382,27 +382,48 @@ class TestPolygonProviderImpl:
     @pytest.mark.asyncio
     async def test_get_option_chain_with_iv(self):
         p = self._prov()
+        # Correct Polygon v3 snapshot structure: IV at contract level, bid/ask in last_quote
         contracts = [
-            {"details": {"expiration_date": "2030-06-20", "contract_type": "call", "strike_price": 150.0},
-             "day": {"close": 2.0, "last_quote": {"ask": 2.1}},
-             "greeks": {"implied_volatility": 0.20}, "open_interest": 1000},
-            {"details": {"expiration_date": "2030-06-20", "contract_type": "put", "strike_price": 145.0},
-             "day": {"close": 1.8, "last_quote": {}},
-             "greeks": {"implied_volatility": 0.21}, "open_interest": 800},
+            {
+                "details": {"expiration_date": "2030-06-20", "contract_type": "call", "strike_price": 150.0},
+                "day": {"close": 2.0},
+                "last_quote": {"bid": 1.9, "ask": 2.1, "midpoint": 2.0},
+                "last_trade": {"price": 2.0},
+                "implied_volatility": 0.20,
+                "open_interest": 1000,
+                "underlying_asset": {"price": 148.0},
+            },
+            {
+                "details": {"expiration_date": "2030-06-20", "contract_type": "put", "strike_price": 145.0},
+                "day": {"close": 1.8},
+                "last_quote": {"bid": 1.7, "ask": 1.9, "midpoint": 1.8},
+                "last_trade": {"price": 1.8},
+                "implied_volatility": 0.21,
+                "open_interest": 800,
+                "underlying_asset": {"price": 148.0},
+            },
         ]
         p._get = AsyncMock(return_value={"results": contracts})
         chain = await p.get_option_chain("AAPL")
         assert chain["chosen_expiry"] == "2030-06-20"
         assert chain["calls"] is not None
+        assert chain["calls"]["bid"].notna().all()
         assert chain["source"] == "polygon"
 
     @pytest.mark.asyncio
     async def test_get_option_chain_no_iv_falls_back_to_yfinance(self):
         p = self._prov()
+        # Polygon contract with no implied_volatility → should fall back to yfinance
         contracts = [
-            {"details": {"expiration_date": "2030-06-20", "contract_type": "call", "strike_price": 150.0},
-             "day": {"close": 2.0, "last_quote": {}},
-             "greeks": {}, "open_interest": 1000},
+            {
+                "details": {"expiration_date": "2030-06-20", "contract_type": "call", "strike_price": 150.0},
+                "day": {"close": 2.0},
+                "last_quote": {},
+                "last_trade": {},
+                "implied_volatility": None,
+                "open_interest": 1000,
+                "underlying_asset": {},
+            },
         ]
         p._get = AsyncMock(return_value={"results": contracts})
         yf_chain = {

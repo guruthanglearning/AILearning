@@ -83,6 +83,9 @@ class OptionsOutput(AgentResultBase):
     nearest_expiry: str | None = None
     chain_liquidity_hint: str | None = None
     implied_move_1d_pct: float | None = None
+    # Pre-fetched chain rows for decision_support reuse — excluded from API responses
+    chain_calls_records: list[dict] = Field(default_factory=list, exclude=True)
+    chain_puts_records: list[dict] = Field(default_factory=list, exclude=True)
 
 
 class OptionRight(StrEnum):

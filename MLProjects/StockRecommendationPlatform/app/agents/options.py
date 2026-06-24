@@ -127,6 +127,8 @@ class OptionsAgent(BaseAgent[OptionsOutput]):
                 nearest_expiry=chosen,
                 chain_liquidity_hint=liq,
                 implied_move_1d_pct=imp_move,
+                chain_calls_records=calls.to_dict("records"),
+                chain_puts_records=puts.to_dict("records"),
                 raw_artifact={"atm_strike_c": float(atm_c["strike"]), "open_interest_sum": oi},
             )
         except Exception as e:

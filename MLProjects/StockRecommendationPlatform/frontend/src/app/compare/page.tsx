@@ -130,6 +130,36 @@ export default function ComparePage() {
         <p className="text-sm text-gray-400">Compare up to {MAX_SYMBOLS} symbols — normalized chart + risk metrics.</p>
       </div>
 
+      {/* Description card */}
+      <div className="bg-gray-900/60 border border-gray-800 rounded-xl p-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Normalized chart</p>
+          <p className="text-gray-300 leading-relaxed">
+            All prices are <span className="text-white font-medium">indexed to 100</span> at the start of the
+            selected period, so you can compare relative performance regardless of each stock&apos;s actual price.
+            A value of 120 means the stock is up 20% from the period start; 80 means it&apos;s down 20%.
+          </p>
+        </div>
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Return &amp; risk metrics</p>
+          <ul className="space-y-1 text-gray-300 leading-relaxed">
+            <li><span className="text-white font-medium">1M / 3M / 6M%</span> — price return over approx. 20, 62, and 124 trading bars.</li>
+            <li><span className="text-white font-medium">RSI(14)</span> — momentum oscillator: above 70 = overbought, below 30 = oversold.</li>
+            <li><span className="text-white font-medium">VaR 95% / 99%</span> — daily loss not exceeded 95% / 99% of days, from historical log-returns.</li>
+          </ul>
+        </div>
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">How to use it</p>
+          <p className="text-gray-300 leading-relaxed">
+            Add 2–{MAX_SYMBOLS} ticker symbols, choose a lookback period, and scan the chart for
+            divergence between assets. Pair with the{" "}
+            <span className="text-indigo-400">Correlation</span> page to check whether assets
+            that look similar in returns also move together day-to-day — two stocks can have the
+            same 3M return but very different correlation.
+          </p>
+        </div>
+      </div>
+
       {/* Symbol input */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
         <div className="flex gap-2">

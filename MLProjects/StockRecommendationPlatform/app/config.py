@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str | None = None
 
     # Phase 6 — API hardening
-    cors_origins: str = "*"                  # CORS_ORIGINS env var; "*" = dev wildcard; comma-separated for prod
+    cors_origins: str = "http://localhost:3001"  # CORS_ORIGINS env var; set to https://your-domain.com for prod (comma-separated)
     rate_limit_default: str = "200/minute"   # global fallback for all routes
     rate_limit_analysis: str = "30/minute"   # POST/GET /v1/analysis/run (expensive)
     rate_limit_batch: str = "5/minute"       # POST /v1/analysis/batch (spawns background job)

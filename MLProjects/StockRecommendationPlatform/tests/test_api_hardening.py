@@ -124,7 +124,7 @@ def test_rate_limit_config_defaults(monkeypatch):
         monkeypatch.delenv(var, raising=False)
     from app.config import Settings
     s = Settings()
-    assert s.cors_origins == "*"
+    assert s.cors_origins == "http://localhost:3001"
     assert s.rate_limit_default == "200/minute"
     assert s.rate_limit_analysis == "30/minute"
     assert s.rate_limit_batch == "5/minute"

@@ -2,16 +2,22 @@
 from app.schemas.agents import (
     AgentStatus,
     DataProvenance,
+    DecisionAids,
     FinancialsOutput,
     FundamentalsOutput,
     InstrumentRecommendation,
     MarketDataOutput,
+    OptionLeg,
+    OptionLegType,
+    OptionRight,
+    OptionsGuidance,
+    OptionsMetricRow,
     OptionsOutput,
     RiskProOutput,
     SentimentMLOutput,
     TechnicalsOutput,
 )
-from app.supervisor import Supervisor, _agent_summary, _fmt_cap
+from app.supervisor import Supervisor, _agent_summary, _fmt_cap, _validate_strike_guidance
 
 
 def _prov():
@@ -257,3 +263,153 @@ def test_merge_balanced_regime_score_positive_returns_stock():
     risk = RiskProOutput(agent_name="r", status=AgentStatus.complete, provenance=_prov(), has_upcoming_earnings=False)
     v, og, note = s._merge(m, tech, opt, risk, 0.1)
     assert v == InstrumentRecommendation.stock
+
+
+# ── _validate_strike_guidance ─────────────────────────────────────────────────
+
+def _make_aids(rows: list[OptionsMetricRow]) -> DecisionAids:
+    return DecisionAids(
+        summary_headline="test",
+        stock_vs_options_score=0.0,
+        options_metrics_table=rows,
+    )
+
+
+def _call_legs() -> list[OptionLeg]:
+    return [
+        OptionLeg(right=OptionRight.call, strike=185.0, quantity_signed=1, leg_type=OptionLegType.long),
+        OptionLeg(right=OptionRight.call, strike=190.0, quantity_signed=-1, leg_type=OptionLegType.short),
+    ]
+
+
+def _put_legs() -> list[OptionLeg]:
+    return [
+        OptionLeg(right=OptionRight.put, strike=180.0, quantity_signed=-1, leg_type=OptionLegType.short),
+        OptionLeg(right=OptionRight.put, strike=175.0, quantity_signed=1, leg_type=OptionLegType.long),
+    ]
+
+
+def _full_bull_call_row(expiry: str = "2026-08-15") -> OptionsMetricRow:
+    return OptionsMetricRow(
+        template_id="bull_call_spread",
+        strategy_label="Bull Call Spread",
+        expiration=expiry,
+        dte_at_analysis=50,
+        legs=_call_legs(),
+        row_data_quality="full",
+    )
+
+
+def _full_short_put_row(expiry: str = "2026-08-15") -> OptionsMetricRow:
+    return OptionsMetricRow(
+        template_id="short_put_spread",
+        strategy_label="Short Put Spread",
+        expiration=expiry,
+        dte_at_analysis=50,
+        legs=_put_legs(),
+        row_data_quality="full",
+    )
+
+
+def test_validate_strike_guidance_none_input():
+    assert _validate_strike_guidance(None, _make_aids([])) is None
+
+
+def test_validate_strike_guidance_no_strategy_family():
+    og = OptionsGuidance(strike_guidance="Buy the $185/$190 call spread")
+    aids = _make_aids([_full_bull_call_row()])
+    result = _validate_strike_guidance(og, aids)
+    assert result is not None
+    assert result.chain_validated is True
+    assert result.chain_verified_strikes is not None
+    assert "185" in result.chain_verified_strikes
+    assert result.strike_guidance == "Buy the $185/$190 call spread"
+
+
+def test_validate_strike_guidance_debit_vertical_maps_to_bull_call():
+    og = OptionsGuidance(strategy_family="debit_vertical_or_long_put_call")
+    aids = _make_aids([_full_bull_call_row()])
+    result = _validate_strike_guidance(og, aids)
+    assert result.chain_validated is True
+    assert "185" in result.chain_verified_strikes
+    assert "190" in result.chain_verified_strikes
+    assert "2026-08-15" in result.chain_verified_strikes
+
+
+def test_validate_strike_guidance_long_stock_maps_to_bull_call():
+    og = OptionsGuidance(strategy_family="long_stock_or_long_diagonal")
+    aids = _make_aids([_full_bull_call_row()])
+    result = _validate_strike_guidance(og, aids)
+    assert result.chain_validated is True
+
+
+def test_validate_strike_guidance_debit_spread_maps_to_bull_call():
+    og = OptionsGuidance(strategy_family="debit_spread_or_stock")
+    aids = _make_aids([_full_bull_call_row()])
+    result = _validate_strike_guidance(og, aids)
+    assert result.chain_validated is True
+
+
+def test_validate_strike_guidance_premium_selling_maps_to_short_put():
+    og = OptionsGuidance(strategy_family="premium_selling_or_covered_call")
+    aids = _make_aids([_full_short_put_row()])
+    result = _validate_strike_guidance(og, aids)
+    assert result.chain_validated is True
+    assert "180" in result.chain_verified_strikes
+    assert "175" in result.chain_verified_strikes
+
+
+def test_validate_strike_guidance_validated_legs_populated():
+    og = OptionsGuidance(strategy_family="debit_vertical_or_long_put_call")
+    aids = _make_aids([_full_bull_call_row()])
+    result = _validate_strike_guidance(og, aids)
+    assert len(result.validated_legs) == 2
+    assert result.validated_legs[0].strike == 185.0
+    assert result.validated_legs[0].leg_type == OptionLegType.long
+    assert result.validated_legs[1].strike == 190.0
+    assert result.validated_legs[1].leg_type == OptionLegType.short
+
+
+def test_validate_strike_guidance_degraded_row_returns_unchanged():
+    og = OptionsGuidance(
+        strategy_family="debit_vertical_or_long_put_call",
+        strike_guidance="estimated only",
+    )
+    degraded_row = OptionsMetricRow(
+        template_id="bull_call_spread",
+        strategy_label="Bull Call Spread",
+        row_data_quality="degraded",
+        legs=[],
+    )
+    result = _validate_strike_guidance(og, _make_aids([degraded_row]))
+    assert result.chain_validated is False
+    assert result.chain_verified_strikes is None
+    assert result.strike_guidance == "estimated only"
+
+
+def test_validate_strike_guidance_empty_legs_returns_unchanged():
+    og = OptionsGuidance(strategy_family="debit_vertical_or_long_put_call")
+    row_no_legs = OptionsMetricRow(
+        template_id="bull_call_spread",
+        strategy_label="Bull Call Spread",
+        row_data_quality="full",
+        legs=[],
+    )
+    result = _validate_strike_guidance(og, _make_aids([row_no_legs]))
+    assert result.chain_validated is False
+
+
+def test_validate_strike_guidance_no_matching_template_returns_unchanged():
+    og = OptionsGuidance(strategy_family="premium_selling_or_covered_call")
+    aids = _make_aids([_full_bull_call_row()])  # only bull_call_spread, no short_put_spread
+    result = _validate_strike_guidance(og, aids)
+    assert result.chain_validated is False
+
+
+def test_validate_strike_guidance_leg_description_format():
+    og = OptionsGuidance(strategy_family="debit_vertical_or_long_put_call")
+    aids = _make_aids([_full_bull_call_row("2026-09-19")])
+    result = _validate_strike_guidance(og, aids)
+    assert "Buy $185 call" in result.chain_verified_strikes
+    assert "Sell $190 call" in result.chain_verified_strikes
+    assert "exp 2026-09-19" in result.chain_verified_strikes

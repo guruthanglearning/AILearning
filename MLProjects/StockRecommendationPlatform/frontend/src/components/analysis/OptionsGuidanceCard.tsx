@@ -1,8 +1,48 @@
 import { Accordion } from "@/components/ui/Accordion";
 import { Badge } from "@/components/ui/Badge";
-import type { OptionsGuidance } from "@/types/api";
+import type { OptionLeg, OptionsGuidance } from "@/types/api";
+
+function LegTable({ legs, expiry }: { legs: OptionLeg[]; expiry?: string | null }) {
+  return (
+    <div className="mt-1 overflow-x-auto">
+      <table className="w-full text-xs font-mono">
+        <thead>
+          <tr className="text-gray-500 border-b border-gray-800">
+            <th className="text-left py-1 pr-3">Action</th>
+            <th className="text-left py-1 pr-3">Right</th>
+            <th className="text-right py-1 pr-3">Strike</th>
+            <th className="text-left py-1">Qty</th>
+          </tr>
+        </thead>
+        <tbody>
+          {legs.map((leg, i) => (
+            <tr key={i} className="border-b border-gray-800/50 last:border-0">
+              <td className={`py-1 pr-3 font-semibold ${leg.leg_type === "long" ? "text-emerald-400" : "text-red-400"}`}>
+                {leg.leg_type === "long" ? "Buy" : "Sell"}
+              </td>
+              <td className="py-1 pr-3 text-gray-300 uppercase">{leg.right}</td>
+              <td className="py-1 pr-3 text-gray-100 text-right">${leg.strike.toFixed(0)}</td>
+              <td className="py-1 text-gray-500">{leg.quantity_signed > 0 ? `+${leg.quantity_signed}` : leg.quantity_signed}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {expiry && (
+        <p className="text-gray-500 mt-1">Expiry: <span className="text-gray-300">{expiry}</span></p>
+      )}
+    </div>
+  );
+}
+
+function parseExpiry(verifiedStr: string | null): string | null {
+  if (!verifiedStr) return null;
+  const m = verifiedStr.match(/exp (\S+)/);
+  return m ? m[1] : null;
+}
 
 export function OptionsGuidanceCard({ guidance }: { guidance: OptionsGuidance }) {
+  const expiry = parseExpiry(guidance.chain_verified_strikes ?? null);
+
   return (
     <Accordion title="Options Guidance" defaultOpen={false}>
       <div className="space-y-3 text-sm">
@@ -24,8 +64,8 @@ export function OptionsGuidanceCard({ guidance }: { guidance: OptionsGuidance })
           </div>
         )}
 
-        {/* Chain-verified strikes — highest confidence, shown before generic guidance */}
-        {guidance.chain_validated && guidance.chain_verified_strikes ? (
+        {/* Chain-verified strikes — structured leg table when chain data available */}
+        {guidance.chain_validated && guidance.validated_legs.length > 0 ? (
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="text-xs text-gray-500 uppercase tracking-wide">Strike Guidance</span>
@@ -34,9 +74,9 @@ export function OptionsGuidanceCard({ guidance }: { guidance: OptionsGuidance })
                 Chain Verified
               </span>
             </div>
-            <p className="font-mono text-emerald-300 bg-gray-900 rounded px-2 py-1 text-xs">
-              {guidance.chain_verified_strikes}
-            </p>
+            <div className="bg-gray-900 rounded px-3 py-2">
+              <LegTable legs={guidance.validated_legs} expiry={expiry} />
+            </div>
             {guidance.strike_guidance && (
               <p className="text-gray-500 mt-1 text-xs italic">{guidance.strike_guidance}</p>
             )}

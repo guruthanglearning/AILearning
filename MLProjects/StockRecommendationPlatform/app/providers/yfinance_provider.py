@@ -101,7 +101,8 @@ class YFinanceProvider(MarketDataProvider):
 
             chain = await _run_sync(lambda: t.option_chain(chosen))
             hist = await _run_sync(lambda: t.history(period="5d"))
-            spot = float(hist["Close"].iloc[-1]) if not hist.empty else None
+            _closes = hist["Close"].dropna() if not hist.empty else pd.Series(dtype=float)
+            spot = float(_closes.iloc[-1]) if not _closes.empty else None
 
             return {
                 "expiries": list(expiries),

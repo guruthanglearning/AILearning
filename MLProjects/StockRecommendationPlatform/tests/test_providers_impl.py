@@ -173,6 +173,19 @@ class TestYFinanceProviderImpl:
             chain = await YFinanceProvider().get_option_chain("AAPL")
         assert chain["chosen_expiry"] == "2030-06-01"
 
+    @pytest.mark.asyncio
+    async def test_get_option_chain_nan_close_returns_none_spot(self):
+        """Regression: when history has trailing NaN close (e.g. ASML after-hours gap),
+        spot must be None — not float('nan') — so OptionsAgent's isna() guard fires."""
+        import numpy as np
+        df = _hist_df(5)
+        df.loc[df.index[-1], "Close"] = np.nan
+        ticker = _mock_ticker(hist=df)
+        with patch("app.providers.yfinance_provider.yf.Ticker", return_value=ticker):
+            chain = await YFinanceProvider().get_option_chain("AAPL")
+        assert chain["spot"] is not None
+        assert not (isinstance(chain["spot"], float) and pd.isna(chain["spot"]))
+
 
 # ── PolygonProvider ────────────────────────────────────────────────────────────
 

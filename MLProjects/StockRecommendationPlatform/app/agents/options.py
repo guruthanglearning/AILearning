@@ -49,7 +49,7 @@ class OptionsAgent(BaseAgent[OptionsOutput]):
                 quote = await ctx.provider.get_quote(ctx.symbol)
                 spot = quote.get("last_price")
 
-            if spot is None:
+            if spot is None or pd.isna(spot):
                 return OptionsOutput(
                     agent_name=self.name,
                     status=AgentStatus.degraded,

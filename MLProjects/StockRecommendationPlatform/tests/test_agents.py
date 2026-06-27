@@ -290,6 +290,46 @@ async def test_options_agent_implied_move_computed():
     assert result.implied_move_1d_pct is not None and result.implied_move_1d_pct > 0
 
 
+@pytest.mark.asyncio
+async def test_options_agent_degraded_when_spot_is_nan():
+    """Regression: yfinance returns float('nan') for spot when history has trailing NaN.
+    Must degrade gracefully instead of producing 'all distances are NaN' error."""
+    prov = _fake_provider()
+    prov.get_option_chain = AsyncMock(
+        return_value={
+            "expiries": ["2025-06-20"],
+            "chosen_expiry": "2025-06-20",
+            "spot": float("nan"),
+            "calls": _option_df(150.0),
+            "puts": _option_df(150.0),
+            "source": "polygon+yfinance_chain",
+        }
+    )
+    result = await OptionsAgent().run(_ctx(provider=prov))
+    assert result.status == AgentStatus.degraded
+    assert result.error_message == "No spot price"
+
+
+@pytest.mark.asyncio
+async def test_options_agent_degraded_when_spot_is_none_and_quote_also_none():
+    """When chain spot is None, agent tries get_quote; if that also returns None, degrade."""
+    prov = _fake_provider()
+    prov.get_option_chain = AsyncMock(
+        return_value={
+            "expiries": ["2025-06-20"],
+            "chosen_expiry": "2025-06-20",
+            "spot": None,
+            "calls": _option_df(150.0),
+            "puts": _option_df(150.0),
+            "source": "yfinance",
+        }
+    )
+    prov.get_quote = AsyncMock(return_value={"last_price": None})
+    result = await OptionsAgent().run(_ctx(provider=prov))
+    assert result.status == AgentStatus.degraded
+    assert result.error_message == "No spot price"
+
+
 # ---------------------------------------------------------------------------
 # RiskProWorkflowAgent
 # ---------------------------------------------------------------------------

@@ -424,31 +424,28 @@ class TestPolygonProviderImpl:
         assert chain["source"] == "polygon"
 
     @pytest.mark.asyncio
-    async def test_get_option_chain_no_iv_falls_back_to_yfinance(self):
+    async def test_get_option_chain_no_iv_still_returns_polygon_chain(self):
+        """Polygon chain with no IV must be returned as-is (not fall back to yfinance).
+        IV being None after hours or for less-liquid tickers is normal; the spot and
+        strikes from Polygon are still reliable and should not be discarded."""
         p = self._prov()
-        # Polygon contract with no implied_volatility → should fall back to yfinance
         contracts = [
             {
                 "details": {"expiration_date": "2030-06-20", "contract_type": "call", "strike_price": 150.0},
                 "day": {"close": 2.0},
-                "last_quote": {},
-                "last_trade": {},
+                "last_quote": {"bid": 1.9, "ask": 2.1},
+                "last_trade": {"price": 2.0},
                 "implied_volatility": None,
                 "open_interest": 1000,
-                "underlying_asset": {},
+                "underlying_asset": {"price": 148.0},
             },
         ]
         p._get = AsyncMock(return_value={"results": contracts})
-        yf_chain = {
-            "expiries": ["2030-06-20"], "chosen_expiry": "2030-06-20", "spot": 148.0,
-            "calls": pd.DataFrame({"strike": [150.0], "impliedVolatility": [0.20]}),
-            "puts": None, "atm_iv": None, "chain_liquidity_hint": "unknown",
-            "implied_move_1d_pct": None, "source": "yfinance",
-        }
-        with patch("app.providers.yfinance_provider.YFinanceProvider.get_option_chain",
-                   AsyncMock(return_value=yf_chain)):
-            chain = await p.get_option_chain("AAPL")
-        assert "yfinance" in chain["source"]
+        chain = await p.get_option_chain("AAPL")
+        assert chain["source"] == "polygon"
+        assert chain["calls"] is not None
+        assert chain["spot"] == 148.0
+        assert chain["calls"]["impliedVolatility"].isna().all()
 
     @pytest.mark.asyncio
     async def test_get_option_chain_empty_falls_back(self):

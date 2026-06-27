@@ -280,14 +280,6 @@ class PolygonProvider(MarketDataProvider):
             calls = pd.DataFrame(rows_c) if rows_c else None
             puts = pd.DataFrame(rows_p) if rows_p else None
 
-            # Fall back to yfinance when Polygon IV is unavailable (free tier / after hours)
-            has_iv = (
-                calls is not None and not calls.empty
-                and calls["impliedVolatility"].notna().any()
-            )
-            if not has_iv:
-                return await self._yf_chain_fallback(symbol)
-
             return {
                 "expiries": expiries,
                 "chosen_expiry": chosen,

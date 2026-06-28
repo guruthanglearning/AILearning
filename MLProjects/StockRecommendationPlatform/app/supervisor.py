@@ -314,6 +314,8 @@ class Supervisor:
             log.info("claude_verdict_applied", symbol=symbol, recommendation=verdict.value)
 
         options_guidance = _validate_strike_guidance(options_guidance, decision_aids)
+        if options_guidance is not None:
+            options_guidance = options_guidance.model_copy(update={"chain_source": opt.provenance.source})
 
         result = SupervisorVerdict(
             instrument_recommendation=verdict,
@@ -486,6 +488,8 @@ class Supervisor:
             log.info("claude_verdict_applied", symbol=symbol, recommendation=verdict.value)
 
         options_guidance = _validate_strike_guidance(options_guidance, decision_aids)
+        if options_guidance is not None:
+            options_guidance = options_guidance.model_copy(update={"chain_source": opt.provenance.source})
 
         result = SupervisorVerdict(
             instrument_recommendation=verdict,

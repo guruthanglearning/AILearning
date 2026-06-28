@@ -63,6 +63,7 @@ export interface OptionsGuidance {
   chain_validated: boolean;
   chain_verified_strikes: string | null;
   validated_legs: OptionLeg[];
+  chain_source: string | null;
 }
 
 export interface DataFreshness {

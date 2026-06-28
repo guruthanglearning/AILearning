@@ -163,6 +163,8 @@ class OptionsGuidance(BaseModel):
     chain_validated: bool = False
     chain_verified_strikes: str | None = None  # e.g. "Buy $185 call / Sell $190 call exp 2026-07-18"
     validated_legs: list[OptionLeg] = Field(default_factory=list)
+    # Data source — "polygon", "polygon+yfinance_chain", "yfinance", etc.
+    chain_source: str | None = None
 
 
 class DataFreshness(BaseModel):

@@ -40,12 +40,24 @@ function parseExpiry(verifiedStr: string | null): string | null {
   return m ? m[1] : null;
 }
 
+function isYfinanceFallback(source: string | null): boolean {
+  return source !== null && source.includes("yfinance");
+}
+
 export function OptionsGuidanceCard({ guidance }: { guidance: OptionsGuidance }) {
   const expiry = parseExpiry(guidance.chain_verified_strikes ?? null);
+  const yfinanceFallback = isYfinanceFallback(guidance.chain_source ?? null);
 
   return (
     <Accordion title="Options Guidance" defaultOpen={false}>
       <div className="space-y-3 text-sm">
+        {yfinanceFallback && (
+          <div className="flex items-center gap-2 text-xs bg-amber-950 border border-amber-700 rounded px-2 py-1.5">
+            <span className="text-amber-400">⚠</span>
+            <span className="text-amber-300 font-medium">yfinance data</span>
+            <span className="text-amber-500">— Polygon unavailable; chain uses delayed yfinance quotes. Strike precision and IV may differ from live market.</span>
+          </div>
+        )}
         {guidance.strategy_family && (
           <div>
             <span className="text-xs text-gray-500 uppercase tracking-wide">Strategy</span>

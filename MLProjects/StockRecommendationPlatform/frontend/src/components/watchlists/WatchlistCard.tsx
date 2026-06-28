@@ -11,7 +11,7 @@ import type { WatchlistResponse } from "@/types/api";
 import { AddSymbolForm } from "./AddSymbolForm";
 import { WatchlistSymbolList } from "./WatchlistSymbolList";
 
-function BatchPanel({ watchlistId, watchlistName }: { watchlistId: string; watchlistName: string }) {
+function BatchPanel({ watchlistId }: { watchlistId: string; watchlistName: string }) {
   const { data: symbolRows } = useListWatchlistSymbols(watchlistId, true);
   const { job, loading, error, start, reset } = useBatchJob();
 

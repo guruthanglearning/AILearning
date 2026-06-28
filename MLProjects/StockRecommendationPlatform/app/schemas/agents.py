@@ -5,7 +5,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class AgentStatus(StrEnum):
@@ -165,6 +165,13 @@ class OptionsGuidance(BaseModel):
     validated_legs: list[OptionLeg] = Field(default_factory=list)
     # Data source — "polygon", "polygon+yfinance_chain", "yfinance", etc.
     chain_source: str | None = None
+
+    @field_validator("profit_targets_scenario", "rationale_codes", mode="before")
+    @classmethod
+    def coerce_str_to_list(cls, v: object) -> list:
+        if isinstance(v, str):
+            return [v] if v.strip() else []
+        return v if v is not None else []
 
 
 class DataFreshness(BaseModel):

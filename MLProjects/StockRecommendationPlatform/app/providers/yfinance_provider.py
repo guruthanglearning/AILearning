@@ -17,10 +17,23 @@ _PERIOD_MAP = {
     "1y": "1y",
 }
 
+# Limit concurrent yfinance fetches — Yahoo Finance rate-limits aggressively
+# and yfinance's thread-pool calls interfere when all 7 agents run in parallel.
+_YF_SEMAPHORE: asyncio.Semaphore | None = None
 
-def _run_sync(fn, *args):
-    """Run a blocking yfinance call in a thread pool so we don't block the event loop."""
-    return asyncio.get_event_loop().run_in_executor(None, partial(fn, *args))
+
+def _get_semaphore() -> asyncio.Semaphore:
+    global _YF_SEMAPHORE
+    if _YF_SEMAPHORE is None:
+        _YF_SEMAPHORE = asyncio.Semaphore(3)
+    return _YF_SEMAPHORE
+
+
+async def _run_sync(fn, *args):
+    """Run a blocking yfinance call in a thread pool, limited to 3 concurrent fetches."""
+    async with _get_semaphore():
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, partial(fn, *args))
 
 
 class YFinanceProvider(MarketDataProvider):

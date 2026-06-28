@@ -70,10 +70,12 @@ class OptionsAgent(BaseAgent[OptionsOutput]):
                     raw_artifact={},
                 )
 
-            calls = calls.copy()
-            puts = puts.copy()
-
-            # Drop rows with missing strikes — prevents idxmin() returning NaN
+            # Reset index to avoid NaN index labels that break idxmin() under
+            # concurrent yfinance load, then coerce strike to float.
+            calls = calls.copy().reset_index(drop=True)
+            puts = puts.copy().reset_index(drop=True)
+            calls["strike"] = pd.to_numeric(calls["strike"], errors="coerce")
+            puts["strike"] = pd.to_numeric(puts["strike"], errors="coerce")
             calls = calls.dropna(subset=["strike"])
             puts = puts.dropna(subset=["strike"])
             if calls.empty or puts.empty:

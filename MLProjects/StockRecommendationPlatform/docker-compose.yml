@@ -58,6 +58,8 @@ services:
       - "3000:3000"
     environment:
       NEXT_PUBLIC_API_URL: "http://localhost:8010"
+      # NEXT_PUBLIC_API_URL is browser-side — use localhost so the host browser
+      # can reach the mapped port. Override with your server's IP for remote deploys.
     depends_on:
       - app
     restart: unless-stopped

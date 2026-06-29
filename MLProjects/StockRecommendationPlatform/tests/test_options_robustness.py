@@ -13,7 +13,6 @@ import asyncio
 import threading
 from unittest.mock import AsyncMock, MagicMock
 
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -21,7 +20,6 @@ from app.agents.base import AgentContext
 from app.agents.options import OptionsAgent
 from app.providers.base import MarketDataProvider
 from app.schemas.agents import AgentStatus, OptionsGuidance
-
 
 # ---------------------------------------------------------------------------
 # Helpers

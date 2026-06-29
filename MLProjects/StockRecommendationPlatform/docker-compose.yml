@@ -55,7 +55,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "3010:3000"
     environment:
       NEXT_PUBLIC_API_URL: "http://localhost:8010"
       # NEXT_PUBLIC_API_URL is browser-side — use localhost so the host browser

@@ -39,6 +39,9 @@ services:
       REDIS_URL: redis://redis:6379/0
       USE_REDIS: "true"
       POLYGON_API_KEY: "${POLYGON_API_KEY:-}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      FINNHUB_API_KEY: "${FINNHUB_API_KEY:-}"
+      CORS_ORIGINS: "http://localhost:3010,http://localhost:3000,http://localhost:3001"
       AGENT_TIMEOUT_SECONDS: "45"
       QUOTE_STALE_SECONDS: "120"
     depends_on:
@@ -54,12 +57,13 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        # NEXT_PUBLIC_* vars are baked in at build time — must be passed as build args.
+        # Use localhost so the host browser can reach the mapped port.
+        # Override NEXT_PUBLIC_API_URL for remote deploys (e.g. your server's IP).
+        NEXT_PUBLIC_API_URL: "http://localhost:8010"
     ports:
       - "3010:3000"
-    environment:
-      NEXT_PUBLIC_API_URL: "http://localhost:8010"
-      # NEXT_PUBLIC_API_URL is browser-side — use localhost so the host browser
-      # can reach the mapped port. Override with your server's IP for remote deploys.
     depends_on:
       - app
     restart: unless-stopped

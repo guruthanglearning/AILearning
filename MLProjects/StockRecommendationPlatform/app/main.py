@@ -232,11 +232,21 @@ async def stream_analysis_sse(
             log.warning("stream_analysis_error", error=str(exc))
             yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
 
-    return StreamingResponse(
-        _generate(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
+    # Starlette CORSMiddleware does not inject headers into StreamingResponse.
+    # Mirror the origin back explicitly when it is in the allowed list.
+    allowed = _parse_cors_origins(settings.cors_origins)
+    origin = request.headers.get("origin", "")
+    cors_origin = origin if (origin in allowed or "*" in allowed) else ""
+
+    sse_headers: dict[str, str] = {
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    }
+    if cors_origin:
+        sse_headers["Access-Control-Allow-Origin"] = cors_origin
+        sse_headers["Vary"] = "Origin"
+
+    return StreamingResponse(_generate(), media_type="text/event-stream", headers=sse_headers)
 
 
 @app.get("/v1/quote/live/{symbol}", response_model=LiveQuote)

@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: stockresearch-config
+  namespace: stockresearch
+data:
+  # Database — uses in-cluster service name
+  POSTGRES_USER: "rec"
+  POSTGRES_DB: "recommendation"
+
+  # Redis — in-cluster
+  REDIS_URL: "redis://redis-svc:6379/0"
+  USE_REDIS: "true"
+
+  # CORS — allow both NodePort (browser) and in-cluster origins
+  CORS_ORIGINS: "http://localhost:30300,http://frontend-svc:3000"
+
+  # Agent tuning
+  AGENT_TIMEOUT_SECONDS: "45"
+  QUOTE_STALE_SECONDS: "120"

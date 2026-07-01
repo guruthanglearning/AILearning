@@ -21,7 +21,8 @@ A **production-oriented multi-agent research platform** that runs 7 specialist A
 11. [Quick Start](#quick-start)
 12. [Running Tests](#running-tests)
 13. [Docker Setup](#docker-setup)
-14. [Project Structure](#project-structure)
+14. [Kubernetes Setup](#kubernetes-setup)
+15. [Project Structure](#project-structure)
 
 ---
 
@@ -376,9 +377,16 @@ The Analysis page also opens a **WebSocket** connection (`/v1/ws/quote/{symbol}`
 | `/` | **Analysis** — symbol input, SSE-streamed agent grid, verdict card, technicals, trade guidance, price forecast, options panels, decision aids, history |
 | `/market-grid` | **Market Grid** — live auto-refreshing table of 40 symbols with 14 columns; prices sourced from Polygon batch snapshot, supplementary fields from yfinance |
 | `/momentum` | **Momentum** — cross-sectional momentum scores per GICS sector; sortable by 1M/3M/6M return, RSI, vs SPY; configurable top-N per sector |
+| `/compare` | **Compare** — side-by-side analysis comparison for two symbols |
+| `/correlation` | **Correlation** — price correlation matrix across a configurable symbol set |
+| `/history` | **History** — full analysis run history across all symbols with filtering and verdict timeline |
+| `/portfolio` | **Portfolio** — track open positions; add/edit/close trades with P&L tracking |
 | `/watchlists` | **Watchlists** — create named lists, add/remove symbols, click-through to analysis |
 | `/alerts` | **Alerts** — set price-above / price-below / verdict-changes-to triggers per symbol |
+| `/earnings` | **Earnings** — upcoming earnings calendar for tracked symbols |
+| `/sector-heat` | **Sector Heatmap** — colour-coded sector performance grid |
 | `/keys` | **API Keys** — create, list, and revoke API keys |
+| `/settings` | **Settings** — user preferences (default portfolio value, risk %, model selection) |
 | `/logs` | **Logs** — real-time error log viewer showing per-agent failures with symbol, agent name, status, and stack detail |
 
 ### Key Frontend Components
@@ -388,9 +396,18 @@ src/
 ├── app/
 │   ├── page.tsx                  ← Analysis home (SSE streaming)
 │   ├── market-grid/page.tsx      ← Live market grid
+│   ├── momentum/page.tsx         ← Sector momentum scoring
+│   ├── compare/page.tsx          ← Side-by-side symbol comparison
+│   ├── correlation/page.tsx      ← Correlation matrix
+│   ├── history/page.tsx          ← Full analysis run history
+│   ├── portfolio/page.tsx        ← Position tracker
 │   ├── watchlists/page.tsx
 │   ├── alerts/page.tsx
-│   └── keys/page.tsx
+│   ├── earnings/page.tsx
+│   ├── sector-heat/page.tsx
+│   ├── settings/page.tsx
+│   ├── keys/page.tsx
+│   └── logs/page.tsx
 ├── components/
 │   ├── analysis/
 │   │   ├── AgentStatusGrid.tsx   ← 7-card live agent status (pending → done)
@@ -715,6 +732,8 @@ A degraded agent does **not** stop the analysis — the Supervisor proceeds with
 
 ---
 
+## API Reference
+
 ### Analysis
 
 | Method | Endpoint | Description |
@@ -722,7 +741,8 @@ A degraded agent does **not** stop the analysis — the Supervisor proceeds with
 | `POST` | `/v1/analysis/run` | Run analysis (blocking, returns full verdict) |
 | `GET`  | `/v1/analysis/run/{symbol}` | Same as POST, GET convenience wrapper |
 | `GET`  | `/v1/analysis/stream/{symbol}` | **SSE stream** — agent_done events + verdict |
-| `GET`  | `/v1/analysis/history/{symbol}?limit=20` | Past completed runs for a symbol |
+| `GET`  | `/v1/analysis/history/{symbol}?limit=20` | Past completed runs for a specific symbol |
+| `GET`  | `/v1/analysis/history?limit=50` | All past runs across all symbols |
 
 **SSE event types:**
 
@@ -743,6 +763,8 @@ A degraded agent does **not** stop the analysis — the Supervisor proceeds with
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/v1/market/quotes?symbols=AAPL,MSFT,...` | Batch live quotes, up to 50 symbols |
+| `GET` | `/v1/market/mode` | Get current market session (pre / regular / after / closed) |
+| `POST` | `/v1/market/mode` | Override market session for testing |
 
 **Response fields per row:**
 `symbol`, `pre_mkt_price`, `pre_mkt_change`, `last_price`, `change`, `post_mkt_price`, `post_mkt_change`, `earnings_date`, `market_cap`, `div_payment_date`, `exchange`, `week_52_high`, `week_52_low`, `shares_outstanding`
@@ -782,6 +804,38 @@ A degraded agent does **not** stop the analysis — the Supervisor proceeds with
 | `GET`    | `/v1/auth/keys` | List all API keys |
 | `DELETE` | `/v1/auth/keys/{id}` | Revoke a key |
 
+### Portfolio
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET`    | `/v1/portfolio/positions` | List all open positions |
+| `POST`   | `/v1/portfolio/positions` | Add a new position |
+| `PUT`    | `/v1/portfolio/positions/{id}` | Update a position (size, price, notes) |
+| `DELETE` | `/v1/portfolio/positions/{id}` | Remove a position |
+
+### Settings
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET`    | `/v1/settings` | Get user settings (default portfolio value, risk %, model) |
+| `PUT`    | `/v1/settings` | Update settings |
+| `DELETE` | `/v1/settings/{key}` | Reset a single setting to its default |
+
+### Price History & Peers
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/v1/price-history/{symbol}?period=1y` | OHLCV price bars for charting |
+| `GET` | `/v1/peers/{symbol}` | Peer comparison — same-sector stocks with fundamentals |
+| `GET` | `/v1/correlation?symbols=AAPL,MSFT,...` | Pairwise return correlation matrix |
+
+### Logs
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET`    | `/v1/logs/errors` | List recent agent error events |
+| `DELETE` | `/v1/logs/errors` | Clear the error log |
+
 ### Momentum
 
 | Method | Endpoint | Description |
@@ -793,6 +847,7 @@ A degraded agent does **not** stop the analysis — the Supervisor proceeds with
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `WS` | `/v1/ws/quote/{symbol}` | Real-time per-second price updates via Polygon WebSocket relay (`wss://delayed.polygon.io/stocks`). Requires `POLYGON_API_KEY`. Falls back to HTTP REST when unavailable. |
+| `WS` | `/v1/ws/market-grid` | Broadcast price ticks for all symbols in the market grid simultaneously. |
 
 ### Utility
 
@@ -825,7 +880,7 @@ A degraded agent does **not** stop the analysis — the Supervisor proceeds with
 | ML sentiment | FinBERT via HuggingFace Transformers / external StockPrediction API |
 | Rate limiting | SlowAPI (redis-backed in prod) |
 | Observability | structlog · OpenTelemetry · Prometheus |
-| Testing | pytest + pytest-asyncio · 325 tests · ≥ 80% coverage |
+| Testing | pytest + pytest-asyncio · 363 tests · ≥ 80% coverage |
 | Linting | Ruff |
 
 ### Frontend
@@ -844,8 +899,11 @@ A degraded agent does **not** stop the analysis — the Supervisor proceeds with
 
 | Component | Technology |
 |-----------|-----------|
-| Containers | Docker Compose (Postgres + Redis) |
-| CI-ready | Dockerfile included |
+| Local dev | `launch.ps1` — single-command startup (backend + frontend, auto port sync) |
+| Containers | Docker Compose — full stack: Postgres 16 + Redis 7 + FastAPI backend + Next.js frontend |
+| Kubernetes | `k8s/` manifests — 2 backend replicas + 2 frontend replicas + Postgres StatefulSet + Redis; deployable to Docker Desktop K8s or any cluster |
+| Image builds | `k8s/build.ps1` — builds `stockresearch-backend:latest` and `stockresearch-frontend:k8s` |
+| Migrations | Alembic init container in K8s; runs automatically on Docker Compose first boot |
 | Tracing | OpenTelemetry → OTLP gRPC exporter |
 | Metrics | Prometheus `/metrics` |
 | Logging | structlog JSON → stdout |
@@ -862,6 +920,7 @@ All settings can be overridden via environment variables or a `.env` file in the
 | `REDIS_URL` | `redis://localhost:6379/0` | Redis URL |
 | `USE_REDIS` | `false` | Enable Redis quote cache |
 | `POLYGON_API_KEY` | *(none)* | Enable Polygon.io provider (falls back to yfinance) |
+| `FINNHUB_API_KEY` | *(none)* | Finnhub data source for supplementary fundamentals |
 | `STOCK_PREDICTION_API_URL` | *(none)* | External ML API for SentimentMLAgent |
 | `AGENT_TIMEOUT_SECONDS` | `45.0` | Per-agent hard timeout |
 | `QUOTE_STALE_SECONDS` | `120` | Cache TTL |
@@ -884,38 +943,66 @@ All settings can be overridden via environment variables or a `.env` file in the
 
 - Python 3.12+
 - Node.js 18+
-- Docker Desktop (for Postgres + Redis)
+- Docker Desktop
 
-### 1. Start infrastructure
+### Option A — Single command (recommended)
+
+`launch.ps1` detects already-running services, auto-syncs the frontend `.env.local` port, waits for readiness, and opens the browser.
 
 ```powershell
 cd D:\Study\AILearning\MLProjects\StockRecommendationPlatform
-docker compose up -d
+
+# Copy and fill in your API keys first
+copy .env.example .env   # or create .env manually (see Configuration section)
+
+.\launch.ps1
 ```
 
-### 2. Install Python dependencies
+Default ports: backend **8024**, frontend **3001**.
+
+### Option B — Manual
+
+#### 1. Set environment variables
+
+Create a `.env` file in the project root:
+
+```dotenv
+ANTHROPIC_API_KEY=sk-ant-api03-...
+POLYGON_API_KEY=...          # optional — falls back to yfinance
+FINNHUB_API_KEY=...          # optional
+DATABASE_URL=postgresql+asyncpg://rec:rec@localhost:5433/recommendation
+REDIS_URL=redis://localhost:6380/0
+USE_REDIS=true
+```
+
+#### 2. Start infrastructure (Postgres + Redis)
 
 ```powershell
-# Uses shared venv at D:\Study\AILearning\shared_Environment
+docker compose up -d postgres redis
+```
+
+#### 3. Install Python dependencies
+
+```powershell
 pip install -r requirements.txt
 ```
 
-### 3. Run database migrations
+#### 4. Run database migrations
 
 ```powershell
 alembic upgrade head
 ```
 
-### 4. Start the backend
+#### 5. Start the backend
 
 ```powershell
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8010
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8024
 ```
 
-- API docs: http://127.0.0.1:8010/docs
-- Health: http://127.0.0.1:8010/healthz
+- API docs: http://127.0.0.1:8024/docs
+- Health: http://127.0.0.1:8024/healthz
 
-### 5. Start the frontend
+#### 6. Start the frontend
 
 ```powershell
 cd frontend
@@ -923,27 +1010,26 @@ npm install
 npm run dev
 ```
 
-- App: http://localhost:3000
-- Market Grid: http://localhost:3000/market-grid
+- App: http://localhost:3001
 
-### 6. Create an API key
+#### 7. Create an API key
 
-```bash
-curl -X POST http://localhost:8010/v1/auth/keys \
-  -H "Content-Type: application/json" \
+```powershell
+curl -X POST http://localhost:8024/v1/auth/keys `
+  -H "Content-Type: application/json" `
   -d '{"name": "my-key"}'
 ```
 
-Copy the returned `key` value into the API Keys page in the browser or set `X-API-Key` header on requests.
+Copy the returned `key` value into the **API Key** field shown top-right in the browser UI, or send it as the `X-API-Key` header on direct API calls.
 
-### 7. Run your first analysis
+#### 8. Run your first analysis
 
-```bash
-# Blocking
-curl "http://localhost:8010/v1/analysis/run/AAPL?portfolio_value_usd=100000&max_risk_per_trade_pct=1"
+```powershell
+# SSE stream (agents appear one by one as they finish)
+curl -N "http://localhost:8024/v1/analysis/stream/AAPL"
 
-# SSE stream (watch agents appear one by one)
-curl -N "http://localhost:8010/v1/analysis/stream/NVDA"
+# Blocking (waits for full verdict)
+curl "http://localhost:8024/v1/analysis/run/AAPL?portfolio_value_usd=100000&max_risk_per_trade_pct=1"
 ```
 
 ---
@@ -961,31 +1047,139 @@ pytest -q --cov=app --cov-report=term-missing
 pytest tests/test_agents.py -v
 ```
 
-**Test suite:** 325 tests across 20 test files covering agents, supervisor, providers (yfinance, Polygon, Redis cache), watchlists router, alerts trigger, batch jobs, API hardening, observability, options metrics, Polygon WebSocket relay, decision support extras, and main cache/endpoints.
+**Test suite:** 363 tests across 21 test files covering agents, supervisor, providers (yfinance, Polygon, Redis cache), watchlists router, alerts trigger, batch jobs, API hardening, observability, options metrics, options robustness (concurrent safety + semaphore), Polygon WebSocket relay, decision support extras, and main cache/endpoints.
 
 ---
 
 ## Docker Setup
 
-```yaml
-# docker-compose.yml provisions:
-#   postgres:5433  (rec/rec/recommendation)
-#   redis:6379
-docker compose up -d
-docker compose logs -f
-docker compose down -v   # destroy volumes
-```
+The full stack — Postgres, Redis, backend, and frontend — all run as Docker containers.
 
-To run the full stack in containers, build the app image:
+### 1. Configure environment
 
 ```powershell
-docker build -t stockresearch-api .
-docker run -p 8010:8010 \
-  -e DATABASE_URL=postgresql+asyncpg://rec:rec@postgres:5432/recommendation \
-  -e REDIS_URL=redis://redis:6379/0 \
-  -e USE_REDIS=true \
-  stockresearch-api
+# Create .env in project root (gitignored)
+ANTHROPIC_API_KEY=sk-ant-api03-...
+POLYGON_API_KEY=...
+FINNHUB_API_KEY=...
 ```
+
+Docker Compose reads `.env` automatically and injects keys into the backend container.
+
+### 2. Build and start all services
+
+```powershell
+docker compose up -d --build
+```
+
+| Service | Container port | Host port |
+|---------|---------------|-----------|
+| Frontend (Next.js) | 3000 | **3010** → http://localhost:3010 |
+| Backend (FastAPI) | 8010 | **8010** → http://localhost:8010/docs |
+| PostgreSQL 16 | 5432 | 5433 |
+| Redis 7 | 6379 | 6380 |
+
+Alembic migrations run automatically on first boot inside the backend container.
+
+### 3. Useful commands
+
+```powershell
+docker compose logs -f app        # stream backend logs
+docker compose logs -f frontend   # stream frontend logs
+docker compose ps                 # container status
+docker compose down               # stop (preserves volumes)
+docker compose down -v            # stop and destroy volumes
+docker compose up -d --force-recreate app  # restart backend with new env vars
+```
+
+---
+
+## Kubernetes Setup
+
+The `k8s/` directory contains production-ready Kubernetes manifests deploying 2 backend replicas, 2 frontend replicas, a Postgres StatefulSet, and a Redis deployment — all in the `stockresearch` namespace.
+
+### Architecture
+
+| Workload | Kind | Replicas | Exposed via |
+|----------|------|----------|-------------|
+| backend | Deployment | **2** | NodePort **30810** |
+| frontend | Deployment | **2** | NodePort **30300** |
+| postgres | StatefulSet | 1 | ClusterIP (in-cluster only) |
+| redis | Deployment | 1 | ClusterIP (in-cluster only) |
+
+### Deploy to Docker Desktop Kubernetes
+
+Docker Desktop's built-in Kubernetes is the easiest local option — it shares the host Docker image cache so no image loading is needed.
+
+**Enable it:** Docker Desktop → Settings → Kubernetes → ✓ Enable Kubernetes → Apply & Restart.
+
+```powershell
+# 1. Build images
+.\k8s\build.ps1
+
+# 2. Create secret (copy template, fill in real keys — never commit this file)
+Copy-Item k8s\secret.yaml.example k8s\secret.yaml
+# Edit k8s\secret.yaml and set ANTHROPIC_API_KEY, POLYGON_API_KEY, etc.
+
+# 3. Apply the secret (outside kustomize — keeps it out of git)
+kubectl --context docker-desktop apply -f k8s\secret.yaml
+
+# 4. Deploy everything else
+kubectl config use-context docker-desktop
+kubectl apply -k k8s\
+
+# 5. Wait for all pods
+kubectl get pods -n stockresearch -w
+```
+
+Once all pods are `1/1 Running`:
+- Frontend: http://localhost:30300
+- Backend API docs: http://localhost:30810/docs
+
+**View in Docker Desktop UI:** Kubernetes → change Namespace dropdown to **stockresearch**.
+
+### Deploy to a kind cluster (alternative)
+
+[kind](https://kind.sigs.k8s.io) runs Kubernetes nodes as Docker containers and supports NodePort host mapping.
+
+```powershell
+# Create cluster with NodePort mappings
+kind create cluster --config k8s\kind-cluster.yaml
+
+# Load images into the cluster (kind doesn't share the Docker image cache)
+kind load docker-image stockresearch-backend:latest --name stockresearch
+kind load docker-image stockresearch-frontend:k8s --name stockresearch
+
+# Create secret + deploy
+kubectl --context kind-stockresearch apply -f k8s\secret.yaml
+kubectl --context kind-stockresearch apply -k k8s\
+```
+
+### Manifest layout
+
+```
+k8s/
+├── namespace.yaml          # stockresearch namespace
+├── configmap.yaml          # non-secret config (REDIS_URL, CORS_ORIGINS, timeouts)
+├── secret.yaml.example     # template — copy to secret.yaml, fill keys, never commit
+├── kustomization.yaml      # kubectl apply -k k8s/
+├── build.ps1               # builds backend:latest + frontend:k8s images
+├── kind-cluster.yaml       # kind cluster config with NodePort host mappings
+├── postgres/
+│   ├── statefulset.yaml    # 1 replica, 5Gi PVC
+│   └── service.yaml        # ClusterIP :5432
+├── redis/
+│   ├── deployment.yaml     # 1 replica
+│   └── service.yaml        # ClusterIP :6379
+├── backend/
+│   ├── deployment.yaml     # 2 replicas; init container runs alembic upgrade head
+│   └── service.yaml        # NodePort 30810
+└── frontend/
+    ├── deployment.yaml     # 2 replicas; image stockresearch-frontend:k8s
+    └── service.yaml        # NodePort 30300
+```
+
+> `k8s/secret.yaml` is listed in `.gitignore` — actual secrets are never committed.
 
 ---
 
@@ -1005,20 +1199,22 @@ StockRecommendationPlatform/
 │   │   └── sentiment_ml.py      ← SentimentMLAgent (FinBERT / external API)
 │   ├── providers/
 │   │   ├── base.py              ← MarketDataProvider ABC
-│   │   ├── yfinance_provider.py ← Default async yfinance wrapper
+│   │   ├── yfinance_provider.py ← Default async yfinance wrapper + Semaphore(3)
 │   │   ├── polygon_provider.py  ← Polygon.io REST client
 │   │   ├── redis_cache.py       ← Redis caching decorator
 │   │   └── factory.py           ← build_provider() — selects & wraps provider
 │   ├── routers/
 │   │   ├── auth.py              ← API key CRUD
 │   │   ├── watchlists.py        ← Watchlist + symbol management
-│   │   └── alerts.py            ← Alert CRUD + _evaluate_alert()
+│   │   ├── alerts.py            ← Alert CRUD + _evaluate_alert()
+│   │   ├── portfolio.py         ← Portfolio position CRUD
+│   │   └── settings.py          ← User settings GET/PUT/DELETE
 │   ├── db/
 │   │   ├── models.py            ← SQLAlchemy ORM models
 │   │   └── session.py           ← Async engine + get_session()
 │   ├── schemas/
 │   │   ├── agents.py            ← Pydantic output schemas + SupervisorVerdict
-│   │   ├── user.py              ← Watchlist / Alert request/response schemas
+│   │   ├── user.py              ← Watchlist / Alert / Portfolio / Settings schemas
 │   │   └── batch.py             ← BatchJob schemas
 │   ├── supervisor.py            ← Supervisor: run_analysis() + stream_analysis()
 │   ├── decision_support.py      ← build_decision_aids() — score, checklist, plays
@@ -1033,11 +1229,44 @@ StockRecommendationPlatform/
 │   └── main.py                  ← FastAPI app, all routes
 ├── alembic/
 │   └── versions/
-│       ├── 0001_initial_schema.py
-│       ├── 0002_batch_job.py
-│       └── 0003_watchlists_alerts.py
+│       ├── 0001_initial_schema.py      ← analysis_run + agent_artifact
+│       ├── 0002_batch_job.py           ← batch_job table + FK
+│       ├── 0003_watchlists_alerts.py   ← api_key, watchlist, alert tables
+│       ├── 0004_portfolio.py           ← portfolio_position table
+│       └── 0005_user_settings.py       ← user_settings table
 ├── frontend/
-│   └── src/  (Next.js 14 app)
+│   └── src/
+│       ├── app/
+│       │   ├── page.tsx                ← Analysis (SSE streaming)
+│       │   ├── market-grid/page.tsx
+│       │   ├── momentum/page.tsx
+│       │   ├── compare/page.tsx
+│       │   ├── correlation/page.tsx
+│       │   ├── history/page.tsx
+│       │   ├── portfolio/page.tsx
+│       │   ├── watchlists/page.tsx
+│       │   ├── alerts/page.tsx
+│       │   ├── earnings/page.tsx
+│       │   ├── sector-heat/page.tsx
+│       │   ├── settings/page.tsx
+│       │   ├── keys/page.tsx
+│       │   └── logs/page.tsx
+│       ├── components/analysis/        ← Agent grid, verdict, options panels
+│       ├── components/market/          ← Market grid table
+│       ├── contexts/                   ← AnalysisContext, ApiKeyContext
+│       ├── lib/api.ts                  ← fetch + streamAnalysis() helpers
+│       └── types/api.ts                ← TypeScript mirrors of Pydantic schemas
+├── k8s/
+│   ├── namespace.yaml
+│   ├── configmap.yaml
+│   ├── secret.yaml.example             ← Template; copy to secret.yaml (gitignored)
+│   ├── kustomization.yaml              ← kubectl apply -k k8s/
+│   ├── build.ps1                       ← Build both Docker images for K8s
+│   ├── kind-cluster.yaml               ← kind cluster with NodePort host mappings
+│   ├── postgres/                       ← StatefulSet + ClusterIP service
+│   ├── redis/                          ← Deployment + ClusterIP service
+│   ├── backend/                        ← 2-replica Deployment + NodePort 30810
+│   └── frontend/                       ← 2-replica Deployment + NodePort 30300
 ├── tests/
 │   ├── conftest.py
 │   ├── test_agents.py
@@ -1052,6 +1281,7 @@ StockRecommendationPlatform/
 │   ├── test_main_endpoints.py
 │   ├── test_observability.py
 │   ├── test_options_metrics.py
+│   ├── test_options_robustness.py      ← concurrent safety + semaphore (24 tests)
 │   ├── test_polygon_ws.py
 │   ├── test_providers.py
 │   ├── test_providers_impl.py
@@ -1062,8 +1292,11 @@ StockRecommendationPlatform/
 ├── docs/
 │   └── MASTER_PLAN.md
 ├── docker-compose.yml
-├── Dockerfile
-├── requirements.txt
+├── Dockerfile                          ← Backend image (runs alembic then uvicorn)
+├── frontend/Dockerfile                 ← Frontend multi-stage standalone build
+├── launch.ps1                          ← Single-command local dev launcher
+├── requirements.txt                    ← Full dev deps (torch, pytest, ruff, etc.)
+├── requirements.docker.txt             ← Production deps (CPU-only torch, no dev tools)
 ├── pyproject.toml
 └── pytest.ini
 ```

@@ -18,6 +18,9 @@ env/
 .env
 *.env.local
 
+# Kubernetes secrets (use secret.yaml.example as template)
+k8s/secret.yaml
+
 # Runtime logs
 *.log
 backend.log

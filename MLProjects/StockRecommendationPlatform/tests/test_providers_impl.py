@@ -305,16 +305,22 @@ class TestPolygonProviderImpl:
 
     @pytest.mark.asyncio
     async def test_get_price_history_empty_results(self):
+        import pandas as pd
         p = self._prov()
         p._get = AsyncMock(return_value={"results": []})
+        p._yf_price_history_fallback = AsyncMock(return_value=pd.DataFrame())
         df = await p.get_price_history("AAPL", "6mo")
+        p._yf_price_history_fallback.assert_awaited_once_with("AAPL", "6mo")
         assert df.empty
 
     @pytest.mark.asyncio
     async def test_get_price_history_unknown_period_defaults(self):
+        import pandas as pd
         p = self._prov()
         p._get = AsyncMock(return_value={"results": []})
+        p._yf_price_history_fallback = AsyncMock(return_value=pd.DataFrame())
         df = await p.get_price_history("AAPL", "custom_period")
+        p._yf_price_history_fallback.assert_awaited_once_with("AAPL", "custom_period")
         assert df.empty
 
     @pytest.mark.asyncio

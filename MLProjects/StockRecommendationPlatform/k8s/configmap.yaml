@@ -13,7 +13,7 @@ data:
   USE_REDIS: "true"
 
   # CORS — allow both NodePort (browser) and in-cluster origins
-  CORS_ORIGINS: "http://localhost:30300,http://frontend-svc:3000"
+  CORS_ORIGINS: "http://localhost:30300,http://frontend-svc:3000,http://app.stockresearch.local"
 
   # Agent tuning
   AGENT_TIMEOUT_SECONDS: "45"

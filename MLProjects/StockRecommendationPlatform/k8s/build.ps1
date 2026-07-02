@@ -10,9 +10,9 @@ $ProjectRoot = Split-Path -Parent $PSScriptRoot
 Write-Host "==> Building backend image: stockresearch-backend:latest"
 docker build -t stockresearch-backend:latest "$ProjectRoot"
 
-Write-Host "==> Building frontend image: stockresearch-frontend:k8s (NEXT_PUBLIC_API_URL=http://localhost:30810)"
+Write-Host "==> Building frontend image: stockresearch-frontend:k8s (NEXT_PUBLIC_API_URL=http://api.stockresearch.local)"
 docker build `
-  --build-arg NEXT_PUBLIC_API_URL=http://localhost:30810 `
+  --build-arg NEXT_PUBLIC_API_URL=http://api.stockresearch.local `
   -t stockresearch-frontend:k8s `
   "$ProjectRoot\frontend"
 

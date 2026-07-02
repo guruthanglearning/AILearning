@@ -133,7 +133,9 @@ class PolygonProvider(MarketDataProvider):
             )
             bars = data.get("results") or []
             if not bars:
-                return pd.DataFrame()
+                # Polygon returns empty for indices (^VIX etc.) and some tickers (BRK-B);
+                # fall through to yfinance which handles these natively.
+                return await self._yf_price_history_fallback(symbol, period)
             df = pd.DataFrame(bars)
             df["date"] = pd.to_datetime(df["t"], unit="ms", utc=True)
             df = df.set_index("date").rename(

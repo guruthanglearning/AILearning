@@ -1,6 +1,7 @@
 """Options metrics table tests — all offline (pure functions + schema only)."""
 from __future__ import annotations
 
+import pandas as pd
 import pytest
 
 from app.decision_support import (
@@ -145,8 +146,7 @@ def test_degraded_row_has_no_breakevens_or_legs():
 # ---------------------------------------------------------------------------
 
 
-def _zero_bid_ask_calls(spot: float) -> "pd.DataFrame":
-    import pandas as pd
+def _zero_bid_ask_calls(spot: float) -> pd.DataFrame:
     return pd.DataFrame({
         "strike": [spot - 5, spot, spot + 5, spot + 10],
         "bid": [0.0, 0.0, 0.0, 0.0],
@@ -157,8 +157,7 @@ def _zero_bid_ask_calls(spot: float) -> "pd.DataFrame":
     })
 
 
-def _zero_bid_ask_puts(spot: float) -> "pd.DataFrame":
-    import pandas as pd
+def _zero_bid_ask_puts(spot: float) -> pd.DataFrame:
     return pd.DataFrame({
         "strike": [spot - 10, spot - 5, spot, spot + 5],
         "bid": [0.0, 0.0, 0.0, 0.0],

@@ -160,7 +160,7 @@ export function EarningsCalendar() {
                 <span className="text-xs font-semibold text-gray-300">{formatDate(date)}</span>
                 <DaysChip days={group[0].daysAway} />
                 <div className="flex-1 h-px bg-gray-800" />
-                <span className="text-xs text-gray-600">{group.length} company{group.length > 1 ? "ies" : ""}</span>
+                <span className="text-xs text-gray-600">{group.length} {group.length > 1 ? "companies" : "company"}</span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
                 {group

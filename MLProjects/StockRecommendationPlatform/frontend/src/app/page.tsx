@@ -276,10 +276,10 @@ function HomePage() {
 
           {optRows.length > 0 && (
             <>
-              <OptionsAnalysisPanel rows={optRows} />
+              <OptionsAnalysisPanel rows={optRows} marketState={verdict.market_state} />
               <div className="space-y-2">
                 <h2 className="text-sm font-medium text-gray-400">Options Metrics Table</h2>
-                <OptionsMetricsTable rows={optRows} />
+                <OptionsMetricsTable rows={optRows} marketState={verdict.market_state} />
               </div>
             </>
           )}

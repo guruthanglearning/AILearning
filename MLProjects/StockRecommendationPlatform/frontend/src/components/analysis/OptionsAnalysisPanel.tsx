@@ -61,9 +61,14 @@ const QUALITY_VARIANT: Record<string, "success" | "warning" | "error"> = {
   degraded: "error",
 };
 
+function isMarketClosed(row: OptionsMetricRow): boolean {
+  return row.degraded_reasons.includes("market_closed");
+}
+
 function StrategyCard({ row }: { row: OptionsMetricRow }) {
   const [open, setOpen] = useState(true);
   const isDegraded = row.row_data_quality === "degraded";
+  const mktClosed = isDegraded && isMarketClosed(row);
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
@@ -74,9 +79,13 @@ function StrategyCard({ row }: { row: OptionsMetricRow }) {
       >
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-gray-100">{row.strategy_label}</span>
-          <Badge variant={QUALITY_VARIANT[row.row_data_quality] ?? "neutral"}>
-            {row.row_data_quality}
-          </Badge>
+          {mktClosed ? (
+            <Badge variant="warning">mkt closed</Badge>
+          ) : (
+            <Badge variant={QUALITY_VARIANT[row.row_data_quality] ?? "neutral"}>
+              {row.row_data_quality}
+            </Badge>
+          )}
           {row.expiration && (
             <span className="text-xs text-gray-500">
               {row.expiration}{row.dte_at_analysis != null ? ` · ${row.dte_at_analysis}DTE` : ""}
@@ -88,7 +97,12 @@ function StrategyCard({ row }: { row: OptionsMetricRow }) {
 
       {open && (
         <div className="px-4 pb-3">
-          {isDegraded && row.degraded_reasons.length > 0 && (
+          {mktClosed && (
+            <p className="text-xs text-amber-500 mb-2">
+              Bid/ask unavailable outside market hours — spread pricing not calculable. Strike and IV estimates are based on last-close chain data.
+            </p>
+          )}
+          {isDegraded && !mktClosed && row.degraded_reasons.length > 0 && (
             <p className="text-xs text-red-400 mb-2">
               Degraded: {row.degraded_reasons.join(", ")}
             </p>
@@ -112,9 +126,11 @@ function StrategyCard({ row }: { row: OptionsMetricRow }) {
   );
 }
 
-export function OptionsAnalysisPanel({ rows }: { rows: OptionsMetricRow[] }) {
+export function OptionsAnalysisPanel({ rows, marketState }: { rows: OptionsMetricRow[]; marketState?: string | null }) {
   const strategies = rows.filter((r) => r.template_id !== "underlying_summary");
   const summary = rows.find((r) => r.template_id === "underlying_summary");
+  const hasMarketClosedRows = strategies.some(isMarketClosed);
+  const showMarketClosedBanner = hasMarketClosedRows && marketState !== "REGULAR";
 
   if (strategies.length === 0) return null;
 
@@ -130,6 +146,15 @@ export function OptionsAnalysisPanel({ rows }: { rows: OptionsMetricRow[] }) {
           </div>
         )}
       </div>
+      {showMarketClosedBanner && (
+        <div className="flex items-start gap-2 text-xs bg-amber-950 border border-amber-700 rounded px-3 py-2">
+          <span className="text-amber-400 mt-0.5">⏸</span>
+          <span className="text-amber-300">
+            <span className="font-medium">Market closed</span>
+            <span className="text-amber-500"> — Options bid/ask prices are unavailable outside regular trading hours. Spread metrics below cannot be calculated; structural guidance (trend, theta, liquidity) remains valid.</span>
+          </span>
+        </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {strategies.map((row) => (
           <StrategyCard key={row.template_id} row={row} />

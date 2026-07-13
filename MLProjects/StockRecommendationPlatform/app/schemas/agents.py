@@ -269,6 +269,7 @@ class SupervisorVerdict(BaseModel):
     sentiment_score: float | None = None
     earnings_days_away: int | None = None
     has_upcoming_earnings: bool = False
+    market_state: str | None = None  # PRE, REGULAR, POST, CLOSED — from MarketDataAgent
 
 
 class AnalysisRunRequest(BaseModel):

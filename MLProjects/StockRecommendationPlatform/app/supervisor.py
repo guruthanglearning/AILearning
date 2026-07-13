@@ -283,6 +283,7 @@ class Supervisor:
             req.max_risk_per_trade_pct,
             provider=provider,
             ml_forecast_signal=sent.forecast_signal,
+            market_state=m.market_state,
         )
 
         # --- Insufficient data early-exit (before Claude call) ---
@@ -331,6 +332,7 @@ class Supervisor:
             sentiment_score=sent.sentiment_score if sent.status == AgentStatus.complete else None,
             earnings_days_away=risk.earnings_days_away,
             has_upcoming_earnings=risk.has_upcoming_earnings,
+            market_state=m.market_state,
         )
 
         # --- DB hook 3: finalise run record (best-effort) ---
@@ -457,6 +459,7 @@ class Supervisor:
             req.max_risk_per_trade_pct,
             provider=provider,
             ml_forecast_signal=sent.forecast_signal,  # type: ignore[attr-defined]
+            market_state=m.market_state,  # type: ignore[attr-defined]
         )
 
         # --- Insufficient data early-exit (before Claude call) ---
@@ -505,6 +508,7 @@ class Supervisor:
             sentiment_score=sent.sentiment_score if sent.status == AgentStatus.complete else None,
             earnings_days_away=risk.earnings_days_away,
             has_upcoming_earnings=risk.has_upcoming_earnings,
+            market_state=m.market_state,  # type: ignore[attr-defined]
         )
 
         try:

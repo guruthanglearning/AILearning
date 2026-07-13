@@ -202,6 +202,7 @@ def _build_bull_call_spread(
     trend: str | None,
     liq: str | None,
     imp_move: float | None,
+    market_state: str | None = None,
 ) -> OptionsMetricRow:
     if calls is None or calls.empty:
         return _degraded_row("bull_call_spread", "Bull Call Spread (Debit Vertical)", spot, ["no_call_chain"])
@@ -221,6 +222,12 @@ def _build_bull_call_spread(
         row = _debit_call_spread_row(expiry, dte, spot, atm_strike, atm_ask, otm_strike, otm_bid, trend, liq, imp_move)
         if quality == "partial" and row.row_data_quality == "full":
             row = row.model_copy(update={"row_data_quality": "partial", "degraded_reasons": ["zero_bid_ask_on_leg"]})
+        if (
+            row.row_data_quality == "degraded"
+            and "degenerate_spread_prices" in row.degraded_reasons
+            and market_state not in (None, "REGULAR")
+        ):
+            row = row.model_copy(update={"degraded_reasons": ["market_closed"]})
         return row
     except Exception as exc:
         return _degraded_row("bull_call_spread", "Bull Call Spread (Debit Vertical)", spot, [str(exc)])
@@ -234,6 +241,7 @@ def _build_short_put_spread(
     trend: str | None,
     liq: str | None,
     imp_move: float | None,
+    market_state: str | None = None,
 ) -> OptionsMetricRow:
     if puts is None or puts.empty:
         return _degraded_row("short_put_spread", "Short Put Spread (Credit Vertical)", spot, ["no_put_chain"])
@@ -253,6 +261,12 @@ def _build_short_put_spread(
         row = _credit_put_spread_row(expiry, dte, spot, atm_strike, atm_bid, otm_strike, otm_ask, trend, liq, imp_move)
         if quality == "partial" and row.row_data_quality == "full":
             row = row.model_copy(update={"row_data_quality": "partial", "degraded_reasons": ["zero_bid_ask_on_leg"]})
+        if (
+            row.row_data_quality == "degraded"
+            and "degenerate_spread_prices" in row.degraded_reasons
+            and market_state not in (None, "REGULAR")
+        ):
+            row = row.model_copy(update={"degraded_reasons": ["market_closed"]})
         return row
     except Exception as exc:
         return _degraded_row("short_put_spread", "Short Put Spread (Credit Vertical)", spot, [str(exc)])
@@ -264,6 +278,7 @@ async def _build_options_metrics_table(
     opt: OptionsOutput,
     tech: TechnicalsOutput,
     provider: MarketDataProvider,
+    market_state: str | None = None,
 ) -> list[OptionsMetricRow]:
     summary = OptionsMetricRow(
         template_id="underlying_summary",
@@ -305,8 +320,8 @@ async def _build_options_metrics_table(
     liq = opt.chain_liquidity_hint
     imp_move = opt.implied_move_1d_pct
 
-    row_b = _build_bull_call_spread(calls, spot, expiry, dte, trend, liq, imp_move)
-    row_c = _build_short_put_spread(puts, spot, expiry, dte, trend, liq, imp_move)
+    row_b = _build_bull_call_spread(calls, spot, expiry, dte, trend, liq, imp_move, market_state)
+    row_c = _build_short_put_spread(puts, spot, expiry, dte, trend, liq, imp_move, market_state)
     return [summary, row_b, row_c]
 
 
@@ -320,6 +335,7 @@ async def build_decision_aids(
     max_risk_pct: float | None,
     provider: MarketDataProvider,
     ml_forecast_signal: str | None = None,
+    market_state: str | None = None,
 ) -> DecisionAids:
     trend = tech.trend_hint or "mixed"
     hv = await _hv_20d(symbol, provider)
@@ -549,7 +565,7 @@ async def build_decision_aids(
         },
     }
 
-    opts_table = await _build_options_metrics_table(symbol, last_price, opt, tech, provider)
+    opts_table = await _build_options_metrics_table(symbol, last_price, opt, tech, provider, market_state)
 
     questions = [
         "Is this trade speculative or part of a multi-month thesis?",

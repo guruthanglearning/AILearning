@@ -4,6 +4,8 @@ from __future__ import annotations
 import pytest
 
 from app.decision_support import (
+    _build_bull_call_spread,
+    _build_short_put_spread,
     _credit_put_spread_row,
     _debit_call_spread_row,
     _degraded_row,
@@ -136,6 +138,73 @@ def test_degraded_row_has_no_breakevens_or_legs():
     assert row.breakeven_prices == []
     assert row.max_profit is None
     assert row.max_loss is None
+
+
+# ---------------------------------------------------------------------------
+# Market-closed relabelling
+# ---------------------------------------------------------------------------
+
+
+def _zero_bid_ask_calls(spot: float) -> "pd.DataFrame":
+    import pandas as pd
+    return pd.DataFrame({
+        "strike": [spot - 5, spot, spot + 5, spot + 10],
+        "bid": [0.0, 0.0, 0.0, 0.0],
+        "ask": [0.0, 0.0, 0.0, 0.0],
+        "impliedVolatility": [0.30, 0.28, 0.26, 0.24],
+        "openInterest": [100, 200, 150, 80],
+        "lastPrice": [5.0, 3.0, 1.5, 0.5],
+    })
+
+
+def _zero_bid_ask_puts(spot: float) -> "pd.DataFrame":
+    import pandas as pd
+    return pd.DataFrame({
+        "strike": [spot - 10, spot - 5, spot, spot + 5],
+        "bid": [0.0, 0.0, 0.0, 0.0],
+        "ask": [0.0, 0.0, 0.0, 0.0],
+        "impliedVolatility": [0.24, 0.26, 0.28, 0.30],
+        "openInterest": [80, 150, 200, 100],
+        "lastPrice": [0.5, 1.5, 3.0, 5.0],
+    })
+
+
+def test_market_closed_tagging_bull_call_spread():
+    calls = _zero_bid_ask_calls(spot=150.0)
+    row = _build_bull_call_spread(calls, 150.0, "2025-08-15", 30, "bullish", "adequate", 1.5, market_state="CLOSED")
+    assert row.row_data_quality == "degraded"
+    assert "market_closed" in row.degraded_reasons
+    assert "degenerate_spread_prices" not in row.degraded_reasons
+
+
+def test_market_closed_tagging_short_put_spread():
+    puts = _zero_bid_ask_puts(spot=150.0)
+    row = _build_short_put_spread(puts, 150.0, "2025-08-15", 30, "bullish", "adequate", 1.5, market_state="CLOSED")
+    assert row.row_data_quality == "degraded"
+    assert "market_closed" in row.degraded_reasons
+    assert "degenerate_spread_prices" not in row.degraded_reasons
+
+
+def test_pre_market_tagging_bull_call_spread():
+    calls = _zero_bid_ask_calls(spot=150.0)
+    row = _build_bull_call_spread(calls, 150.0, "2025-08-15", 30, "bullish", "adequate", 1.5, market_state="PRE")
+    assert "market_closed" in row.degraded_reasons
+
+
+def test_regular_hours_keeps_degenerate_reason():
+    """During REGULAR hours, zero bid/ask is a real data problem — keep original label."""
+    calls = _zero_bid_ask_calls(spot=150.0)
+    row = _build_bull_call_spread(calls, 150.0, "2025-08-15", 30, "bullish", "adequate", 1.5, market_state="REGULAR")
+    assert "degenerate_spread_prices" in row.degraded_reasons
+    assert "market_closed" not in row.degraded_reasons
+
+
+def test_unknown_market_state_keeps_degenerate_reason():
+    """When market_state is None (unknown), preserve original reason to avoid hiding real errors."""
+    calls = _zero_bid_ask_calls(spot=150.0)
+    row = _build_bull_call_spread(calls, 150.0, "2025-08-15", 30, "bullish", "adequate", 1.5, market_state=None)
+    assert "degenerate_spread_prices" in row.degraded_reasons
+    assert "market_closed" not in row.degraded_reasons
 
 
 # ---------------------------------------------------------------------------

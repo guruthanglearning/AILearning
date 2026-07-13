@@ -176,6 +176,7 @@ export interface SupervisorVerdict {
   sentiment_score: number | null;
   earnings_days_away: number | null;
   has_upcoming_earnings: boolean;
+  market_state: string | null;
 }
 
 export interface PriceBar {

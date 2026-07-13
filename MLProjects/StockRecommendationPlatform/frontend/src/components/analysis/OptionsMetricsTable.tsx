@@ -31,6 +31,10 @@ const QUALITY_VARIANT: Record<string, "success" | "warning" | "error"> = {
   degraded: "error",
 };
 
+function isMarketClosed(row: OptionsMetricRow): boolean {
+  return row.row_data_quality === "degraded" && row.degraded_reasons.includes("market_closed");
+}
+
 const TREND_VARIANT: Record<string, "success" | "error" | "neutral"> = {
   aligned: "success",
   counter: "error",
@@ -55,6 +59,13 @@ const COLUMNS = [
     cell: ({ getValue, row }) => {
       const q = getValue();
       const reasons = row.original.degraded_reasons;
+      if (isMarketClosed(row.original)) {
+        return (
+          <Badge variant="warning" title="Bid/ask unavailable outside market hours">
+            mkt closed
+          </Badge>
+        );
+      }
       return (
         <Badge
           variant={QUALITY_VARIANT[q] ?? "neutral"}
@@ -222,7 +233,7 @@ const COLUMNS = [
   }),
 ];
 
-export function OptionsMetricsTable({ rows }: { rows: OptionsMetricRow[] }) {
+export function OptionsMetricsTable({ rows, marketState }: { rows: OptionsMetricRow[]; marketState?: string | null }) {
   const [sorting, setSorting] = useState<SortingState>([]);
 
   const table = useReactTable({
@@ -235,9 +246,18 @@ export function OptionsMetricsTable({ rows }: { rows: OptionsMetricRow[] }) {
   });
 
   const disclaimer = rows[0]?.disclaimer ?? "Hypothetical scenarios only; not investment advice.";
+  const hasMarketClosedRows = rows.some(isMarketClosed);
+  const showMarketClosedBanner = hasMarketClosedRows && marketState !== "REGULAR";
 
   return (
     <div className="space-y-2">
+      {showMarketClosedBanner && (
+        <div className="flex items-center gap-2 text-xs bg-amber-950 border border-amber-700 rounded px-3 py-1.5">
+          <span className="text-amber-400">⏸</span>
+          <span className="text-amber-300 font-medium">Market closed</span>
+          <span className="text-amber-500">— bid/ask unavailable; spread debit/credit and max profit/loss cannot be calculated until next session.</span>
+        </div>
+      )}
       <div className="overflow-x-auto rounded-lg border border-gray-800">
         <table className="w-full text-xs text-left">
           <thead className="bg-gray-900 text-gray-400 sticky top-0">

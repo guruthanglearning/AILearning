@@ -1,6 +1,6 @@
 const { chromium } = require('@playwright/test');
 
-const BASE = 'http://localhost:3010';
+const BASE = 'http://stockresearch.local:8080';
 const results = [];
 
 function pass(name, detail = '') { results.push({ ok: true,  name, detail }); console.log(`  ✅ ${name}${detail ? ' → ' + detail : ''}`); }
@@ -13,7 +13,7 @@ async function openPage(browser) {
   const errors = [], notFound = [];
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('response', r => {
-    if (r.status() >= 400 && (r.url().includes('localhost') || r.url().includes('stockresearch.local')))
+    if (r.status() >= 400 && (r.url().includes('localhost') || r.url().includes('stockresearch.local') || r.url().includes('8080')))
       notFound.push(`${r.status()} ${r.url()}`);
   });
   return { ctx, page, errors, notFound };
@@ -28,7 +28,8 @@ function critical404s(notFound) { return notFound.filter(u => !u.includes('favic
 
 async function main() {
   const browser = await chromium.launch({ channel: 'msedge', headless: true });
-  console.log('=== Deep Page Content Validation — Docker UI ===\n');
+  console.log('=== Deep Page Content Validation — Docker UI ===');
+  console.log('  Base: http://stockresearch.local:8080\n');
 
   // ── 1. Home / Analysis ─────────────────────────────────────────────────────
   console.log('\n[1] Home / Analysis page');

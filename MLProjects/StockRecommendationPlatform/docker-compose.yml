@@ -41,7 +41,7 @@ services:
       POLYGON_API_KEY: "${POLYGON_API_KEY:-}"
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
       FINNHUB_API_KEY: "${FINNHUB_API_KEY:-}"
-      CORS_ORIGINS: "http://localhost:3010,http://localhost:3000,http://localhost:3001"
+      CORS_ORIGINS: "http://localhost:3010,http://localhost:3000,http://localhost:3001,http://stockresearch.local,http://stockresearch.local:8080"
       AGENT_TIMEOUT_SECONDS: "45"
       QUOTE_STALE_SECONDS: "120"
     depends_on:
@@ -61,11 +61,22 @@ services:
         # NEXT_PUBLIC_* vars are baked in at build time — must be passed as build args.
         # Use localhost so the host browser can reach the mapped port.
         # Override NEXT_PUBLIC_API_URL for remote deploys (e.g. your server's IP).
-        NEXT_PUBLIC_API_URL: "http://localhost:8010"
+        NEXT_PUBLIC_API_URL: "http://api.stockresearch.local:8080"
     ports:
       - "3010:3000"
     depends_on:
       - app
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/docker.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - app
+      - frontend
     restart: unless-stopped
 
 volumes:

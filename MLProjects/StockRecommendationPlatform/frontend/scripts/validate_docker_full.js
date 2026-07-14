@@ -1,7 +1,8 @@
 const { chromium } = require('@playwright/test');
 
-const BASE = 'http://localhost:3010';
-const API  = 'http://localhost:8010';
+const BASE     = 'http://localhost:3010';
+const API_DIRECT = 'http://localhost:8010';
+const API_NGINX  = 'http://api.stockresearch.local:8080';
 
 const results = [];
 function pass(name, detail = '') { results.push({ ok: true,  name, detail }); }
@@ -16,7 +17,7 @@ async function openPage(browser) {
   const errors = [], notFound = [];
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('response', r => {
-    if (r.status() >= 400 && (r.url().includes('localhost')))
+    if (r.status() >= 400 && (r.url().includes('localhost') || r.url().includes('stockresearch.local')))
       notFound.push(`${r.status()} ${r.url()}`);
   });
   return { ctx, page, errors, notFound };
@@ -32,7 +33,9 @@ async function waitText(page, text, timeout = 10000) {
 
 async function main() {
   const browser = await chromium.launch({ channel: 'msedge', headless: false });
-  console.log('=== Full Docker UI Validation: http://localhost:3010 ===\n');
+  console.log('=== Full Docker UI Validation ===');
+  console.log('  Frontend : http://localhost:3010');
+  console.log('  API nginx: http://api.stockresearch.local:8080\n');
 
   // ── 1. Home page ───────────────────────────────────────────────────────────
   {
@@ -190,15 +193,27 @@ async function main() {
     await ctx.close();
   }
 
-  // ── 18. API health check ──────────────────────────────────────────────────
+  // ── 18. API health — direct port ─────────────────────────────────────────
   {
     const { ctx, page } = await openPage(browser);
     try {
-      const resp = await page.goto(API + '/healthz', { waitUntil: 'domcontentloaded', timeout: 10000 });
+      const resp = await page.goto(API_DIRECT + '/healthz', { waitUntil: 'domcontentloaded', timeout: 10000 });
       const body = await page.locator('body').innerText();
-      if (resp.status() === 200 && body.includes('"ok"')) pass('API /healthz (Docker)');
-      else fail('API /healthz (Docker)', `${resp.status()} ${body.slice(0, 40)}`);
-    } catch (e) { fail('API /healthz (Docker)', e.message.slice(0, 80)); }
+      if (resp.status() === 200 && body.includes('"ok"')) pass('API /healthz (direct :8010)');
+      else fail('API /healthz (direct :8010)', `${resp.status()} ${body.slice(0, 40)}`);
+    } catch (e) { fail('API /healthz (direct :8010)', e.message.slice(0, 80)); }
+    await ctx.close();
+  }
+
+  // ── 19. API health — via nginx (api.stockresearch.local:8080) ────────────
+  {
+    const { ctx, page } = await openPage(browser);
+    try {
+      const resp = await page.goto(API_NGINX + '/healthz', { waitUntil: 'domcontentloaded', timeout: 10000 });
+      const body = await page.locator('body').innerText();
+      if (resp.status() === 200 && body.includes('"ok"')) pass('API /healthz (nginx api.stockresearch.local:8080)');
+      else fail('API /healthz (nginx api.stockresearch.local:8080)', `${resp.status()} ${body.slice(0, 40)}`);
+    } catch (e) { fail('API /healthz (nginx api.stockresearch.local:8080)', e.message.slice(0, 80)); }
     await ctx.close();
   }
 

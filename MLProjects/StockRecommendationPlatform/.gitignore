@@ -44,3 +44,7 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# Playwright screenshots (generated — not source)
+scripts/*.png
+frontend/scripts/*.png

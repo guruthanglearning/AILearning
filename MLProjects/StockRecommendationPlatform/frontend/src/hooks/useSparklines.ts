@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { getPriceHistory } from "@/lib/api";
 
-const CONCURRENCY = 3;
+const CONCURRENCY = 8;
 
 export function useSparklines(
   symbols: string[],

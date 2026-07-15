@@ -43,10 +43,62 @@ function chgColor(v: number | null): string {
   return v > 0 ? "text-green-400" : v < 0 ? "text-red-400" : "text-gray-400";
 }
 
+// ── Trend signal ──────────────────────────────────────────────────────────────
+
+function computeTrend(
+  row: MarketQuoteRow,
+  sparkPrices: number[],
+): "bullish" | "neutral" | "bearish" {
+  let score = 0;
+
+  // 30-day momentum from sparklines (primary signal, weight ±2)
+  if (sparkPrices.length >= 2) {
+    const ret = (sparkPrices[sparkPrices.length - 1] - sparkPrices[0]) / sparkPrices[0];
+    if (ret > 0.05)       score += 2;
+    else if (ret > 0.01)  score += 1;
+    else if (ret < -0.05) score -= 2;
+    else if (ret < -0.01) score -= 1;
+  }
+
+  // 52-week range position (secondary signal, weight ±1)
+  if (row.week_52_high != null && row.week_52_low != null && row.last_price != null) {
+    const range = row.week_52_high - row.week_52_low;
+    if (range > 0) {
+      const pos = (row.last_price - row.week_52_low) / range;
+      if (pos >= 0.70)      score += 1;
+      else if (pos <= 0.30) score -= 1;
+    }
+  }
+
+  if (score >= 2)  return "bullish";
+  if (score <= -2) return "bearish";
+  return "neutral";
+}
+
+type TrendSignal = "bullish" | "neutral" | "bearish";
+
+const TREND_CFG: Record<TrendSignal, { icon: string; label: string; cls: string }> = {
+  bullish: { icon: "↑", label: "Bullish", cls: "bg-emerald-900/40 border-emerald-700/50 text-emerald-400" },
+  neutral: { icon: "→", label: "Neutral", cls: "bg-gray-800/60 border-gray-700/40 text-gray-400" },
+  bearish: { icon: "↓", label: "Bearish", cls: "bg-red-900/40 border-red-700/50 text-red-400" },
+};
+
+function TrendBadge({ signal }: { signal: TrendSignal }) {
+  const { icon, label, cls } = TREND_CFG[signal];
+  return (
+    <span
+      className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${cls}`}
+      title="Trend signal: 30-day price momentum + 52-week range position. Not a price forecast."
+    >
+      {icon} {label}
+    </span>
+  );
+}
+
 // ── Sort helpers ──────────────────────────────────────────────────────────────
 
 type SortKey = keyof MarketQuoteRow;
-type ColKey  = SortKey | "sparkline";
+type ColKey  = SortKey | "sparkline" | "trend";
 type SortDir = "asc" | "desc";
 
 function getValue(row: MarketQuoteRow, key: SortKey): string | number {
@@ -92,17 +144,17 @@ function SparklineSvg({
   if (prices.length < 2) {
     return (
       <span
-        className="inline-flex w-[60px] h-[22px] items-center justify-center text-gray-700 text-[9px] cursor-pointer"
+        className="inline-flex w-[50px] h-[20px] items-center px-1 cursor-pointer"
         onClick={onClick}
-        title="Click to open chart"
+        title="Loading 30-day sparkline…"
       >
-        —
+        <span className="w-full h-[3px] rounded-full bg-gray-800 animate-pulse" />
       </span>
     );
   }
 
-  const W = 60;
-  const H = 22;
+  const W = 50;
+  const H = 20;
   const PAD = 2;
   const min = Math.min(...prices);
   const max = Math.max(...prices);
@@ -123,6 +175,7 @@ function SparklineSvg({
     <svg
       width={W}
       height={H}
+      style={{ minWidth: W }}
       className="cursor-pointer hover:opacity-70 transition-opacity"
       onClick={onClick}
       aria-label="Click to open technical chart"
@@ -274,26 +327,28 @@ interface ColDef {
   key: ColKey;
   label: string;
   subLabel?: string;
+  title?: string;
   sticky?: boolean;
   required?: boolean;
 }
 
 const COLUMNS: ColDef[] = [
-  { key: "symbol",             label: "Symbol",                  sticky: true, required: true },
-  { key: "sparkline",          label: "30d",                     required: true },
-  { key: "pre_mkt_price",      label: "Open/Pre",  subLabel: "Price"    },
-  { key: "pre_mkt_change",     label: "Open/Pre",  subLabel: "vs Prev"  },
-  { key: "last_price",         label: "Last Price"                        },
-  { key: "change",             label: "Change"                            },
-  { key: "post_mkt_price",     label: "AH/Post",   subLabel: "Price"    },
-  { key: "post_mkt_change",    label: "AH/Post",   subLabel: "vs Close" },
-  { key: "earnings_date",      label: "Earnings Date"                     },
-  { key: "market_cap",         label: "Market Cap"                        },
-  { key: "div_payment_date",   label: "Div Payment", subLabel: "Date"   },
-  { key: "exchange",           label: "Exchange"                          },
-  { key: "week_52_high",       label: "52-Wk High"                        },
-  { key: "week_52_low",        label: "52-Wk Low"                         },
-  { key: "shares_outstanding", label: "Shares Out"                        },
+  { key: "symbol",             label: "Symbol",    sticky: true, required: true },
+  { key: "sparkline",          label: "30d",       required: true },
+  { key: "trend",              label: "Trend",     subLabel: "Signal",  title: "Trend Signal (30-day momentum + 52-week range)" },
+  { key: "pre_mkt_price",      label: "Pre",       subLabel: "Price",   title: "Pre-Market Price" },
+  { key: "pre_mkt_change",     label: "Pre",       subLabel: "Chg",     title: "Pre-Market Change vs Previous Close" },
+  { key: "last_price",         label: "Last Price"                                                 },
+  { key: "change",             label: "Change",    title: "Price Change vs Previous Close"         },
+  { key: "post_mkt_price",     label: "Post",      subLabel: "Price",   title: "After-Hours Price" },
+  { key: "post_mkt_change",    label: "Post",      subLabel: "Chg",     title: "After-Hours Change vs Close" },
+  { key: "earnings_date",      label: "Earnings",  title: "Next Earnings Date"                     },
+  { key: "market_cap",         label: "Mkt Cap",   title: "Market Capitalization"                  },
+  { key: "div_payment_date",   label: "Div",       subLabel: "Date",    title: "Dividend Payment Date" },
+  { key: "exchange",           label: "Exch",      title: "Exchange (NASDAQ / NYSE / etc.)"        },
+  { key: "week_52_high",       label: "52W",       subLabel: "High",    title: "52-Week High" },
+  { key: "week_52_low",        label: "52W",       subLabel: "Low",     title: "52-Week Low"  },
+  { key: "shares_outstanding", label: "Shares",    title: "Shares Outstanding"                     },
 ];
 
 // ── Live price cell ───────────────────────────────────────────────────────────
@@ -323,7 +378,7 @@ function LivePriceCell({ live, fallback }: { live: LivePriceUpdate | null; fallb
 
 // ── Shared cell class ─────────────────────────────────────────────────────────
 
-const TD = "px-3 py-2 text-xs whitespace-nowrap";
+const TD = "px-2 py-1.5 text-xs whitespace-nowrap";
 
 // ── Cell content renderer ─────────────────────────────────────────────────────
 
@@ -361,6 +416,15 @@ function CellContent({
           onClick={() => onChartOpen(row.symbol)}
         />
       );
+    case "trend":
+      if ((sparklinePrices?.length ?? 0) < 2) {
+        return (
+          <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] border border-gray-800 bg-gray-800/30 text-gray-700 animate-pulse">
+            · · ·
+          </span>
+        );
+      }
+      return <TrendBadge signal={computeTrend(row, sparklinePrices!)} />;
     case "last_price":
       return (
         <span className="flex items-center gap-1">
@@ -409,13 +473,14 @@ function SortArrow({ active, dir }: { active: boolean; dir: SortDir }) {
 function Th({ col, sortKey, sortDir, onSort }: {
   col: ColDef; sortKey: SortKey; sortDir: SortDir; onSort: (k: ColKey) => void;
 }) {
-  const sortable = col.key !== "sparkline";
+  const sortable = col.key !== "sparkline" && col.key !== "trend";
   const active = sortable && sortKey === col.key;
   return (
     <th
       onClick={() => onSort(col.key)}
+      title={col.title ?? (col.subLabel ? `${col.label} (${col.subLabel})` : col.label)}
       className={[
-        "px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap",
+        "px-2 py-1.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap",
         sortable ? "select-none cursor-pointer transition-colors" : "cursor-default",
         active ? "text-indigo-300 bg-gray-800/60" : sortable ? "text-gray-400 hover:text-gray-200 hover:bg-gray-800/30" : "text-gray-500",
         col.sticky ? "sticky left-0 bg-gray-900 z-10" : "",
@@ -468,7 +533,7 @@ function Row({
 // ── CSV export ────────────────────────────────────────────────────────────────
 
 function exportCsv(rows: MarketQuoteRow[], cols: ColDef[]): void {
-  const dataCols = cols.filter((c) => c.key !== "sparkline");
+  const dataCols = cols.filter((c) => c.key !== "sparkline" && c.key !== "trend");
   const header = dataCols.map((c) => c.subLabel ? `${c.label} ${c.subLabel}` : c.label).join(",");
   const body = rows.map((row) =>
     dataCols.map((col) => {
@@ -641,7 +706,7 @@ export function MarketGrid({ onAnalyze }: MarketGridProps) {
   }, [symbols, intervalSec, fetchQuotes]);
 
   function handleSort(key: ColKey) {
-    if (key === "sparkline") return;
+    if (key === "sparkline" || key === "trend") return;
     const sk = key as SortKey;
     if (sk === sortKey) {
       setSortDir((d) => d === "asc" ? "desc" : "asc");
@@ -845,7 +910,12 @@ export function MarketGrid({ onAnalyze }: MarketGridProps) {
             </span>
           )}
           <span className="text-gray-700 ml-1">· Supplemental (earnings, market cap) always from Yahoo Finance</span>
-          {sparklines.size > 0 && (
+          {rows.length > 0 && sparklines.size < symbols.length && (
+            <span className="text-amber-700 ml-1 animate-pulse">
+              · Loading sparklines &amp; trends: {sparklines.size}/{symbols.length}
+            </span>
+          )}
+          {sparklines.size > 0 && sparklines.size >= symbols.length && (
             <span className="text-gray-700 ml-1">· 30d sparklines: {sparklines.size}/{symbols.length} loaded</span>
           )}
         </div>

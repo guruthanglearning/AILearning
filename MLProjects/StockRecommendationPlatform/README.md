@@ -1053,7 +1053,7 @@ pytest tests/test_agents.py -v
 
 ## Docker Setup
 
-The full stack — Postgres, Redis, backend, and frontend — all run as Docker containers.
+The full stack — Postgres, Redis, backend, frontend, and an nginx reverse proxy — all run as Docker containers.
 
 ### 1. Configure environment
 
@@ -1066,7 +1066,22 @@ FINNHUB_API_KEY=...
 
 Docker Compose reads `.env` automatically and injects keys into the backend container.
 
-### 2. Build and start all services
+### 2. Add domain-routing hosts entries (one-time)
+
+The frontend image bakes `NEXT_PUBLIC_API_URL=http://api.stockresearch.local:8080` in at build time, so the browser always calls the API at that hostname regardless of which URL you load the UI from. Add the required hosts entries once:
+
+```powershell
+.\scripts\add_hosts.ps1
+```
+
+This adds to `C:\Windows\System32\drivers\etc\hosts`:
+
+```
+127.0.0.1   stockresearch.local
+127.0.0.1   api.stockresearch.local
+```
+
+### 3. Build and start all services
 
 ```powershell
 docker compose up -d --build
@@ -1074,18 +1089,22 @@ docker compose up -d --build
 
 | Service | Container port | Host port |
 |---------|---------------|-----------|
-| Frontend (Next.js) | 3000 | **3010** → http://localhost:3010 |
-| Backend (FastAPI) | 8010 | **8010** → http://localhost:8010/docs |
+| **nginx** (reverse proxy) | 80 | **8080** → http://stockresearch.local:8080 (UI) / http://api.stockresearch.local:8080 (API) |
+| Frontend (Next.js) | 3000 | 3010 → http://localhost:3010 *(direct — API calls will fail without hosts entries; use nginx URL above instead)* |
+| Backend (FastAPI) | 8010 | 8010 → http://localhost:8010/docs |
 | PostgreSQL 16 | 5432 | 5433 |
 | Redis 7 | 6379 | 6380 |
 
 Alembic migrations run automatically on first boot inside the backend container.
 
-### 3. Useful commands
+**Recommended access:** open **http://stockresearch.local:8080** — nginx (`nginx/docker.conf`) proxies `stockresearch.local` → frontend and `api.stockresearch.local` → backend (with SSE/WebSocket-friendly settings: `proxy_buffering off`, 300s read timeout). The direct frontend port (3010) is still exposed for debugging, but since the frontend bundle always targets `api.stockresearch.local:8080`, loading the UI at `localhost:3010` will fail to reach the API unless the hosts entries from step 2 are present.
+
+### 4. Useful commands
 
 ```powershell
 docker compose logs -f app        # stream backend logs
 docker compose logs -f frontend   # stream frontend logs
+docker compose logs -f nginx      # stream reverse proxy logs
 docker compose ps                 # container status
 docker compose down               # stop (preserves volumes)
 docker compose down -v            # stop and destroy volumes

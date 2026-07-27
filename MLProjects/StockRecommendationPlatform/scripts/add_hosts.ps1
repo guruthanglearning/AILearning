@@ -3,7 +3,9 @@ $content = Get-Content $hostsFile -Raw
 
 $entries = @(
     "127.0.0.1   stockresearch.local",
-    "127.0.0.1   api.stockresearch.local"
+    "127.0.0.1   api.stockresearch.local",
+    "127.0.0.1   grafana.stockresearch.local",
+    "127.0.0.1   prometheus.stockresearch.local"
 )
 
 foreach ($entry in $entries) {

@@ -1080,6 +1080,8 @@ This adds to `C:\Windows\System32\drivers\etc\hosts`:
 ```
 127.0.0.1   stockresearch.local
 127.0.0.1   api.stockresearch.local
+127.0.0.1   grafana.stockresearch.local
+127.0.0.1   prometheus.stockresearch.local
 ```
 
 ### 3. Build and start all services
@@ -1095,12 +1097,12 @@ docker compose up -d --build
 | Backend (FastAPI) | 8010 | 8010 → http://localhost:8010/docs |
 | PostgreSQL 16 | 5432 | 5433 |
 | Redis 7 | 6379 | 6380 |
-| Prometheus | 9090 | 9090 → http://localhost:9090 |
-| Grafana | 3000 | 3300 → http://localhost:3300 (login `admin`/`admin`) |
+| Prometheus | 9090 | 9090 → http://localhost:9090 *(direct — for debugging)* |
+| Grafana | 3000 | 3300 → http://localhost:3300 *(direct — for debugging; login `admin`/`admin`)* |
 
 Alembic migrations run automatically on first boot inside the backend container.
 
-**Recommended access:** open **http://stockresearch.local:8080** — nginx (`nginx/docker.conf`) proxies `stockresearch.local` → frontend and `api.stockresearch.local` → backend (with SSE/WebSocket-friendly settings: `proxy_buffering off`, 300s read timeout). The direct frontend port (3010) is still exposed for debugging, but since the frontend bundle always targets `api.stockresearch.local:8080`, loading the UI at `localhost:3010` will fail to reach the API unless the hosts entries from step 2 are present.
+**Recommended access:** open **http://stockresearch.local:8080** — nginx (`nginx/docker.conf`) proxies `stockresearch.local` → frontend, `api.stockresearch.local` → backend, `grafana.stockresearch.local` → Grafana, and `prometheus.stockresearch.local` → Prometheus, all through the same port **8080** (with SSE/WebSocket-friendly settings: `proxy_buffering off`, 300s read timeout on the API route). The direct ports (3010, 9090, 3300) are still exposed for debugging, but since the frontend bundle always targets `api.stockresearch.local:8080`, loading the UI at `localhost:3010` will fail to reach the API unless the hosts entries from step 2 are present.
 
 ### 4. Useful commands
 
@@ -1236,11 +1238,15 @@ in both the Docker Compose and Kubernetes deployments.
 
 ### Docker Compose
 
-Started automatically with `docker compose up -d` (see [Docker Setup](#docker-setup)):
-- Prometheus: http://localhost:9090
-- Grafana: http://localhost:3300 (login `admin`/`admin`)
+Started automatically with `docker compose up -d` (see [Docker Setup](#docker-setup)). Same
+domain-routing convention as the app itself, proxied through nginx on port 8080:
+- Grafana: **http://grafana.stockresearch.local:8080** (login `admin`/`admin`)
+- Prometheus: **http://prometheus.stockresearch.local:8080**
 
-Config: `monitoring/prometheus.yml` (scrape target `app:8010`), `monitoring/grafana/provisioning/`.
+Direct ports (`localhost:3300`, `localhost:9090`) still work for debugging, same as the
+frontend's direct port — see the note in [Docker Setup](#docker-setup) step 3.
+
+Config: `monitoring/prometheus.yml` (scrape target `app:8010`), `monitoring/grafana/provisioning/`, `nginx/docker.conf`.
 
 ### Kubernetes
 

@@ -77,6 +77,8 @@ services:
     depends_on:
       - app
       - frontend
+      - grafana
+      - prometheus
     restart: unless-stopped
 
   prometheus:

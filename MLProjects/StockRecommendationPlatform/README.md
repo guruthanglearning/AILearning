@@ -22,7 +22,8 @@ A **production-oriented multi-agent research platform** that runs 7 specialist A
 12. [Running Tests](#running-tests)
 13. [Docker Setup](#docker-setup)
 14. [Kubernetes Setup](#kubernetes-setup)
-15. [Project Structure](#project-structure)
+15. [Monitoring](#monitoring)
+16. [Project Structure](#project-structure)
 
 ---
 
@@ -905,7 +906,7 @@ A degraded agent does **not** stop the analysis — the Supervisor proceeds with
 | Image builds | `k8s/build.ps1` — builds `stockresearch-backend:latest` and `stockresearch-frontend:k8s` |
 | Migrations | Alembic init container in K8s; runs automatically on Docker Compose first boot |
 | Tracing | OpenTelemetry → OTLP gRPC exporter |
-| Metrics | Prometheus `/metrics` |
+| Metrics | Prometheus `/metrics` — scraped + visualized in a provisioned Grafana dashboard ([details](#monitoring)) |
 | Logging | structlog JSON → stdout |
 
 ---
@@ -1094,6 +1095,8 @@ docker compose up -d --build
 | Backend (FastAPI) | 8010 | 8010 → http://localhost:8010/docs |
 | PostgreSQL 16 | 5432 | 5433 |
 | Redis 7 | 6379 | 6380 |
+| Prometheus | 9090 | 9090 → http://localhost:9090 |
+| Grafana | 3000 | 3300 → http://localhost:3300 (login `admin`/`admin`) |
 
 Alembic migrations run automatically on first boot inside the backend container.
 
@@ -1125,6 +1128,8 @@ The `k8s/` directory contains production-ready Kubernetes manifests deploying 2 
 | frontend | Deployment | **2** | NodePort **30300** |
 | postgres | StatefulSet | 1 | ClusterIP (in-cluster only) |
 | redis | Deployment | 1 | ClusterIP (in-cluster only) |
+| prometheus | Deployment | 1 | NodePort **30909** / Ingress `prometheus.stockresearch.local` |
+| grafana | Deployment | 1 | NodePort **30330** / Ingress `grafana.stockresearch.local` |
 
 ### Deploy to Docker Desktop Kubernetes
 
@@ -1193,12 +1198,67 @@ k8s/
 ├── backend/
 │   ├── deployment.yaml     # 2 replicas; init container runs alembic upgrade head
 │   └── service.yaml        # NodePort 30810
-└── frontend/
-    ├── deployment.yaml     # 2 replicas; image stockresearch-frontend:k8s
-    └── service.yaml        # NodePort 30300
+├── frontend/
+│   ├── deployment.yaml     # 2 replicas; image stockresearch-frontend:k8s
+│   └── service.yaml        # NodePort 30300
+├── prometheus/
+│   ├── prometheus.yml      # Scrape config — target backend-svc:8010, job stockrec-backend
+│   ├── deployment.yaml     # 1 replica
+│   └── service.yaml        # NodePort 30909
+└── grafana/
+    ├── datasource.yml      # Prometheus datasource (pinned uid: Prometheus)
+    ├── dashboard.yml       # Dashboard provider config
+    ├── stockrec-overview.json  # The dashboard itself
+    ├── deployment.yaml     # 1 replica
+    └── service.yaml        # NodePort 30330
 ```
 
+`prometheus/` and `grafana/` are wired into `kustomization.yaml` via `configMapGenerator`,
+which hashes each ConfigMap name and auto-rewrites the Deployment volume references — no
+manual name tracking needed when the provisioning files change.
+
 > `k8s/secret.yaml` is listed in `.gitignore` — actual secrets are never committed.
+
+---
+
+## Monitoring
+
+The backend already emits Prometheus metrics at `/metrics` (`app/observability.py` —
+`prometheus-fastapi-instrumentator`, plus custom `agent_latency_seconds` and
+`batch_job_symbols_total`). A Prometheus + Grafana stack scrapes and visualizes them, available
+in both the Docker Compose and Kubernetes deployments.
+
+**Dashboard** (`StockRecommendationPlatform — Overview`), 4 rows:
+- **Service Health** — backend up/down, HTTP request rate by status, p95 latency by endpoint, 5xx error rate
+- **Agent Performance** — p95 latency and call rate per agent (MarketData, Financials, Technicals, Options, Sentiment, etc.)
+- **Batch Jobs** — symbols processed by outcome
+- **Resource Usage** — backend process memory (RSS) and CPU usage
+
+### Docker Compose
+
+Started automatically with `docker compose up -d` (see [Docker Setup](#docker-setup)):
+- Prometheus: http://localhost:9090
+- Grafana: http://localhost:3300 (login `admin`/`admin`)
+
+Config: `monitoring/prometheus.yml` (scrape target `app:8010`), `monitoring/grafana/provisioning/`.
+
+### Kubernetes
+
+Deployed as part of `kubectl apply -k k8s\` (see [Kubernetes Setup](#kubernetes-setup)):
+- NodePort: Grafana `http://localhost:30330`, Prometheus `http://localhost:30909`
+- Ingress: `http://grafana.stockresearch.local`, `http://prometheus.stockresearch.local`
+  (add both to your hosts file alongside the `app.`/`api.` entries from
+  [Docker Setup](#docker-setup) step 2 — same idea, different hostnames)
+
+Config: `k8s/prometheus/`, `k8s/grafana/`.
+
+> **Note:** `k8s/grafana/dashboard.yml` and `k8s/grafana/stockrec-overview.json` are copies of
+> the files under `monitoring/grafana/provisioning/dashboards/` — kustomize's
+> `configMapGenerator` can't load files from outside the `k8s/` directory, so if the dashboard
+> changes, update both locations.
+
+> **Default credentials:** Grafana ships with `admin`/`admin` in both deployments — fine for
+> local dev, but change it before exposing either stack beyond localhost.
 
 ---
 
@@ -1310,6 +1370,9 @@ StockRecommendationPlatform/
 │   └── test_watchlists_router.py
 ├── docs/
 │   └── MASTER_PLAN.md
+├── monitoring/
+│   ├── prometheus.yml                  ← Scrape config for Docker Compose (target app:8010)
+│   └── grafana/provisioning/           ← Datasource + dashboard provisioning
 ├── docker-compose.yml
 ├── Dockerfile                          ← Backend image (runs alembic then uvicorn)
 ├── frontend/Dockerfile                 ← Frontend multi-stage standalone build

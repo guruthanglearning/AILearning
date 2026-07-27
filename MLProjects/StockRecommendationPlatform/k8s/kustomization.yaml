@@ -14,4 +14,22 @@ resources:
   - backend/service.yaml
   - frontend/deployment.yaml
   - frontend/service.yaml
+  - prometheus/deployment.yaml
+  - prometheus/service.yaml
+  - grafana/deployment.yaml
+  - grafana/service.yaml
   - ingress.yaml
+
+configMapGenerator:
+  - name: prometheus-config
+    files:
+      - prometheus.yml=prometheus/prometheus.yml
+  - name: grafana-datasource
+    files:
+      - datasource.yml=grafana/datasource.yml
+  - name: grafana-dashboard-provider
+    files:
+      - dashboard.yml=grafana/dashboard.yml
+  - name: grafana-dashboard-json
+    files:
+      - stockrec-overview.json=grafana/stockrec-overview.json

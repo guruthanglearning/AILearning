@@ -1,0 +1,15 @@
+# Copy of monitoring/grafana/provisioning/dashboards/dashboard.yml — kustomize's
+# configMapGenerator can't load files from outside the k8s/ dir, so keep both in sync.
+apiVersion: 1
+
+providers:
+  - name: StockRecommendationPlatform
+    orgId: 1
+    folder: ""
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards/json
+      foldersFromFilesStructure: false

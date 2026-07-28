@@ -70,6 +70,12 @@ _TTL_CACHE: dict[str, tuple[float, Any]] = {}
 _CACHE_TTL_SECS = 300        # 5 minutes (default: peers, momentum)
 _PRICE_HISTORY_TTL_SECS = 60  # 1 minute (price charts — fresher data per analysis)
 
+# Caps concurrent yfinance .info calls in /v1/market/quotes — a 40-symbol Market
+# Grid load previously fired all of them at once, which is what trips Yahoo's
+# rate limiter (see app/providers/yfinance_provider.py for the same guard on
+# the agent-fetch path).
+_YF_SUPPLEMENTARY_SEMAPHORE = asyncio.Semaphore(3)
+
 
 def _cache_get(key: str, ttl: float = _CACHE_TTL_SECS) -> Any | None:
     entry = _TTL_CACHE.get(key)
@@ -449,13 +455,20 @@ async def get_market_quotes(
                 "week_52_low":     info.get("fiftyTwoWeekLow"),
                 "shares_outstanding": info.get("sharesOutstanding"),
             }
-        except Exception:
+        except Exception as exc:
+            log.warning("yfinance_supplementary_fetch_failed", symbol=sym, error=str(exc))
             return {}
 
     loop = asyncio.get_event_loop()
-    supp_tasks = [loop.run_in_executor(None, _fetch_supplementary, s) for s in sym_list]
-    supp_list  = await asyncio.gather(*supp_tasks)
-    supp_map   = {sym: data for sym, data in zip(sym_list, supp_list)}
+
+    async def _fetch_supplementary_limited(sym: str) -> dict:
+        # Yahoo Finance rate-limits aggressively — cap concurrent .info calls,
+        # same guard as app/providers/yfinance_provider.py uses for agent fetches.
+        async with _YF_SUPPLEMENTARY_SEMAPHORE:
+            return await loop.run_in_executor(None, _fetch_supplementary, sym)
+
+    supp_list = await asyncio.gather(*(_fetch_supplementary_limited(s) for s in sym_list))
+    supp_map  = {sym: data for sym, data in zip(sym_list, supp_list)}
 
     # ── Step 3: Merge — Polygon prices take priority over yfinance ────────────
     now = datetime.now(tz=UTC)

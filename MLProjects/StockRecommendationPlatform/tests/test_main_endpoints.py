@@ -180,6 +180,19 @@ def test_healthz():
 
 
 # ---------------------------------------------------------------------------
+# GET /v1/docs/readme
+# ---------------------------------------------------------------------------
+
+
+def test_get_readme():
+    with TestClient(app) as client:
+        resp = client.get("/v1/docs/readme")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "# Stock Recommendation Platform" in body["content"]
+
+
+# ---------------------------------------------------------------------------
 # _resolve_universe helper
 # ---------------------------------------------------------------------------
 

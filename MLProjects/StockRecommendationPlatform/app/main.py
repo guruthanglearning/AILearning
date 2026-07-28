@@ -6,6 +6,7 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -181,6 +182,17 @@ def _batch_row_to_response(row: BatchJob) -> BatchJobResponse:
 @app.get("/healthz")
 def healthz() -> dict[str, str]:
     return {"status": "ok"}
+
+
+_README_PATH = Path(__file__).resolve().parent.parent / "README.md"
+
+
+@app.get("/v1/docs/readme")
+def get_readme() -> dict[str, str]:
+    """Serves the project README so the frontend /docs page always shows the live file."""
+    if not _README_PATH.exists():
+        raise HTTPException(status_code=404, detail="README.md not found")
+    return {"content": _README_PATH.read_text(encoding="utf-8")}
 
 
 @app.post("/v1/analysis/run", response_model=SupervisorVerdict)

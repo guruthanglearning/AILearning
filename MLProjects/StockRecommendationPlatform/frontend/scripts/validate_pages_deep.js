@@ -341,6 +341,31 @@ async function main() {
     await ctx.close();
   }
 
+  // ── 15. Docs ───────────────────────────────────────────────────────────────
+  console.log('\n[15] Docs page');
+  {
+    const { ctx, page, errors } = await openPage(browser);
+    try {
+      await nav(page, '/docs');
+      await page.waitForSelector('article', { timeout: 15000 });
+      const body = await page.locator('body').innerText();
+      const hasToc = body.includes('Table of Contents');
+      const hasMonitoring = body.includes('Monitoring');
+      if (hasToc && hasMonitoring) pass('Docs — README content loaded');
+      else fail('Docs — README content loaded', `toc=${hasToc} monitoring=${hasMonitoring}`);
+      const link = page.locator('article a', { hasText: 'Monitoring' }).first();
+      const href = await link.getAttribute('href');
+      await link.click();
+      await page.waitForTimeout(500);
+      const targetVisible = href ? await page.locator(href).isVisible() : false;
+      if (targetVisible) pass('Docs — TOC anchor link scrolls to heading');
+      else fail('Docs — TOC anchor link scrolls to heading');
+      if (corsErrors(errors).length) fail('Docs — no CORS errors', corsErrors(errors)[0].slice(0,80));
+      else pass('Docs — no CORS errors');
+    } catch (e) { fail('Docs', e.message.slice(0, 80)); }
+    await ctx.close();
+  }
+
   await browser.close();
 
   // ── Summary ────────────────────────────────────────────────────────────────

@@ -389,6 +389,7 @@ The Analysis page also opens a **WebSocket** connection (`/v1/ws/quote/{symbol}`
 | `/keys` | **API Keys** — create, list, and revoke API keys |
 | `/settings` | **Settings** — user preferences (default portfolio value, risk %, model selection) |
 | `/logs` | **Logs** — real-time error log viewer showing per-agent failures with symbol, agent name, status, and stack detail |
+| `/docs` | **Docs** — this README, rendered live in-app (fetched from the backend, always in sync with the current file) |
 
 ### Key Frontend Components
 
@@ -860,6 +861,7 @@ A degraded agent does **not** stop the analysis — the Supervisor proceeds with
 | `GET`  | `/metrics` | Prometheus metrics endpoint |
 | `GET`  | `/v1/claude/models` | List available Claude models with pricing |
 | `GET`  | `/v1/claude/usage` | Session token usage and estimated cost per model |
+| `GET`  | `/v1/docs/readme` | Raw README.md content, consumed by the `/docs` frontend page |
 
 ---
 
@@ -890,7 +892,8 @@ A degraded agent does **not** stop the analysis — the Supervisor proceeds with
 |-------|-----------|
 | Framework | Next.js 14 (App Router) |
 | Language | TypeScript |
-| Styling | Tailwind CSS |
+| Styling | Tailwind CSS (+ `@tailwindcss/typography` for the `/docs` markdown view) |
+| Markdown rendering | `react-markdown` + `remark-gfm` + `rehype-slug` (`/docs` page) |
 | State | React Context (AnalysisContext, ApiKeyContext) |
 | Streaming | fetch + ReadableStream SSE parser |
 | HTTP client | Native fetch |
@@ -1335,9 +1338,11 @@ StockRecommendationPlatform/
 │       │   ├── sector-heat/page.tsx
 │       │   ├── settings/page.tsx
 │       │   ├── keys/page.tsx
-│       │   └── logs/page.tsx
+│       │   ├── logs/page.tsx
+│       │   └── docs/page.tsx           ← Live README viewer
 │       ├── components/analysis/        ← Agent grid, verdict, options panels
 │       ├── components/market/          ← Market grid table
+│       ├── components/docs/ReadmeViewer.tsx  ← Fetches + renders README.md as markdown
 │       ├── contexts/                   ← AnalysisContext, ApiKeyContext
 │       ├── lib/api.ts                  ← fetch + streamAnalysis() helpers
 │       └── types/api.ts                ← TypeScript mirrors of Pydantic schemas

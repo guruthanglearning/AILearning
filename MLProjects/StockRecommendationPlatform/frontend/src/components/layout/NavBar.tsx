@@ -20,6 +20,7 @@ const NAV_LINKS = [
   { href: "/logs", label: "Logs" },
   { href: "/settings", label: "Settings" },
   { href: "/keys", label: "API Keys" },
+  { href: "/docs", label: "Docs" },
 ];
 
 export function NavBar() {

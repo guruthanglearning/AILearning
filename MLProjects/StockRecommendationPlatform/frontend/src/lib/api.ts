@@ -203,6 +203,13 @@ export async function setMarketMode(realtime: boolean): Promise<{ realtime: bool
   return res.json();
 }
 
+export async function getReadme(): Promise<string> {
+  const res = await fetch(`${API_URL}/v1/docs/readme`);
+  await checkResponse(res);
+  const data: { content: string } = await res.json();
+  return data.content;
+}
+
 export async function getMarketQuotes(symbols: string[]): Promise<MarketQuoteRow[]> {
   if (!symbols.length) return [];
   const res = await fetch(

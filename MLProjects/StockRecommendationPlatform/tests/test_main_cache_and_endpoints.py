@@ -12,7 +12,13 @@ import pytest
 from starlette.testclient import TestClient
 
 from app.limiter import limiter
-from app.main import _TTL_CACHE, _cache_get, _cache_set, app
+from app.main import (
+    _SUPPLEMENTARY_FAIL_TTL_SECS,
+    _TTL_CACHE,
+    _cache_get,
+    _cache_set,
+    app,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -434,3 +440,66 @@ def test_market_quotes_ticker_exception_returns_empty_row(monkeypatch):
     row = resp.json()[0]
     assert row["symbol"] == "ERR"
     assert row["last_price"] is None
+
+
+def test_market_quotes_supplementary_is_cached(monkeypatch):
+    """A second request within the TTL window should reuse the cached result and not
+    call yf.Ticker again — this is what prevents hammering Yahoo on every 10s Market
+    Grid poll (see the rate-limit incident this guards against)."""
+    call_count = 0
+
+    def _ticker_factory(sym):
+        nonlocal call_count
+        call_count += 1
+        return _mock_yf_for_market_quotes({"regularMarketPrice": 150.0, "marketCap": 999})
+
+    monkeypatch.setattr("app.main.yf.Ticker", _ticker_factory)
+
+    with TestClient(app) as client:
+        first = client.get("/v1/market/quotes?symbols=AAPL")
+        second = client.get("/v1/market/quotes?symbols=AAPL")
+
+    assert first.status_code == 200 and second.status_code == 200
+    assert first.json()[0]["market_cap"] == 999
+    assert second.json()[0]["market_cap"] == 999
+    assert call_count == 1
+
+
+def test_market_quotes_failed_fetch_retries_sooner_than_success(monkeypatch):
+    """A failed fetch (rate-limited, etc.) must not poison the cache for the full TTL —
+    only a short one, so a follow-up request soon after can retry rather than serving
+    stale nulls for 2 minutes."""
+    call_count = 0
+    fake_now = 1_000.0
+
+    class _RaisingTicker:
+        """`.info` raising (e.g. YFRateLimitError) is what actually hits the except
+        branch in _fetch_supplementary — unlike `ticker.info = None`, which the code's
+        `info = _ticker.info or {}` silently turns into a normal (still-truthy) result."""
+
+        @property
+        def info(self):
+            raise RuntimeError("Too Many Requests. Rate limited.")
+
+    def _ticker_factory(sym):
+        nonlocal call_count
+        call_count += 1
+        return _RaisingTicker()
+
+    monkeypatch.setattr("app.main.yf.Ticker", _ticker_factory)
+    monkeypatch.setattr("app.main.time.monotonic", lambda: fake_now)
+
+    with TestClient(app) as client:
+        client.get("/v1/market/quotes?symbols=FAIL")
+        assert call_count == 1
+
+        # Still within the short fail-TTL -> served from cache, no retry.
+        fake_now += _SUPPLEMENTARY_FAIL_TTL_SECS - 1
+        client.get("/v1/market/quotes?symbols=FAIL")
+        assert call_count == 1
+
+        # Past the short fail-TTL -> retries even though we're still well under
+        # the long success-TTL.
+        fake_now += 5
+        client.get("/v1/market/quotes?symbols=FAIL")
+        assert call_count == 2

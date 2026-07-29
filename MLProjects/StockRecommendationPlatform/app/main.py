@@ -75,6 +75,8 @@ _PRICE_HISTORY_TTL_SECS = 60  # 1 minute (price charts — fresher data per anal
 # rate limiter (see app/providers/yfinance_provider.py for the same guard on
 # the agent-fetch path).
 _YF_SUPPLEMENTARY_SEMAPHORE = asyncio.Semaphore(3)
+_SUPPLEMENTARY_TTL_SECS = 120       # earnings/market cap/div/exchange/52w/shares change slowly
+_SUPPLEMENTARY_FAIL_TTL_SECS = 20   # don't hammer Yahoo while rate-limited, but recover fast
 
 
 def _cache_get(key: str, ttl: float = _CACHE_TTL_SECS) -> Any | None:
@@ -462,10 +464,27 @@ async def get_market_quotes(
     loop = asyncio.get_event_loop()
 
     async def _fetch_supplementary_limited(sym: str) -> dict:
+        # Market Grid polls this endpoint every 10s by default (see MarketGrid.tsx
+        # intervalSec), and these fields (earnings, market cap, div date, exchange,
+        # 52w range, shares) barely change intraday — cache per symbol so repeated
+        # polls (and multiple open tabs) don't re-hit yfinance every 10s, which is
+        # what was tripping Yahoo's rate limiter. Failed fetches get a short TTL so
+        # we don't hammer Yahoo while already rate-limited, but recover quickly once
+        # it clears.
+        cache_key = f"yf_supplementary:{sym}"
+        entry = _TTL_CACHE.get(cache_key)
+        if entry is not None:
+            cached_value = entry[1]
+            ttl = _SUPPLEMENTARY_TTL_SECS if cached_value else _SUPPLEMENTARY_FAIL_TTL_SECS
+            if time.monotonic() - entry[0] < ttl:
+                return cached_value
+
         # Yahoo Finance rate-limits aggressively — cap concurrent .info calls,
         # same guard as app/providers/yfinance_provider.py uses for agent fetches.
         async with _YF_SUPPLEMENTARY_SEMAPHORE:
-            return await loop.run_in_executor(None, _fetch_supplementary, sym)
+            data = await loop.run_in_executor(None, _fetch_supplementary, sym)
+        _cache_set(cache_key, data)
+        return data
 
     supp_list = await asyncio.gather(*(_fetch_supplementary_limited(s) for s in sym_list))
     supp_map  = {sym: data for sym, data in zip(sym_list, supp_list)}

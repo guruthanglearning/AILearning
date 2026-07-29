@@ -4,8 +4,18 @@ from __future__ import annotations
 
 import pytest
 
+import app.main as main_module
 from app.schemas.agents import InstrumentRecommendation
 from app.services.claude_service import ClaudeVerdict
+
+
+@pytest.fixture(autouse=True)
+def clear_ttl_cache():
+    """_TTL_CACHE is a module-level dict (market quotes, peers, momentum, etc.) — clear it
+    between tests so one test's mocked response can't leak into another via the cache."""
+    main_module._TTL_CACHE.clear()
+    yield
+    main_module._TTL_CACHE.clear()
 
 
 def _build_claude_verdict(

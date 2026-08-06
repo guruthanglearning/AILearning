@@ -51,6 +51,15 @@ CLAUDE_MODELS: dict[str, dict] = {
         "supports_thinking": False,
         "est_cost_per_analysis": 0.004,
     },
+    "claude-fable-5": {
+        "label": "Fable 5",
+        "tier": "Frontier",
+        "description": "Most capable model — highest cost, thinking always on",
+        "input_price_per_m": 10.0,
+        "output_price_per_m": 50.0,
+        "supports_thinking": True,
+        "est_cost_per_analysis": 0.10,
+    },
 }
 DEFAULT_MODEL = "claude-opus-4-8"
 
@@ -429,7 +438,19 @@ async def get_claude_verdict(
         if model_cfg["supports_thinking"]:
             create_kwargs["thinking"] = {"type": "adaptive"}
 
-        response = await client.messages.create(**create_kwargs)
+        if chosen_model == "claude-fable-5":
+            # Fable 5 runs safety classifiers that can decline a request
+            # (stop_reason="refusal") more readily than Opus-tier models.
+            # Opt into the server-side fallback so a policy decline is
+            # re-served by Opus 4.8 in the same call instead of surfacing
+            # as a hard failure to the user. `fallbacks` isn't a typed param
+            # on this SDK version (0.107.1) yet — pass it via extra_body
+            # rather than upgrading the SDK just for this one field.
+            create_kwargs["betas"] = ["server-side-fallback-2026-06-01"]
+            create_kwargs["extra_body"] = {"fallbacks": [{"model": "claude-opus-4-8"}]}
+            response = await client.beta.messages.create(**create_kwargs)
+        else:
+            response = await client.messages.create(**create_kwargs)
 
     except anthropic.AuthenticationError as exc:
         raise ClaudeServiceError(
@@ -497,8 +518,12 @@ async def get_claude_verdict(
     entry["analyses"] += 1
     entry["input_tokens"] += response.usage.input_tokens
     entry["output_tokens"] += response.usage.output_tokens
-    input_cost = response.usage.input_tokens * model_cfg["input_price_per_m"] / 1_000_000
-    output_cost = response.usage.output_tokens * model_cfg["output_price_per_m"] / 1_000_000
+    # response.model is the model that actually served the response — differs from
+    # chosen_model when a Fable 5 refusal fell back to Opus 4.8 (see fallbacks above).
+    # Price by the model that was actually billed, not the one originally requested.
+    pricing_cfg = CLAUDE_MODELS.get(getattr(response, "model", chosen_model), model_cfg)
+    input_cost = response.usage.input_tokens * pricing_cfg["input_price_per_m"] / 1_000_000
+    output_cost = response.usage.output_tokens * pricing_cfg["output_price_per_m"] / 1_000_000
     entry["estimated_cost_usd"] = round(entry["estimated_cost_usd"] + input_cost + output_cost, 4)
 
     log.info(

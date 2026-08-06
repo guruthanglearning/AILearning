@@ -193,6 +193,23 @@ def test_get_readme():
 
 
 # ---------------------------------------------------------------------------
+# GET /v1/claude/models
+# ---------------------------------------------------------------------------
+
+
+def test_claude_models_includes_fable_5():
+    with TestClient(app) as client:
+        resp = client.get("/v1/claude/models")
+    assert resp.status_code == 200
+    models = resp.json()["models"]
+    assert "claude-fable-5" in models
+    fable = models["claude-fable-5"]
+    assert fable["input_price_per_m"] == 10.0
+    assert fable["output_price_per_m"] == 50.0
+    assert fable["supports_thinking"] is True
+
+
+# ---------------------------------------------------------------------------
 # _resolve_universe helper
 # ---------------------------------------------------------------------------
 
@@ -536,6 +553,27 @@ def test_stream_analysis_sse(monkeypatch):
     assert "agent_done" in resp.text
     assert "verdict" in resp.text
     assert "done" in resp.text
+
+
+def test_stream_analysis_sse_forwards_claude_model(monkeypatch):
+    """Regression test: claude_model was previously dropped on the SSE path — the
+    frontend's model selector (Haiku/Sonnet/Opus/Fable) had no effect on the main
+    Analysis page because this query param didn't exist and wasn't threaded into
+    AnalysisRunRequest. See app/supervisor.py's use of req.claude_model."""
+    captured_req = {}
+
+    async def _mock_stream(req):
+        captured_req["claude_model"] = req.claude_model
+        yield {"type": "done"}
+
+    import app.main as main_module
+    monkeypatch.setattr(main_module._supervisor, "stream_analysis", _mock_stream)
+
+    with TestClient(app) as client:
+        resp = client.get("/v1/analysis/stream/AAPL?claude_model=claude-fable-5")
+
+    assert resp.status_code == 200
+    assert captured_req["claude_model"] == "claude-fable-5"
 
 
 def test_stream_analysis_sse_exception_yields_error_event(monkeypatch):

@@ -218,6 +218,7 @@ async def run_analysis_get(
     symbol: str,
     portfolio_value_usd: float | None = None,
     max_risk_per_trade_pct: float | None = None,
+    claude_model: str | None = None,
 ) -> SupervisorVerdict:
     """GET convenience wrapper for quick testing. Hypothetical research only — not investment advice."""
     return await _supervisor.run_analysis(
@@ -225,6 +226,7 @@ async def run_analysis_get(
             symbol=symbol,
             portfolio_value_usd=portfolio_value_usd,
             max_risk_per_trade_pct=max_risk_per_trade_pct,
+            claude_model=claude_model,
         )
     )
 
@@ -236,12 +238,14 @@ async def stream_analysis_sse(
     symbol: str,
     portfolio_value_usd: float | None = None,
     max_risk_per_trade_pct: float | None = None,
+    claude_model: str | None = None,
 ) -> StreamingResponse:
     """SSE stream: yields agent_done events as each agent completes, then the full verdict."""
     req = AnalysisRunRequest(
         symbol=symbol,
         portfolio_value_usd=portfolio_value_usd,
         max_risk_per_trade_pct=max_risk_per_trade_pct,
+        claude_model=claude_model,
     )
 
     async def _generate():

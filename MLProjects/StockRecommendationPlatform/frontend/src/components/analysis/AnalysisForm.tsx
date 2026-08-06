@@ -44,6 +44,16 @@ const MODEL_OPTIONS = [
     activeBg: "bg-violet-900/40",
     activeBorder: "border-violet-500",
   },
+  {
+    id: "claude-fable-5",
+    label: "Fable 5",
+    tier: "Frontier",
+    cost: "~$0.10",
+    color: "text-amber-400",
+    border: "border-amber-700/50",
+    activeBg: "bg-amber-900/40",
+    activeBorder: "border-amber-500",
+  },
 ] as const;
 
 const DEFAULT_MODEL = "claude-opus-4-8";

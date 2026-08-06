@@ -139,6 +139,8 @@ export function streamAnalysis(
     url.searchParams.set("portfolio_value_usd", String(req.portfolio_value_usd));
   if (req.max_risk_per_trade_pct != null)
     url.searchParams.set("max_risk_per_trade_pct", String(req.max_risk_per_trade_pct));
+  if (req.claude_model)
+    url.searchParams.set("claude_model", req.claude_model);
 
   fetch(url.toString(), { headers: headers(apiKey), signal })
     .then(async (res) => {

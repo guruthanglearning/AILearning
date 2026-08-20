@@ -11,6 +11,7 @@ const MODEL_OPTIONS = [
   { id: "claude-sonnet-4-6",         label: "Sonnet 4.6 — Balanced" },
   { id: "claude-opus-4-8",           label: "Opus 4.8 — Professional" },
   { id: "claude-fable-5",            label: "Fable 5 — Frontier" },
+  { id: "gpt-4o-mini",               label: "GPT-4o mini — OpenAI" },
 ];
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {

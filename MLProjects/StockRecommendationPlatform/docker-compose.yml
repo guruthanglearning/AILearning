@@ -40,6 +40,7 @@ services:
       USE_REDIS: "true"
       POLYGON_API_KEY: "${POLYGON_API_KEY:-}"
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
       FINNHUB_API_KEY: "${FINNHUB_API_KEY:-}"
       CORS_ORIGINS: "http://localhost:3010,http://localhost:3000,http://localhost:3001,http://stockresearch.local,http://stockresearch.local:8080"
       AGENT_TIMEOUT_SECONDS: "45"

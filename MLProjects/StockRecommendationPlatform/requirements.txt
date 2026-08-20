@@ -27,6 +27,9 @@ slowapi>=0.1.9
 # Phase 11 — Claude LLM decision engine
 anthropic>=0.40.0
 
+# Phase 12 — Codex (OpenAI) alternate model provider
+openai>=1.50.0
+
 # Phase 5 — Observability
 structlog>=24.1.0
 opentelemetry-api>=1.24.0

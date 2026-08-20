@@ -54,6 +54,16 @@ const MODEL_OPTIONS = [
     activeBg: "bg-amber-900/40",
     activeBorder: "border-amber-500",
   },
+  {
+    id: "gpt-4o-mini",
+    label: "GPT-4o mini",
+    tier: "OpenAI",
+    cost: "~$0.001",
+    color: "text-teal-400",
+    border: "border-teal-700/50",
+    activeBg: "bg-teal-900/40",
+    activeBorder: "border-teal-500",
+  },
 ] as const;
 
 const DEFAULT_MODEL = "claude-opus-4-8";

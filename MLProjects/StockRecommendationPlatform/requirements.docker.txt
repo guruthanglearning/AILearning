@@ -24,7 +24,7 @@ slowapi>=0.1.9
 # Claude LLM decision engine
 anthropic>=0.40.0
 
-# Codex (OpenAI) alternate model provider
+# OpenAI (GPT-4o mini) alternate model provider
 openai>=1.50.0
 
 # Observability

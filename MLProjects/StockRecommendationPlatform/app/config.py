@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     # Phase 11 — Claude LLM decision engine
     anthropic_api_key: str | None = None
 
-    # Phase 12 — Codex (OpenAI) as an alternate model provider
+    # Phase 12 — OpenAI (GPT-4o mini) as an alternate model provider
     openai_api_key: str | None = None
 
     # Phase 6 — API hardening

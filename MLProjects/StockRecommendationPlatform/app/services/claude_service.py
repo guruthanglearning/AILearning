@@ -500,7 +500,7 @@ async def _call_anthropic_verdict(
 
 
 async def _call_openai_verdict(chosen_model: str, user_msg: str) -> tuple[dict[str, Any], int, int, str]:
-    """Call the OpenAI API (Codex) and return (tool_input, input_tokens, output_tokens, served_model)."""
+    """Call the OpenAI API and return (tool_input, input_tokens, output_tokens, served_model)."""
     import json
     import traceback
 
@@ -513,7 +513,7 @@ async def _call_openai_verdict(chosen_model: str, user_msg: str) -> tuple[dict[s
         raise ClaudeServiceError(
             "OPENAI_API_KEY is not configured. "
             "Add your OpenAI API key to the .env file (OPENAI_API_KEY=sk-...) "
-            "and restart the server to enable Codex-powered analysis."
+            "and restart the server to enable OpenAI-powered analysis."
         )
 
     try:
@@ -550,7 +550,7 @@ async def _call_openai_verdict(chosen_model: str, user_msg: str) -> tuple[dict[s
     except Exception as exc:
         tb = traceback.format_exc()
         raise ClaudeServiceError(
-            f"Unexpected error calling Codex ({type(exc).__name__}): {exc}\n\n{tb}"
+            f"Unexpected error calling OpenAI ({type(exc).__name__}): {exc}\n\n{tb}"
         ) from exc
 
     message = response.choices[0].message
@@ -560,7 +560,7 @@ async def _call_openai_verdict(chosen_model: str, user_msg: str) -> tuple[dict[s
     )
     if tool_call is None:
         raise ClaudeServiceError(
-            "Codex returned a response with no tool call — "
+            "OpenAI returned a response with no tool call — "
             "the model did not call submit_analysis_verdict as expected. "
             f"Response finish_reason: {response.choices[0].finish_reason}"
         )
@@ -568,7 +568,7 @@ async def _call_openai_verdict(chosen_model: str, user_msg: str) -> tuple[dict[s
     try:
         inp: dict[str, Any] = json.loads(tool_call.function.arguments)
     except json.JSONDecodeError as exc:
-        raise ClaudeServiceError(f"Codex returned malformed tool-call arguments: {exc}") from exc
+        raise ClaudeServiceError(f"OpenAI returned malformed tool-call arguments: {exc}") from exc
 
     usage = response.usage
     served_model = getattr(response, "model", chosen_model)

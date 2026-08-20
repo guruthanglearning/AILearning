@@ -32,6 +32,7 @@ CLAUDE_MODELS: dict[str, dict] = {
         "output_price_per_m": 25.0,
         "supports_thinking": True,
         "est_cost_per_analysis": 0.05,
+        "provider": "anthropic",
     },
     "claude-sonnet-4-6": {
         "label": "Sonnet 4.6",
@@ -41,6 +42,7 @@ CLAUDE_MODELS: dict[str, dict] = {
         "output_price_per_m": 15.0,
         "supports_thinking": True,
         "est_cost_per_analysis": 0.02,
+        "provider": "anthropic",
     },
     "claude-haiku-4-5-20251001": {
         "label": "Haiku 4.5",
@@ -50,6 +52,7 @@ CLAUDE_MODELS: dict[str, dict] = {
         "output_price_per_m": 5.0,
         "supports_thinking": False,
         "est_cost_per_analysis": 0.004,
+        "provider": "anthropic",
     },
     "claude-fable-5": {
         "label": "Fable 5",
@@ -59,6 +62,18 @@ CLAUDE_MODELS: dict[str, dict] = {
         "output_price_per_m": 50.0,
         "supports_thinking": True,
         "est_cost_per_analysis": 0.10,
+        "provider": "anthropic",
+    },
+    "gpt-4o-mini": {
+        "label": "GPT-4o mini",
+        "tier": "OpenAI",
+        "description": "OpenAI alternate provider — good reasoning at low cost",
+        # Verify against OpenAI's current published rate card if this drifts.
+        "input_price_per_m": 0.15,
+        "output_price_per_m": 0.60,
+        "supports_thinking": False,
+        "est_cost_per_analysis": 0.001,
+        "provider": "openai",
     },
 }
 DEFAULT_MODEL = "claude-opus-4-8"
@@ -205,6 +220,18 @@ _VERDICT_TOOL: dict[str, Any] = {
             "q3_max_loss_answer",
             "q4_assignment_answer",
         ],
+    },
+}
+
+
+# OpenAI's Chat Completions "tools" format wraps the same JSON schema Anthropic
+# uses for input_schema — reuse it instead of maintaining a second copy.
+_VERDICT_TOOL_OPENAI: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": _VERDICT_TOOL["name"],
+        "description": _VERDICT_TOOL["description"],
+        "parameters": _VERDICT_TOOL["input_schema"],
     },
 }
 
@@ -379,30 +406,15 @@ def _fmt_agents_prompt(
     return "\n".join(lines)
 
 
-async def get_claude_verdict(
-    symbol: str,
-    m: MarketDataOutput,
-    f: FundamentalsOutput,
-    tech: TechnicalsOutput,
-    opt: OptionsOutput,
-    risk: RiskProOutput,
-    sent: SentimentMLOutput,
-    decision_aids: DecisionAids,
-    model: str | None = None,
-) -> ClaudeVerdict:
-    """Call Claude to synthesize all agent outputs into a trading verdict.
-
-    Raises ClaudeServiceError on any failure — no fallback is provided.
-    """
+async def _call_anthropic_verdict(
+    chosen_model: str, model_cfg: dict, user_msg: str
+) -> tuple[dict[str, Any], int, int, str]:
+    """Call the Anthropic API and return (tool_input, input_tokens, output_tokens, served_model)."""
     import traceback
 
     import anthropic
 
     from app.config import settings
-    from app.schemas.agents import InstrumentRecommendation, OptionsGuidance
-
-    chosen_model = model if model in CLAUDE_MODELS else DEFAULT_MODEL
-    model_cfg = CLAUDE_MODELS[chosen_model]
 
     api_key = (settings.anthropic_api_key or "").strip()
     if not api_key:
@@ -414,12 +426,6 @@ async def get_claude_verdict(
 
     try:
         client = anthropic.AsyncAnthropic(api_key=api_key)
-
-        user_msg = _fmt_agents_prompt(symbol, m, f, tech, opt, risk, sent, decision_aids)
-        user_msg += (
-            "\n\nBased on all agent data above, provide your trading analysis verdict. "
-            "Be specific and cite actual numbers from the data."
-        )
 
         create_kwargs: dict = {
             "model": chosen_model,
@@ -489,6 +495,120 @@ async def get_claude_verdict(
         )
 
     inp: dict[str, Any] = tool_block.input  # type: ignore[attr-defined]
+    served_model = getattr(response, "model", chosen_model)
+    return inp, response.usage.input_tokens, response.usage.output_tokens, served_model
+
+
+async def _call_openai_verdict(chosen_model: str, user_msg: str) -> tuple[dict[str, Any], int, int, str]:
+    """Call the OpenAI API and return (tool_input, input_tokens, output_tokens, served_model)."""
+    import json
+    import traceback
+
+    import openai
+
+    from app.config import settings
+
+    api_key = (settings.openai_api_key or "").strip()
+    if not api_key:
+        raise ClaudeServiceError(
+            "OPENAI_API_KEY is not configured. "
+            "Add your OpenAI API key to the .env file (OPENAI_API_KEY=sk-...) "
+            "and restart the server to enable OpenAI-powered analysis."
+        )
+
+    try:
+        client = openai.AsyncOpenAI(api_key=api_key)
+        response = await client.chat.completions.create(
+            model=chosen_model,
+            max_completion_tokens=4096,
+            messages=[
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": user_msg},
+            ],
+            tools=[_VERDICT_TOOL_OPENAI],
+            tool_choice="required",
+        )
+    except openai.AuthenticationError as exc:
+        raise ClaudeServiceError(
+            f"OpenAI API authentication failed — check that OPENAI_API_KEY is correct. "
+            f"Detail: {exc}"
+        ) from exc
+    except openai.RateLimitError as exc:
+        raise ClaudeServiceError(
+            f"OpenAI API rate limit reached — too many requests. "
+            f"Wait a moment and retry. Detail: {exc}"
+        ) from exc
+    except openai.APIConnectionError as exc:
+        raise ClaudeServiceError(
+            f"Could not connect to OpenAI API — check network connectivity. "
+            f"Detail: {exc}"
+        ) from exc
+    except openai.APIStatusError as exc:
+        raise ClaudeServiceError(
+            f"OpenAI API returned status {exc.status_code}. Detail: {exc.message}"
+        ) from exc
+    except Exception as exc:
+        tb = traceback.format_exc()
+        raise ClaudeServiceError(
+            f"Unexpected error calling OpenAI ({type(exc).__name__}): {exc}\n\n{tb}"
+        ) from exc
+
+    message = response.choices[0].message
+    tool_call = next(
+        (tc for tc in (message.tool_calls or []) if tc.function.name == _VERDICT_TOOL["name"]),
+        None,
+    )
+    if tool_call is None:
+        raise ClaudeServiceError(
+            "OpenAI returned a response with no tool call — "
+            "the model did not call submit_analysis_verdict as expected. "
+            f"Response finish_reason: {response.choices[0].finish_reason}"
+        )
+
+    try:
+        inp: dict[str, Any] = json.loads(tool_call.function.arguments)
+    except json.JSONDecodeError as exc:
+        raise ClaudeServiceError(f"OpenAI returned malformed tool-call arguments: {exc}") from exc
+
+    usage = response.usage
+    served_model = getattr(response, "model", chosen_model)
+    return inp, usage.prompt_tokens, usage.completion_tokens, served_model
+
+
+async def get_claude_verdict(
+    symbol: str,
+    m: MarketDataOutput,
+    f: FundamentalsOutput,
+    tech: TechnicalsOutput,
+    opt: OptionsOutput,
+    risk: RiskProOutput,
+    sent: SentimentMLOutput,
+    decision_aids: DecisionAids,
+    model: str | None = None,
+) -> ClaudeVerdict:
+    """Call the selected provider (Anthropic or OpenAI) to synthesize all agent
+    outputs into a trading verdict.
+
+    Raises ClaudeServiceError on any failure — no fallback is provided.
+    """
+    from app.schemas.agents import InstrumentRecommendation, OptionsGuidance
+
+    chosen_model = model if model in CLAUDE_MODELS else DEFAULT_MODEL
+    model_cfg = CLAUDE_MODELS[chosen_model]
+
+    user_msg = _fmt_agents_prompt(symbol, m, f, tech, opt, risk, sent, decision_aids)
+    user_msg += (
+        "\n\nBased on all agent data above, provide your trading analysis verdict. "
+        "Be specific and cite actual numbers from the data."
+    )
+
+    if model_cfg.get("provider") == "openai":
+        inp, input_tokens, output_tokens, served_model = await _call_openai_verdict(chosen_model, user_msg)
+    else:
+        inp, input_tokens, output_tokens, served_model = await _call_anthropic_verdict(
+            chosen_model, model_cfg, user_msg
+        )
+
     rec_str: str = inp["instrument_recommendation"]
 
     options_guidance: OptionsGuidance | None = None
@@ -516,14 +636,14 @@ async def get_claude_verdict(
         {"analyses": 0, "input_tokens": 0, "output_tokens": 0, "estimated_cost_usd": 0.0},
     )
     entry["analyses"] += 1
-    entry["input_tokens"] += response.usage.input_tokens
-    entry["output_tokens"] += response.usage.output_tokens
-    # response.model is the model that actually served the response — differs from
+    entry["input_tokens"] += input_tokens
+    entry["output_tokens"] += output_tokens
+    # served_model is the model that actually served the response — differs from
     # chosen_model when a Fable 5 refusal fell back to Opus 4.8 (see fallbacks above).
     # Price by the model that was actually billed, not the one originally requested.
-    pricing_cfg = CLAUDE_MODELS.get(getattr(response, "model", chosen_model), model_cfg)
-    input_cost = response.usage.input_tokens * pricing_cfg["input_price_per_m"] / 1_000_000
-    output_cost = response.usage.output_tokens * pricing_cfg["output_price_per_m"] / 1_000_000
+    pricing_cfg = CLAUDE_MODELS.get(served_model, model_cfg)
+    input_cost = input_tokens * pricing_cfg["input_price_per_m"] / 1_000_000
+    output_cost = output_tokens * pricing_cfg["output_price_per_m"] / 1_000_000
     entry["estimated_cost_usd"] = round(entry["estimated_cost_usd"] + input_cost + output_cost, 4)
 
     log.info(
@@ -531,8 +651,8 @@ async def get_claude_verdict(
         symbol=symbol,
         model=chosen_model,
         recommendation=rec_str,
-        input_tokens=response.usage.input_tokens,
-        output_tokens=response.usage.output_tokens,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
         est_cost_usd=round(input_cost + output_cost, 4),
     )
 

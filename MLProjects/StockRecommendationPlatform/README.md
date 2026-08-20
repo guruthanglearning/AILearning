@@ -859,7 +859,7 @@ A degraded agent does **not** stop the analysis — the Supervisor proceeds with
 | `GET`  | `/v1/quote/live/{symbol}` | Lightweight live quote |
 | `POST` | `/v1/ingest/warm` | Pre-warm Redis cache for a symbol list |
 | `GET`  | `/metrics` | Prometheus metrics endpoint |
-| `GET`  | `/v1/claude/models` | List available Claude models with pricing |
+| `GET`  | `/v1/claude/models` | List available analysis models (Anthropic + OpenAI) with pricing |
 | `GET`  | `/v1/claude/usage` | Session token usage and estimated cost per model |
 | `GET`  | `/v1/docs/readme` | Raw README.md content, consumed by the `/docs` frontend page |
 
@@ -879,7 +879,7 @@ A degraded agent does **not** stop the analysis — the Supervisor proceeds with
 | Database | PostgreSQL 16 (asyncpg driver) |
 | Cache | Redis 7 (optional) |
 | Market data | yfinance (default), Polygon.io REST + WebSocket (optional) |
-| LLM decision engine | Anthropic Claude (Opus 4.8 default; Sonnet 4.6 / Haiku 4.5 selectable per-analysis from UI) |
+| LLM decision engine | Multi-provider, selectable per-analysis from UI — Anthropic Claude (Opus 4.8 default, Sonnet 4.6, Haiku 4.5, Fable 5) or OpenAI (GPT-4o mini) |
 | ML sentiment | FinBERT via HuggingFace Transformers / external StockPrediction API |
 | Rate limiting | SlowAPI (redis-backed in prod) |
 | Observability | structlog · OpenTelemetry · Prometheus |
@@ -937,7 +937,8 @@ All settings can be overridden via environment variables or a `.env` file in the
 | `OTEL_ENDPOINT` | *(empty)* | OTLP gRPC endpoint (empty → console exporter) |
 | `LOG_LEVEL` | `INFO` | structlog log level |
 | `BATCH_CONCURRENCY` | `5` | Concurrent symbols per batch job |
-| `ANTHROPIC_API_KEY` | *(required)* | Claude API key — needed for the LLM decision engine |
+| `ANTHROPIC_API_KEY` | *(required)* | Claude API key — needed for the Anthropic-family LLM models |
+| `OPENAI_API_KEY` | *(optional)* | OpenAI API key — needed only if GPT-4o mini is selected as the analysis model |
 
 ---
 
@@ -972,6 +973,7 @@ Create a `.env` file in the project root:
 
 ```dotenv
 ANTHROPIC_API_KEY=sk-ant-api03-...
+OPENAI_API_KEY=sk-...         # optional — only needed for the GPT-4o mini model option
 POLYGON_API_KEY=...          # optional — falls back to yfinance
 FINNHUB_API_KEY=...          # optional
 DATABASE_URL=postgresql+asyncpg://rec:rec@localhost:5433/recommendation
@@ -1064,11 +1066,12 @@ The full stack — Postgres, Redis, backend, frontend, and an nginx reverse prox
 ```powershell
 # Create .env in project root (gitignored)
 ANTHROPIC_API_KEY=sk-ant-api03-...
+OPENAI_API_KEY=sk-...        # optional — only needed for the GPT-4o mini model option
 POLYGON_API_KEY=...
 FINNHUB_API_KEY=...
 ```
 
-Docker Compose reads `.env` automatically and injects keys into the backend container.
+Docker Compose reads `.env` automatically and injects keys into the backend container. After changing `.env`, recreate the `app` container so it picks up the new value: `docker compose up -d --force-recreate app`.
 
 ### 2. Add domain-routing hosts entries (one-time)
 
@@ -1148,7 +1151,7 @@ Docker Desktop's built-in Kubernetes is the easiest local option — it shares t
 
 # 2. Create secret (copy template, fill in real keys — never commit this file)
 Copy-Item k8s\secret.yaml.example k8s\secret.yaml
-# Edit k8s\secret.yaml and set ANTHROPIC_API_KEY, POLYGON_API_KEY, etc.
+# Edit k8s\secret.yaml and set ANTHROPIC_API_KEY, OPENAI_API_KEY, POLYGON_API_KEY, etc.
 
 # 3. Apply the secret (outside kustomize — keeps it out of git)
 kubectl --context docker-desktop apply -f k8s\secret.yaml

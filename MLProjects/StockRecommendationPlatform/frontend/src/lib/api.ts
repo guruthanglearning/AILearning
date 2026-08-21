@@ -3,6 +3,7 @@ import type {
   AlertCreate,
   AlertResponse,
   AnalysisHistoryItem,
+  AnalysisRunDetail,
   AnalysisRunRequest,
   ApiKeyResponse,
   BatchJobRequest,
@@ -119,6 +120,17 @@ export async function getAllAnalysisHistory(
   const params = new URLSearchParams({ limit: String(limit) });
   if (symbol) params.set("symbol", symbol);
   const res = await fetch(`${API_URL}/v1/analysis/history?${params}`);
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function getAnalysisRunDetail(
+  apiKey: string,
+  runId: string
+): Promise<AnalysisRunDetail> {
+  const res = await fetch(`${API_URL}/v1/analysis/history/detail/${encodeURIComponent(runId)}`, {
+    headers: headers(apiKey),
+  });
   await checkResponse(res);
   return res.json();
 }

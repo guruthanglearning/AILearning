@@ -95,6 +95,13 @@ export function AnalysisForm({ onSubmit, isLoading, defaultSymbol = "" }: Analys
     }
   }, [defaultSymbol, settings.default_symbol]);
 
+  // Re-sync from defaultSymbol when it becomes available after mount — e.g. a
+  // saved report loaded via ?run_id= resolves asynchronously, after this form
+  // already mounted with an empty defaultSymbol.
+  useEffect(() => {
+    if (defaultSymbol) setSymbol(defaultSymbol.toUpperCase());
+  }, [defaultSymbol]);
+
   useEffect(() => {
     getClaudeUsage().then(setUsage).catch(() => {});
   }, []);

@@ -339,6 +339,18 @@ export interface AnalysisHistoryItem {
   status: string;
 }
 
+export interface AnalysisRunDetail {
+  run_id: string;
+  symbol: string;
+  status: string;
+  started_at: string;
+  finished_at: string | null;
+  last_price: number | null;
+  portfolio_value_usd: number | null;
+  max_risk_per_trade_pct: number | null;
+  verdict: SupervisorVerdict | null;
+}
+
 // ─── Market grid ─────────────────────────────────────────────────────────────
 
 export interface MomentumStockRow {

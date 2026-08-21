@@ -310,6 +310,21 @@ class AnalysisHistoryItem(BaseModel):
     status: str
 
 
+class AnalysisRunDetail(BaseModel):
+    """Full saved report for a past analysis run — lets the UI show what was
+    already computed instead of re-running (and re-billing) the analysis."""
+
+    run_id: uuid.UUID
+    symbol: str
+    status: str
+    started_at: datetime
+    finished_at: datetime | None = None
+    last_price: float | None = None
+    portfolio_value_usd: float | None = None
+    max_risk_per_trade_pct: float | None = None
+    verdict: SupervisorVerdict | None = None
+
+
 class MarketQuoteRow(BaseModel):
     symbol: str
     pre_mkt_price: float | None = None

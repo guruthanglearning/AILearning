@@ -3,7 +3,7 @@
 import { createContext, useContext, useRef, useState } from "react";
 
 import { useApiKey } from "@/contexts/ApiKeyContext";
-import { streamAnalysis } from "@/lib/api";
+import { getAnalysisRunDetail, streamAnalysis } from "@/lib/api";
 import type { AgentContribution, AnalysisRunRequest, SupervisorVerdict } from "@/types/api";
 
 export const KNOWN_AGENTS = [
@@ -23,7 +23,9 @@ interface AnalysisState {
   isFetching: boolean;
   error: Error | null;
   startedAt: number | null;
+  savedReportAt: string | null;
   submit: (req: AnalysisRunRequest) => void;
+  loadSaved: (runId: string) => Promise<void>;
   clear: () => void;
 }
 
@@ -37,12 +39,17 @@ export function AnalysisProvider({ children }: { children: React.ReactNode }) {
   const [isFetching, setIsFetching] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [savedReportAt, setSavedReportAt] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Bumped by every submit()/loadSaved() call so a slower, superseded request
+  // can detect it's stale and avoid clobbering newer state when it resolves.
+  const requestSeq = useRef(0);
 
   function submit(newReq: AnalysisRunRequest) {
     abortRef.current?.abort();
     const ctrl = new AbortController();
     abortRef.current = ctrl;
+    requestSeq.current += 1;
 
     setReq(newReq);
     setStartedAt(Date.now());
@@ -50,6 +57,7 @@ export function AnalysisProvider({ children }: { children: React.ReactNode }) {
     setError(null);
     setVerdict(null);
     setPartialContributions([]);
+    setSavedReportAt(null);
 
     streamAnalysis(
       apiKey,
@@ -85,6 +93,35 @@ export function AnalysisProvider({ children }: { children: React.ReactNode }) {
     );
   }
 
+  async function loadSaved(runId: string) {
+    abortRef.current?.abort();
+    const seq = ++requestSeq.current;
+    setIsFetching(true);
+    setError(null);
+    setVerdict(null);
+    setPartialContributions([]);
+    setSavedReportAt(null);
+    try {
+      const detail = await getAnalysisRunDetail(apiKey, runId);
+      if (requestSeq.current !== seq) return; // superseded by a newer submit()/loadSaved()
+      setReq({
+        symbol: detail.symbol,
+        portfolio_value_usd: detail.portfolio_value_usd ?? undefined,
+        max_risk_per_trade_pct: detail.max_risk_per_trade_pct ?? undefined,
+      });
+      setVerdict(detail.verdict);
+      setSavedReportAt(detail.finished_at ?? detail.started_at);
+      if (!detail.verdict) {
+        setError(new Error("This run has no saved report data."));
+      }
+    } catch (e) {
+      if (requestSeq.current !== seq) return;
+      setError(e instanceof Error ? e : new Error("Failed to load saved report"));
+    } finally {
+      if (requestSeq.current === seq) setIsFetching(false);
+    }
+  }
+
   function clear() {
     abortRef.current?.abort();
     setReq(null);
@@ -92,12 +129,24 @@ export function AnalysisProvider({ children }: { children: React.ReactNode }) {
     setPartialContributions([]);
     setError(null);
     setStartedAt(null);
+    setSavedReportAt(null);
     setIsFetching(false);
   }
 
   return (
     <AnalysisContext.Provider
-      value={{ req, verdict, partialContributions, isFetching, error, startedAt, submit, clear }}
+      value={{
+        req,
+        verdict,
+        partialContributions,
+        isFetching,
+        error,
+        startedAt,
+        savedReportAt,
+        submit,
+        loadSaved,
+        clear,
+      }}
     >
       {children}
     </AnalysisContext.Provider>

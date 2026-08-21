@@ -41,11 +41,15 @@ export function AnalysisProvider({ children }: { children: React.ReactNode }) {
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [savedReportAt, setSavedReportAt] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Bumped by every submit()/loadSaved() call so a slower, superseded request
+  // can detect it's stale and avoid clobbering newer state when it resolves.
+  const requestSeq = useRef(0);
 
   function submit(newReq: AnalysisRunRequest) {
     abortRef.current?.abort();
     const ctrl = new AbortController();
     abortRef.current = ctrl;
+    requestSeq.current += 1;
 
     setReq(newReq);
     setStartedAt(Date.now());
@@ -91,6 +95,7 @@ export function AnalysisProvider({ children }: { children: React.ReactNode }) {
 
   async function loadSaved(runId: string) {
     abortRef.current?.abort();
+    const seq = ++requestSeq.current;
     setIsFetching(true);
     setError(null);
     setVerdict(null);
@@ -98,6 +103,7 @@ export function AnalysisProvider({ children }: { children: React.ReactNode }) {
     setSavedReportAt(null);
     try {
       const detail = await getAnalysisRunDetail(apiKey, runId);
+      if (requestSeq.current !== seq) return; // superseded by a newer submit()/loadSaved()
       setReq({
         symbol: detail.symbol,
         portfolio_value_usd: detail.portfolio_value_usd ?? undefined,
@@ -109,9 +115,10 @@ export function AnalysisProvider({ children }: { children: React.ReactNode }) {
         setError(new Error("This run has no saved report data."));
       }
     } catch (e) {
+      if (requestSeq.current !== seq) return;
       setError(e instanceof Error ? e : new Error("Failed to load saved report"));
     } finally {
-      setIsFetching(false);
+      if (requestSeq.current === seq) setIsFetching(false);
     }
   }
 

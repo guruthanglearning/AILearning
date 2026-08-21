@@ -198,16 +198,20 @@ function HomePage() {
     submit,
     loadSaved,
   } = useAnalysis();
-  const autoSubmitted = useRef(false);
+  // Tracks the last (run_id|symbol) query-param combo already acted on, so that
+  // navigating to a *different* run_id or symbol while this page stays mounted
+  // (client-side nav without a remount) still triggers a fresh load/submit —
+  // unlike a one-shot boolean, which would only ever fire once per mount.
+  const lastAutoParam = useRef<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
-    if (autoSubmitted.current) return;
+    const key = runId ? `run:${runId}` : autoSymbol ? `symbol:${autoSymbol}` : null;
+    if (!key || lastAutoParam.current === key) return;
+    lastAutoParam.current = key;
     if (runId) {
-      autoSubmitted.current = true;
       loadSaved(runId);
-    } else if (autoSymbol) {
-      autoSubmitted.current = true;
+    } else {
       submit({ symbol: autoSymbol });
     }
   }, [runId, autoSymbol]); // eslint-disable-line react-hooks/exhaustive-deps

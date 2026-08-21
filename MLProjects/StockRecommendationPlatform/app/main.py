@@ -710,8 +710,8 @@ async def get_analysis_run_detail(request: Request, run_id: uuid.UUID) -> Analys
     show it without re-running (and re-billing) the analysis."""
     async for session in get_session():
         row = await session.get(AnalysisRun, run_id)
-        if row is None:
-            raise HTTPException(status_code=404, detail="Analysis run not found")
+        if row is None or row.status != "complete":
+            raise HTTPException(status_code=404, detail="Analysis run not found or not yet complete")
         return AnalysisRunDetail(
             run_id=row.id,
             symbol=row.symbol,

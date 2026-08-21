@@ -199,6 +199,17 @@ def test_run_detail_null_verdict_when_no_verdict_json(monkeypatch):
     assert resp.json()["verdict"] is None
 
 
+def test_run_detail_404_when_run_not_complete(monkeypatch):
+    run = _fake_run_with_verdict()
+    run.status = "running"
+    monkeypatch.setattr("app.main.get_session", _session_with_get(run))
+
+    with TestClient(app) as client:
+        resp = client.get(f"/v1/analysis/history/detail/{run.id}")
+
+    assert resp.status_code == 404
+
+
 # ---------------------------------------------------------------------------
 # POST /v1/ingest/warm
 # ---------------------------------------------------------------------------

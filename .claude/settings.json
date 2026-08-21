@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s http://localhost:*)",
+      "Bash(curl -s \"http://localhost:*)",
+      "Bash(curl -sv \"http://localhost:*)",
+      "Bash(curl -s -G \"http://localhost:*)",
+      "Bash(curl -s -u admin:admin \"http://localhost:*)",
+      "Bash(docker compose ps)",
+      "Bash(docker compose ps *)",
+      "Bash(gh run watch *)",
+      "Bash(node frontend/scripts/validate_pages_deep.js)",
+      "Bash(node frontend/scripts/validate_full_ui.js)",
+      "Bash(kubectl rollout status *)"
+    ]
+  }
+}

@@ -129,6 +129,77 @@ def test_history_limit_param(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# GET /v1/analysis/history/detail/{run_id}
+# ---------------------------------------------------------------------------
+
+
+def _session_with_get(row):
+    async def _gen():
+        session = AsyncMock()
+        session.get = AsyncMock(return_value=row)
+        yield session
+
+    def _factory():
+        return _gen()
+
+    return _factory
+
+
+def _fake_run_with_verdict() -> MagicMock:
+    row = MagicMock()
+    row.id = uuid.uuid4()
+    row.symbol = "AAPL"
+    row.status = "complete"
+    row.started_at = datetime(2025, 5, 1, tzinfo=UTC)
+    row.finished_at = datetime(2025, 5, 1, 0, 1, tzinfo=UTC)
+    row.last_price = 150.0
+    row.portfolio_value_usd = 10_000.0
+    row.max_risk_per_trade_pct = 2.0
+    row.verdict_json = {
+        "instrument_recommendation": "stock",
+        "confidence_note": "test note",
+    }
+    return row
+
+
+def test_run_detail_returns_saved_verdict(monkeypatch):
+    run = _fake_run_with_verdict()
+    monkeypatch.setattr("app.main.get_session", _session_with_get(run))
+
+    with TestClient(app) as client:
+        resp = client.get(f"/v1/analysis/history/detail/{run.id}")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["symbol"] == "AAPL"
+    assert data["run_id"] == str(run.id)
+    assert data["portfolio_value_usd"] == pytest.approx(10_000.0)
+    assert data["verdict"]["instrument_recommendation"] == "stock"
+    assert data["verdict"]["confidence_note"] == "test note"
+
+
+def test_run_detail_404_when_missing(monkeypatch):
+    monkeypatch.setattr("app.main.get_session", _session_with_get(None))
+
+    with TestClient(app) as client:
+        resp = client.get(f"/v1/analysis/history/detail/{uuid.uuid4()}")
+
+    assert resp.status_code == 404
+
+
+def test_run_detail_null_verdict_when_no_verdict_json(monkeypatch):
+    run = _fake_run_with_verdict()
+    run.verdict_json = None
+    monkeypatch.setattr("app.main.get_session", _session_with_get(run))
+
+    with TestClient(app) as client:
+        resp = client.get(f"/v1/analysis/history/detail/{run.id}")
+
+    assert resp.status_code == 200
+    assert resp.json()["verdict"] is None
+
+
+# ---------------------------------------------------------------------------
 # POST /v1/ingest/warm
 # ---------------------------------------------------------------------------
 

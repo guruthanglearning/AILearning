@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { ConfirmButton } from "@/components/ui/ConfirmButton";
 import { Spinner } from "@/components/ui/Spinner";
@@ -14,8 +15,20 @@ import { WatchlistSymbolList } from "./WatchlistSymbolList";
 function BatchPanel({ watchlistId }: { watchlistId: string; watchlistName: string }) {
   const { data: symbolRows } = useListWatchlistSymbols(watchlistId, true);
   const { job, loading, error, start, reset } = useBatchJob();
+  const qc = useQueryClient();
+  const invalidatedForJob = useRef<string | null>(null);
 
   const symbols = (symbolRows ?? []).map((s) => s.symbol);
+
+  useEffect(() => {
+    if (!job) return;
+    const settled = job.status === "complete" || job.status === "partial";
+    if (!settled || invalidatedForJob.current === job.job_id) return;
+    invalidatedForJob.current = job.job_id;
+    job.results.forEach((r) => {
+      qc.invalidateQueries({ queryKey: ["analysis", "history", r.symbol] });
+    });
+  }, [job, qc]);
 
   if (!symbols.length) return null;
 

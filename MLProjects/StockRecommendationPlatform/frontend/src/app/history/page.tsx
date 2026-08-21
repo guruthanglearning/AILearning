@@ -106,8 +106,9 @@ export default function HistoryPage() {
                 <tr key={item.run_id} className="border-b border-gray-800/60 hover:bg-gray-800/30">
                   <td className="py-2.5 px-2 pl-0 font-mono font-bold">
                     <button
-                      onClick={() => router.push(`/?symbol=${item.symbol}`)}
+                      onClick={() => router.push(`/?run_id=${item.run_id}`)}
                       className="text-indigo-400 hover:text-indigo-300 transition-colors"
+                      title="View the saved report — does not re-run the analysis"
                     >
                       {item.symbol}
                     </button>

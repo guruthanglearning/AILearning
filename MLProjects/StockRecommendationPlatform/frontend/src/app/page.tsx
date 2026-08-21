@@ -186,16 +186,31 @@ function HowToReadButton({ onClick }: { onClick: () => void }) {
 function HomePage() {
   const searchParams = useSearchParams();
   const autoSymbol = searchParams.get("symbol") ?? "";
-  const { req, verdict, partialContributions, isFetching, error, startedAt, submit } = useAnalysis();
+  const runId = searchParams.get("run_id") ?? "";
+  const {
+    req,
+    verdict,
+    partialContributions,
+    isFetching,
+    error,
+    startedAt,
+    savedReportAt,
+    submit,
+    loadSaved,
+  } = useAnalysis();
   const autoSubmitted = useRef(false);
   const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
-    if (autoSymbol && !autoSubmitted.current) {
+    if (autoSubmitted.current) return;
+    if (runId) {
+      autoSubmitted.current = true;
+      loadSaved(runId);
+    } else if (autoSymbol) {
       autoSubmitted.current = true;
       submit({ symbol: autoSymbol });
     }
-  }, [autoSymbol]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [runId, autoSymbol]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = (newReq: AnalysisRunRequest) => submit(newReq);
   const handleRerun  = useCallback(() => { if (req) submit(req); }, [req, submit]);
@@ -217,6 +232,28 @@ function HomePage() {
       )}
 
       {error && !isFetching && <ErrorMessage error={error as Error} />}
+
+      {savedReportAt && verdict && !isFetching && (
+        <div className="flex items-center justify-between gap-3 bg-indigo-950/40 border border-indigo-900/60 rounded-lg px-4 py-2 text-xs text-indigo-300">
+          <span>
+            Viewing a saved report from{" "}
+            {new Date(savedReportAt).toLocaleString(undefined, {
+              month: "short",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+            . No new analysis was run.
+          </span>
+          <button
+            type="button"
+            onClick={handleRerun}
+            className="shrink-0 text-indigo-300 hover:text-indigo-200 underline underline-offset-2"
+          >
+            Re-run now
+          </button>
+        </div>
+      )}
 
       {/* ── STAGE 1 — Go / No-Go ─────────────────────────────────────── */}
       {req?.symbol && (

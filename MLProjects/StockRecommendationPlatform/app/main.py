@@ -50,6 +50,7 @@ from app.routers import settings as settings_router
 from app.routers import watchlists as watchlists_router
 from app.schemas.agents import (
     AnalysisHistoryItem,
+    AnalysisRunDetail,
     AnalysisRunRequest,
     LiveQuote,
     MarketQuoteRow,
@@ -700,6 +701,29 @@ async def get_all_analysis_history(
                 )
             )
         return items
+
+
+@app.get("/v1/analysis/history/detail/{run_id}", response_model=AnalysisRunDetail)
+@limiter.limit(settings.rate_limit_default)
+async def get_analysis_run_detail(request: Request, run_id: uuid.UUID) -> AnalysisRunDetail:
+    """Return the full saved report for one past analysis run, so the UI can
+    show it without re-running (and re-billing) the analysis."""
+    async for session in get_session():
+        row = await session.get(AnalysisRun, run_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Analysis run not found")
+        return AnalysisRunDetail(
+            run_id=row.id,
+            symbol=row.symbol,
+            status=row.status,
+            started_at=row.started_at,
+            finished_at=row.finished_at,
+            last_price=row.last_price,
+            portfolio_value_usd=row.portfolio_value_usd,
+            max_risk_per_trade_pct=row.max_risk_per_trade_pct,
+            verdict=row.verdict_json,
+        )
+    raise HTTPException(status_code=404, detail="Analysis run not found")
 
 
 @app.get("/v1/price-history/{symbol}")

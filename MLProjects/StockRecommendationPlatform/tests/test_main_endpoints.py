@@ -129,6 +129,69 @@ def test_history_limit_param(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# GET /v1/analysis/history/latest
+# ---------------------------------------------------------------------------
+
+
+def test_latest_per_symbol_returns_map(monkeypatch):
+    runs = [_fake_run("AAPL"), _fake_run("MSFT")]
+    monkeypatch.setattr("app.main.get_session", _mk_session(runs))
+
+    with TestClient(app) as client:
+        resp = client.get("/v1/analysis/history/latest?symbols=AAPL,MSFT")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert set(data.keys()) == {"AAPL", "MSFT"}
+    assert data["AAPL"]["symbol"] == "AAPL"
+    assert data["MSFT"]["symbol"] == "MSFT"
+
+
+def test_latest_per_symbol_missing_symbol_is_null(monkeypatch):
+    runs = [_fake_run("AAPL")]
+    monkeypatch.setattr("app.main.get_session", _mk_session(runs))
+
+    with TestClient(app) as client:
+        resp = client.get("/v1/analysis/history/latest?symbols=AAPL,TSLA")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["AAPL"]["symbol"] == "AAPL"
+    assert data["TSLA"] is None
+
+
+def test_latest_per_symbol_normalizes_case_and_dedupes(monkeypatch):
+    runs = [_fake_run("AAPL")]
+    monkeypatch.setattr("app.main.get_session", _mk_session(runs))
+
+    with TestClient(app) as client:
+        resp = client.get("/v1/analysis/history/latest?symbols=aapl,AAPL, aapl ")
+
+    assert resp.status_code == 200
+    assert list(resp.json().keys()) == ["AAPL"]
+
+
+def test_latest_per_symbol_blank_entries_return_empty_map(monkeypatch):
+    monkeypatch.setattr("app.main.get_session", _mk_session([]))
+
+    with TestClient(app) as client:
+        resp = client.get("/v1/analysis/history/latest?symbols=,,")
+
+    assert resp.status_code == 200
+    assert resp.json() == {}
+
+
+def test_latest_per_symbol_rejects_too_many_symbols(monkeypatch):
+    monkeypatch.setattr("app.main.get_session", _mk_session([]))
+    symbols = ",".join(f"SYM{i}" for i in range(101))
+
+    with TestClient(app) as client:
+        resp = client.get(f"/v1/analysis/history/latest?symbols={symbols}")
+
+    assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
 # GET /v1/analysis/history/detail/{run_id}
 # ---------------------------------------------------------------------------
 

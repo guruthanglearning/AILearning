@@ -26,7 +26,8 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.orm import aliased
 
 import app.error_log as error_log
 from app.batch import run_batch_job
@@ -622,6 +623,65 @@ async def get_batch_status(request: Request, job_id: uuid.UUID) -> BatchJobRespo
         if row is None:
             raise HTTPException(status_code=404, detail="Batch job not found")
         return _batch_row_to_response(row)
+
+
+@app.get("/v1/analysis/history/latest", response_model=dict[str, AnalysisHistoryItem | None])
+@limiter.limit(settings.rate_limit_default)
+async def get_latest_analysis_per_symbol(
+    request: Request,
+    symbols: str = Query(..., min_length=1),
+) -> dict[str, AnalysisHistoryItem | None]:
+    """Return the most recent completed analysis run for each requested symbol
+    in a single query — avoids one /v1/analysis/history/{symbol} call per row
+    when a UI (e.g. a watchlist) needs "does this symbol have a saved report"
+    for a whole list of symbols at once."""
+    syms = sorted({s.upper().strip() for s in symbols.split(",") if s.strip()})
+    if not syms:
+        return {}
+    if len(syms) > 100:
+        raise HTTPException(status_code=400, detail="Too many symbols (max 100)")
+
+    out: dict[str, AnalysisHistoryItem | None] = dict.fromkeys(syms)
+    async for session in get_session():
+        rn = (
+            func.row_number()
+            .over(
+                partition_by=AnalysisRun.symbol,
+                # id.desc() as a tie-breaker only guarantees a stable, repeatable
+                # pick when two runs share a started_at — not that the tied id is
+                # truly the later one (ids are random uuid4, not time-ordered).
+                order_by=(AnalysisRun.started_at.desc(), AnalysisRun.id.desc()),
+            )
+            .label("rn")
+        )
+        ranked = (
+            select(AnalysisRun, rn)
+            .where(AnalysisRun.symbol.in_(syms), AnalysisRun.status == "complete")
+            .subquery()
+        )
+        latest = aliased(AnalysisRun, ranked)
+        rows = (
+            await session.execute(select(latest).where(ranked.c.rn == 1))
+        ).scalars().all()
+        for row in rows:
+            score: float | None = None
+            if row.verdict_json:
+                try:
+                    score = row.verdict_json["decision_aids"]["stock_vs_options_score"]
+                except (KeyError, TypeError):
+                    pass
+            out[row.symbol] = AnalysisHistoryItem(
+                run_id=row.id,
+                symbol=row.symbol,
+                started_at=row.started_at,
+                finished_at=row.finished_at,
+                instrument_recommendation=row.instrument_recommendation,
+                confidence_note=row.confidence_note,
+                last_price=row.last_price,
+                stock_vs_options_score=score,
+                status=row.status,
+            )
+    return out
 
 
 @app.get("/v1/analysis/history/{symbol}", response_model=list[AnalysisHistoryItem])

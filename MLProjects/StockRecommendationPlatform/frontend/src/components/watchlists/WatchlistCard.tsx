@@ -25,9 +25,7 @@ function BatchPanel({ watchlistId }: { watchlistId: string; watchlistName: strin
     const settled = job.status === "complete" || job.status === "partial";
     if (!settled || invalidatedForJob.current === job.job_id) return;
     invalidatedForJob.current = job.job_id;
-    job.results.forEach((r) => {
-      qc.invalidateQueries({ queryKey: ["analysis", "history", r.symbol] });
-    });
+    qc.invalidateQueries({ queryKey: ["analysis", "history", "latest"] });
   }, [job, qc]);
 
   if (!symbols.length) return null;

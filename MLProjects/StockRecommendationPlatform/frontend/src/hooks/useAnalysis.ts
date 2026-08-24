@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { useApiKey } from "@/contexts/ApiKeyContext";
-import { getAnalysisHistory, getLiveQuote, runAnalysis } from "@/lib/api";
+import { getAnalysisHistory, getLatestAnalysisPerSymbol, getLiveQuote, runAnalysis } from "@/lib/api";
 import type { AnalysisRunRequest } from "@/types/api";
 
 export function useRunAnalysis(req: AnalysisRunRequest | null) {
@@ -32,6 +32,20 @@ export function useAnalysisHistory(symbol: string | null, limit = 20) {
     queryKey: ["analysis", "history", symbol, limit],
     queryFn: () => getAnalysisHistory(apiKey, symbol!, limit),
     enabled: !!symbol && !!apiKey,
+    staleTime: 60_000,
+    retry: false,
+  });
+}
+
+// One request for a whole list of symbols (e.g. a watchlist) instead of one
+// per-symbol history call per row.
+export function useLatestAnalysisRuns(symbols: string[]) {
+  const { apiKey, hasKey } = useApiKey();
+  const key = [...symbols].sort().join(",");
+  return useQuery({
+    queryKey: ["analysis", "history", "latest", key],
+    queryFn: () => getLatestAnalysisPerSymbol(apiKey, symbols),
+    enabled: symbols.length > 0 && hasKey,
     staleTime: 60_000,
     retry: false,
   });

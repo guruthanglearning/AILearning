@@ -113,6 +113,18 @@ export async function getAnalysisHistory(
   return res.json();
 }
 
+export async function getLatestAnalysisPerSymbol(
+  apiKey: string,
+  symbols: string[]
+): Promise<Record<string, AnalysisHistoryItem | null>> {
+  const params = new URLSearchParams({ symbols: symbols.join(",") });
+  const res = await fetch(`${API_URL}/v1/analysis/history/latest?${params}`, {
+    headers: headers(apiKey),
+  });
+  await checkResponse(res);
+  return res.json();
+}
+
 export async function getAllAnalysisHistory(
   limit = 50,
   symbol?: string

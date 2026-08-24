@@ -113,7 +113,9 @@ export async function getAnalysisHistory(
   return res.json();
 }
 
-export async function getLatestAnalysisPerSymbol(
+const LATEST_HISTORY_CHUNK_SIZE = 100; // matches the backend's max symbols-per-request
+
+async function fetchLatestAnalysisChunk(
   apiKey: string,
   symbols: string[]
 ): Promise<Record<string, AnalysisHistoryItem | null>> {
@@ -123,6 +125,19 @@ export async function getLatestAnalysisPerSymbol(
   });
   await checkResponse(res);
   return res.json();
+}
+
+export async function getLatestAnalysisPerSymbol(
+  apiKey: string,
+  symbols: string[]
+): Promise<Record<string, AnalysisHistoryItem | null>> {
+  const unique = Array.from(new Set(symbols));
+  const chunks: string[][] = [];
+  for (let i = 0; i < unique.length; i += LATEST_HISTORY_CHUNK_SIZE) {
+    chunks.push(unique.slice(i, i + LATEST_HISTORY_CHUNK_SIZE));
+  }
+  const results = await Promise.all(chunks.map((chunk) => fetchLatestAnalysisChunk(apiKey, chunk)));
+  return Object.assign({}, ...results);
 }
 
 export async function getAllAnalysisHistory(

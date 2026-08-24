@@ -645,7 +645,13 @@ async def get_latest_analysis_per_symbol(
     async for session in get_session():
         rn = (
             func.row_number()
-            .over(partition_by=AnalysisRun.symbol, order_by=AnalysisRun.started_at.desc())
+            .over(
+                partition_by=AnalysisRun.symbol,
+                # id.desc() as a tie-breaker only guarantees a stable, repeatable
+                # pick when two runs share a started_at — not that the tied id is
+                # truly the later one (ids are random uuid4, not time-ordered).
+                order_by=(AnalysisRun.started_at.desc(), AnalysisRun.id.desc()),
+            )
             .label("rn")
         )
         ranked = (

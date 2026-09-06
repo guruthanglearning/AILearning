@@ -354,6 +354,18 @@ def test_claude_models_includes_fable_5():
     assert fable["supports_thinking"] is True
 
 
+def test_claude_models_includes_fable_5_1():
+    with TestClient(app) as client:
+        resp = client.get("/v1/claude/models")
+    assert resp.status_code == 200
+    models = resp.json()["models"]
+    assert "claude-fable-5-1" in models
+    fable = models["claude-fable-5-1"]
+    assert fable["input_price_per_m"] == 10.0
+    assert fable["output_price_per_m"] == 50.0
+    assert fable["supports_thinking"] is True
+
+
 # ---------------------------------------------------------------------------
 # _resolve_universe helper
 # ---------------------------------------------------------------------------

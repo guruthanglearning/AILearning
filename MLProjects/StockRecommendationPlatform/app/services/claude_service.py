@@ -55,7 +55,17 @@ CLAUDE_MODELS: dict[str, dict] = {
         "provider": "anthropic",
     },
     "claude-fable-5": {
-        "label": "Fable 5",
+        "label": "Fable 5 (legacy)",
+        "tier": "Frontier",
+        "description": "Previous-generation frontier model — superseded by Fable 5.1",
+        "input_price_per_m": 10.0,
+        "output_price_per_m": 50.0,
+        "supports_thinking": True,
+        "est_cost_per_analysis": 0.10,
+        "provider": "anthropic",
+    },
+    "claude-fable-5-1": {
+        "label": "Fable 5.1",
         "tier": "Frontier",
         "description": "Most capable model — highest cost, thinking always on",
         "input_price_per_m": 10.0,
@@ -243,6 +253,34 @@ class ClaudeVerdict:
     options_guidance: OptionsGuidance | None
     summary_headline: str
     user_answers: list[str] = field(default_factory=list)
+    cost_breakdown: dict[str, Any] | None = None
+
+
+def _compute_cost_breakdown(chosen_model: str, input_tokens: int, output_tokens: int) -> dict[str, Any]:
+    """Estimate this analysis's cost under every available model, using the
+    actual token counts from the model that served it. Token counts aren't
+    perfectly comparable across tokenizers, but Claude models share a
+    tokenizer family closely enough for this to be a useful side-by-side."""
+    estimates = [
+        {
+            "model": model_id,
+            "label": cfg["label"],
+            "cost_usd": round(
+                input_tokens * cfg["input_price_per_m"] / 1_000_000
+                + output_tokens * cfg["output_price_per_m"] / 1_000_000,
+                4,
+            ),
+            "is_selected": model_id == chosen_model,
+        }
+        for model_id, cfg in CLAUDE_MODELS.items()
+    ]
+    estimates.sort(key=lambda e: e["cost_usd"])
+    return {
+        "selected_model": chosen_model,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "estimates": estimates,
+    }
 
 
 def _fmt_agents_prompt(
@@ -444,8 +482,8 @@ async def _call_anthropic_verdict(
         if model_cfg["supports_thinking"]:
             create_kwargs["thinking"] = {"type": "adaptive"}
 
-        if chosen_model == "claude-fable-5":
-            # Fable 5 runs safety classifiers that can decline a request
+        if chosen_model in ("claude-fable-5", "claude-fable-5-1"):
+            # Fable-tier models run safety classifiers that can decline a request
             # (stop_reason="refusal") more readily than Opus-tier models.
             # Opt into the server-side fallback so a policy decline is
             # re-served by Opus 4.8 in the same call instead of surfacing
@@ -667,4 +705,5 @@ async def get_claude_verdict(
             inp["q3_max_loss_answer"],
             inp["q4_assignment_answer"],
         ],
+        cost_breakdown=_compute_cost_breakdown(chosen_model, input_tokens, output_tokens),
     )

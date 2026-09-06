@@ -277,14 +277,24 @@ def _price_usage(
     cache_read_tokens: int,
 ) -> tuple[float, float]:
     """Return (input_cost, output_cost) for one model's pricing, including any
-    prompt-cache write/read tokens billed alongside the base input tokens."""
-    read_multiplier = _CACHE_READ_MULTIPLIER.get(model_id, _DEFAULT_CACHE_READ_MULTIPLIER)
+    prompt-cache write/read tokens billed alongside the base input tokens.
+
+    The 1.25x/10%/2.5% cache multipliers are Anthropic-specific — this app's
+    OpenAI call never requests prompt caching and has different cached-input
+    economics, so for a non-Anthropic model the cache tokens are folded into
+    the base input rate instead (they were still part of the actual prompt
+    that would have been sent) rather than priced as if Anthropic-cached.
+    """
     input_price = pricing_cfg["input_price_per_m"]
-    input_cost = (
-        input_tokens * input_price
-        + cache_creation_tokens * input_price * _CACHE_WRITE_MULTIPLIER
-        + cache_read_tokens * input_price * read_multiplier
-    ) / 1_000_000
+    if pricing_cfg.get("provider") == "anthropic":
+        read_multiplier = _CACHE_READ_MULTIPLIER.get(model_id, _DEFAULT_CACHE_READ_MULTIPLIER)
+        input_cost = (
+            input_tokens * input_price
+            + cache_creation_tokens * input_price * _CACHE_WRITE_MULTIPLIER
+            + cache_read_tokens * input_price * read_multiplier
+        ) / 1_000_000
+    else:
+        input_cost = (input_tokens + cache_creation_tokens + cache_read_tokens) * input_price / 1_000_000
     output_cost = output_tokens * pricing_cfg["output_price_per_m"] / 1_000_000
     return input_cost, output_cost
 
@@ -732,19 +742,22 @@ async def get_claude_verdict(
             ),
         )
 
+    # served_model is the model that actually served the response — differs from
+    # chosen_model when a Fable-tier refusal fell back to Opus 4.8 (see fallbacks above).
+    # Attribute usage and price by the model that was actually billed, not the
+    # one originally requested — otherwise a fallback would show up under the
+    # requested model's bucket at the served model's (different) rate.
+    billed_model = served_model if served_model in CLAUDE_MODELS else chosen_model
+    pricing_cfg = CLAUDE_MODELS[billed_model]
+
     # Track session usage
     entry = _session_usage.setdefault(
-        chosen_model,
+        billed_model,
         {"analyses": 0, "input_tokens": 0, "output_tokens": 0, "estimated_cost_usd": 0.0},
     )
     entry["analyses"] += 1
     entry["input_tokens"] += input_tokens
     entry["output_tokens"] += output_tokens
-    # served_model is the model that actually served the response — differs from
-    # chosen_model when a Fable-tier refusal fell back to Opus 4.8 (see fallbacks above).
-    # Price by the model that was actually billed, not the one originally requested.
-    billed_model = served_model if served_model in CLAUDE_MODELS else chosen_model
-    pricing_cfg = CLAUDE_MODELS[billed_model]
     input_cost, output_cost = _price_usage(
         pricing_cfg, billed_model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens
     )

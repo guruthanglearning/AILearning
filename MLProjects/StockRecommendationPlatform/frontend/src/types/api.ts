@@ -162,6 +162,20 @@ export interface FundamentalsSnapshot {
   revenue_growth: number | null;
 }
 
+export interface ModelCostEstimate {
+  model: string;
+  label: string;
+  cost_usd: number;
+  is_selected: boolean;
+}
+
+export interface AnalysisCostBreakdown {
+  selected_model: string;
+  input_tokens: number;
+  output_tokens: number;
+  estimates: ModelCostEstimate[];
+}
+
 export interface SupervisorVerdict {
   instrument_recommendation: InstrumentRecommendation;
   confidence_note: string;
@@ -177,6 +191,7 @@ export interface SupervisorVerdict {
   earnings_days_away: number | null;
   has_upcoming_earnings: boolean;
   market_state: string | null;
+  cost_breakdown: AnalysisCostBreakdown | null;
 }
 
 export interface PriceBar {

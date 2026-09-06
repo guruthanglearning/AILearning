@@ -287,6 +287,7 @@ class Supervisor:
         )
 
         # --- Insufficient data early-exit (before Claude call) ---
+        cost_breakdown = None
         if m.status == AgentStatus.failed or m.last_price is None:
             verdict = InstrumentRecommendation.insufficient_data
             options_guidance = None
@@ -312,6 +313,7 @@ class Supervisor:
             decision_aids.summary_headline = claude.summary_headline
             if claude.user_answers:
                 decision_aids.user_answers = claude.user_answers
+            cost_breakdown = claude.cost_breakdown
             log.info("claude_verdict_applied", symbol=symbol, recommendation=verdict.value)
 
         options_guidance = _validate_strike_guidance(options_guidance, decision_aids)
@@ -333,6 +335,7 @@ class Supervisor:
             earnings_days_away=risk.earnings_days_away,
             has_upcoming_earnings=risk.has_upcoming_earnings,
             market_state=m.market_state,
+            cost_breakdown=cost_breakdown,
         )
 
         # --- DB hook 3: finalise run record (best-effort) ---
@@ -463,6 +466,7 @@ class Supervisor:
         )
 
         # --- Insufficient data early-exit (before Claude call) ---
+        cost_breakdown = None
         if m.status == AgentStatus.failed or m.last_price is None:  # type: ignore[attr-defined]
             verdict = InstrumentRecommendation.insufficient_data
             options_guidance = None
@@ -488,6 +492,7 @@ class Supervisor:
             decision_aids.summary_headline = claude.summary_headline
             if claude.user_answers:
                 decision_aids.user_answers = claude.user_answers
+            cost_breakdown = claude.cost_breakdown
             log.info("claude_verdict_applied", symbol=symbol, recommendation=verdict.value)
 
         options_guidance = _validate_strike_guidance(options_guidance, decision_aids)
@@ -509,6 +514,7 @@ class Supervisor:
             earnings_days_away=risk.earnings_days_away,
             has_upcoming_earnings=risk.has_upcoming_earnings,
             market_state=m.market_state,  # type: ignore[attr-defined]
+            cost_breakdown=cost_breakdown,
         )
 
         try:

@@ -255,6 +255,24 @@ class FundamentalsSnapshot(BaseModel):
     revenue_growth: float | None = None
 
 
+class ModelCostEstimate(BaseModel):
+    model: str
+    label: str
+    cost_usd: float
+    is_selected: bool = False
+
+
+class AnalysisCostBreakdown(BaseModel):
+    """Per-model cost comparison for this one analysis — the selected model's
+    actual billed cost, plus what every other available model would have cost
+    for the same token usage."""
+
+    selected_model: str
+    input_tokens: int
+    output_tokens: int
+    estimates: list[ModelCostEstimate] = Field(default_factory=list)
+
+
 class SupervisorVerdict(BaseModel):
     instrument_recommendation: InstrumentRecommendation
     confidence_note: str
@@ -270,6 +288,7 @@ class SupervisorVerdict(BaseModel):
     earnings_days_away: int | None = None
     has_upcoming_earnings: bool = False
     market_state: str | None = None  # PRE, REGULAR, POST, CLOSED — from MarketDataAgent
+    cost_breakdown: AnalysisCostBreakdown | None = None
 
 
 class AnalysisRunRequest(BaseModel):

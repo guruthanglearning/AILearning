@@ -15,6 +15,7 @@ import { EntryExitCard } from "@/components/analysis/EntryExitCard";
 import { FundamentalsPanel } from "@/components/analysis/FundamentalsPanel";
 import { HowToReadModal } from "@/components/analysis/HowToReadModal";
 import { LivePriceBar } from "@/components/analysis/LivePriceBar";
+import { ModelCostComparisonCard } from "@/components/analysis/ModelCostComparisonCard";
 import { OptionsAnalysisPanel } from "@/components/analysis/OptionsAnalysisPanel";
 import { OptionsGuidanceCard } from "@/components/analysis/OptionsGuidanceCard";
 import { OptionsMetricsTable } from "@/components/analysis/OptionsMetricsTable";
@@ -225,11 +226,21 @@ function HomePage() {
 
   return (
     <div className="space-y-6">
-      <AnalysisForm
-        onSubmit={handleSubmit}
-        isLoading={isFetching}
-        defaultSymbol={autoSymbol || req?.symbol || ""}
-      />
+      <div className="flex flex-col lg:flex-row gap-4 items-start">
+        <div className="flex-1 min-w-0 w-full">
+          <AnalysisForm
+            onSubmit={handleSubmit}
+            isLoading={isFetching}
+            defaultSymbol={autoSymbol || req?.symbol || ""}
+          />
+        </div>
+
+        {verdict?.cost_breakdown && !isFetching && (
+          <div className="w-full lg:w-80 shrink-0">
+            <ModelCostComparisonCard breakdown={verdict.cost_breakdown} />
+          </div>
+        )}
+      </div>
 
       {isFetching && startedAt != null && (
         <AnalysisLoader symbol={req?.symbol ?? ""} startedAt={startedAt} />

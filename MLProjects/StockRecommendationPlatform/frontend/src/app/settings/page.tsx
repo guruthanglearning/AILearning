@@ -10,7 +10,8 @@ const MODEL_OPTIONS = [
   { id: "claude-haiku-4-5-20251001", label: "Haiku 4.5 — Dev / Fast" },
   { id: "claude-sonnet-4-6",         label: "Sonnet 4.6 — Balanced" },
   { id: "claude-opus-4-8",           label: "Opus 4.8 — Professional" },
-  { id: "claude-fable-5",            label: "Fable 5 — Frontier" },
+  { id: "claude-fable-5-1",          label: "Fable 5.1 — Frontier" },
+  { id: "claude-fable-5",            label: "Fable 5 (legacy) — Frontier" },
   { id: "gpt-4o-mini",               label: "GPT-4o mini — OpenAI" },
 ];
 

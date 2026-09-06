@@ -256,27 +256,70 @@ class ClaudeVerdict:
     cost_breakdown: dict[str, Any] | None = None
 
 
-def _compute_cost_breakdown(chosen_model: str, input_tokens: int, output_tokens: int) -> dict[str, Any]:
+# Prompt cache write is billed at ~1.25x the base input price (5-min ephemeral
+# TTL, which is all this app requests). Cache read is ~10% of base input price
+# on most models, but only 2.5% on Fable-tier models — see Anthropic's pricing
+# page. Both apply on top of (never instead of) the base input/output cost.
+_CACHE_WRITE_MULTIPLIER = 1.25
+_CACHE_READ_MULTIPLIER: dict[str, float] = {
+    "claude-fable-5": 0.025,
+    "claude-fable-5-1": 0.025,
+}
+_DEFAULT_CACHE_READ_MULTIPLIER = 0.10
+
+
+def _price_usage(
+    pricing_cfg: dict,
+    model_id: str,
+    input_tokens: int,
+    output_tokens: int,
+    cache_creation_tokens: int,
+    cache_read_tokens: int,
+) -> tuple[float, float]:
+    """Return (input_cost, output_cost) for one model's pricing, including any
+    prompt-cache write/read tokens billed alongside the base input tokens."""
+    read_multiplier = _CACHE_READ_MULTIPLIER.get(model_id, _DEFAULT_CACHE_READ_MULTIPLIER)
+    input_price = pricing_cfg["input_price_per_m"]
+    input_cost = (
+        input_tokens * input_price
+        + cache_creation_tokens * input_price * _CACHE_WRITE_MULTIPLIER
+        + cache_read_tokens * input_price * read_multiplier
+    ) / 1_000_000
+    output_cost = output_tokens * pricing_cfg["output_price_per_m"] / 1_000_000
+    return input_cost, output_cost
+
+
+def _compute_cost_breakdown(
+    billed_model: str,
+    input_tokens: int,
+    output_tokens: int,
+    cache_creation_tokens: int = 0,
+    cache_read_tokens: int = 0,
+) -> dict[str, Any]:
     """Estimate this analysis's cost under every available model, using the
-    actual token counts from the model that served it. Token counts aren't
-    perfectly comparable across tokenizers, but Claude models share a
-    tokenizer family closely enough for this to be a useful side-by-side."""
+    actual token counts (including any prompt-cache write/read tokens) from
+    the model that actually served it. Token counts aren't perfectly
+    comparable across tokenizers — this is closest for same-family Claude
+    models, and only a rough approximation for the OpenAI row."""
     estimates = [
         {
             "model": model_id,
             "label": cfg["label"],
             "cost_usd": round(
-                input_tokens * cfg["input_price_per_m"] / 1_000_000
-                + output_tokens * cfg["output_price_per_m"] / 1_000_000,
+                sum(
+                    _price_usage(
+                        cfg, model_id, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens
+                    )
+                ),
                 4,
             ),
-            "is_selected": model_id == chosen_model,
+            "is_selected": model_id == billed_model,
         }
         for model_id, cfg in CLAUDE_MODELS.items()
     ]
     estimates.sort(key=lambda e: e["cost_usd"])
     return {
-        "selected_model": chosen_model,
+        "selected_model": billed_model,
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
         "estimates": estimates,
@@ -446,8 +489,9 @@ def _fmt_agents_prompt(
 
 async def _call_anthropic_verdict(
     chosen_model: str, model_cfg: dict, user_msg: str
-) -> tuple[dict[str, Any], int, int, str]:
-    """Call the Anthropic API and return (tool_input, input_tokens, output_tokens, served_model)."""
+) -> tuple[dict[str, Any], int, int, str, int, int]:
+    """Call the Anthropic API and return (tool_input, input_tokens, output_tokens,
+    served_model, cache_creation_tokens, cache_read_tokens)."""
     import traceback
 
     import anthropic
@@ -534,7 +578,20 @@ async def _call_anthropic_verdict(
 
     inp: dict[str, Any] = tool_block.input  # type: ignore[attr-defined]
     served_model = getattr(response, "model", chosen_model)
-    return inp, response.usage.input_tokens, response.usage.output_tokens, served_model
+    # Cache-covered tokens are billed separately from response.usage.input_tokens
+    # (cache writes ~1.25x input price, cache reads ~10%/2.5% — see
+    # _CACHE_READ_MULTIPLIER below) — surface them so cost accounting doesn't
+    # silently undercount a cached request.
+    cache_creation_tokens = getattr(response.usage, "cache_creation_input_tokens", 0) or 0
+    cache_read_tokens = getattr(response.usage, "cache_read_input_tokens", 0) or 0
+    return (
+        inp,
+        response.usage.input_tokens,
+        response.usage.output_tokens,
+        served_model,
+        cache_creation_tokens,
+        cache_read_tokens,
+    )
 
 
 async def _call_openai_verdict(chosen_model: str, user_msg: str) -> tuple[dict[str, Any], int, int, str]:
@@ -640,12 +697,19 @@ async def get_claude_verdict(
         "Be specific and cite actual numbers from the data."
     )
 
+    cache_creation_tokens = 0
+    cache_read_tokens = 0
     if model_cfg.get("provider") == "openai":
         inp, input_tokens, output_tokens, served_model = await _call_openai_verdict(chosen_model, user_msg)
     else:
-        inp, input_tokens, output_tokens, served_model = await _call_anthropic_verdict(
-            chosen_model, model_cfg, user_msg
-        )
+        (
+            inp,
+            input_tokens,
+            output_tokens,
+            served_model,
+            cache_creation_tokens,
+            cache_read_tokens,
+        ) = await _call_anthropic_verdict(chosen_model, model_cfg, user_msg)
 
     rec_str: str = inp["instrument_recommendation"]
 
@@ -677,11 +741,13 @@ async def get_claude_verdict(
     entry["input_tokens"] += input_tokens
     entry["output_tokens"] += output_tokens
     # served_model is the model that actually served the response — differs from
-    # chosen_model when a Fable 5 refusal fell back to Opus 4.8 (see fallbacks above).
+    # chosen_model when a Fable-tier refusal fell back to Opus 4.8 (see fallbacks above).
     # Price by the model that was actually billed, not the one originally requested.
-    pricing_cfg = CLAUDE_MODELS.get(served_model, model_cfg)
-    input_cost = input_tokens * pricing_cfg["input_price_per_m"] / 1_000_000
-    output_cost = output_tokens * pricing_cfg["output_price_per_m"] / 1_000_000
+    billed_model = served_model if served_model in CLAUDE_MODELS else chosen_model
+    pricing_cfg = CLAUDE_MODELS[billed_model]
+    input_cost, output_cost = _price_usage(
+        pricing_cfg, billed_model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens
+    )
     entry["estimated_cost_usd"] = round(entry["estimated_cost_usd"] + input_cost + output_cost, 4)
 
     log.info(
@@ -705,5 +771,7 @@ async def get_claude_verdict(
             inp["q3_max_loss_answer"],
             inp["q4_assignment_answer"],
         ],
-        cost_breakdown=_compute_cost_breakdown(chosen_model, input_tokens, output_tokens),
+        cost_breakdown=_compute_cost_breakdown(
+            billed_model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens
+        ),
     )

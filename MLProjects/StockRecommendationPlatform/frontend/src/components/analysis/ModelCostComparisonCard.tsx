@@ -15,8 +15,9 @@ export function ModelCostComparisonCard({ breakdown }: { breakdown: AnalysisCost
       <div>
         <h2 className="text-xs font-semibold text-gray-300">Model Cost Comparison</h2>
         <p className="text-[10px] text-gray-600 mt-0.5">
-          Estimated from this run&rsquo;s {input_tokens.toLocaleString()} in / {output_tokens.toLocaleString()} out tokens,
-          applied to each model&rsquo;s pricing.
+          Estimated from this run&rsquo;s {input_tokens.toLocaleString()} in / {output_tokens.toLocaleString()} out tokens
+          (incl. prompt-cache read/write), applied to each model&rsquo;s pricing. The GPT-4o mini row is a rougher
+          approximation — OpenAI tokenizes text differently than Claude.
         </p>
       </div>
 

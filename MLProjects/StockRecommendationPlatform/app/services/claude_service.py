@@ -767,6 +767,7 @@ async def get_claude_verdict(
         "claude_verdict_ok",
         symbol=symbol,
         model=chosen_model,
+        billed_model=billed_model,
         recommendation=rec_str,
         input_tokens=input_tokens,
         output_tokens=output_tokens,

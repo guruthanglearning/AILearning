@@ -879,11 +879,11 @@ A degraded agent does **not** stop the analysis — the Supervisor proceeds with
 | Database | PostgreSQL 16 (asyncpg driver) |
 | Cache | Redis 7 (optional) |
 | Market data | yfinance (default), Polygon.io REST + WebSocket (optional) |
-| LLM decision engine | Multi-provider, selectable per-analysis from UI — Anthropic Claude (Opus 4.8 default, Sonnet 4.6, Haiku 4.5, Fable 5) or OpenAI (GPT-4o mini) |
+| LLM decision engine | Multi-provider, selectable per-analysis from UI — Anthropic Claude (Opus 4.8 default, Sonnet 4.6, Haiku 4.5, Fable 5.1, Fable 5 legacy) or OpenAI (GPT-4o mini) |
 | ML sentiment | FinBERT via HuggingFace Transformers / external StockPrediction API |
 | Rate limiting | SlowAPI (redis-backed in prod) |
 | Observability | structlog · OpenTelemetry · Prometheus |
-| Testing | pytest + pytest-asyncio · 363 tests · ≥ 80% coverage |
+| Testing | pytest + pytest-asyncio · 396 tests · ≥ 80% coverage |
 | Linting | Ruff |
 
 ### Frontend
@@ -1053,7 +1053,7 @@ pytest -q --cov=app --cov-report=term-missing
 pytest tests/test_agents.py -v
 ```
 
-**Test suite:** 363 tests across 21 test files covering agents, supervisor, providers (yfinance, Polygon, Redis cache), watchlists router, alerts trigger, batch jobs, API hardening, observability, options metrics, options robustness (concurrent safety + semaphore), Polygon WebSocket relay, decision support extras, and main cache/endpoints.
+**Test suite:** 396 tests across 22 test files covering agents, supervisor, providers (yfinance, Polygon, Redis cache), watchlists router, alerts trigger, batch jobs, API hardening, observability, options metrics, options robustness (concurrent safety + semaphore), Polygon WebSocket relay, decision support extras, per-model LLM cost accounting, and main cache/endpoints.
 
 ---
 

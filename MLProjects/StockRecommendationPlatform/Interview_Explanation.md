@@ -6,13 +6,13 @@
 **Core Output**: Stock vs. Options recommendation with full decision-support aids
 **Architecture**: 7 specialist agents running in parallel + an LLM supervisor that synthesizes their output
 **Tech Stack**: FastAPI, Next.js 14, PostgreSQL, Redis, Claude (multi-model) / GPT-4o mini, Docker, Kubernetes
-**Scale**: 396+ automated tests, 15 frontend pages, dual deployment (Docker Compose and Kubernetes) validated in parity
+**Scale**: 396 automated tests, 15 frontend pages, dual deployment (Docker Compose and Kubernetes) validated in parity
 
 ---
 
 ## 🎯 Opening Statement (30 seconds)
 
-*"I built a stock research platform that runs 7 specialist AI agents in parallel — market data, fundamentals, technicals, financials, options, risk, and sentiment — then hands their structured output to an LLM supervisor (Claude, with a pluggable OpenAI fallback) that synthesizes everything into a single stock-vs-options recommendation with a plain-English rationale. Results stream to the browser over SSE so each agent card lights up the moment it finishes, instead of waiting for the slowest one. It's deployed both as a Docker Compose stack and to Kubernetes, with Prometheus/Grafana monitoring and a 396-test suite backing it."*
+*"I built a stock research platform that runs 7 specialist AI agents in parallel — market data, fundamentals, technicals, financials, options, risk, and sentiment — then hands their structured output to an LLM supervisor (Claude, with GPT-4o mini available as an alternate, user-selectable provider) that synthesizes everything into a single stock-vs-options recommendation with a plain-English rationale. Results stream to the browser over SSE so each agent card lights up the moment it finishes, instead of waiting for the slowest one. It's deployed both as a Docker Compose stack and to Kubernetes, with Prometheus/Grafana monitoring and a 396-test suite backing it."*
 
 ---
 
@@ -145,7 +145,7 @@ Once agent outputs are in, a **Decision Support** layer (`build_decision_aids`) 
 | Observability | structlog · OpenTelemetry · Prometheus · Grafana |
 | Frontend | Next.js 14 (App Router) · TypeScript · Tailwind CSS |
 | Streaming | fetch + ReadableStream SSE parser (analysis), native WebSocket (live price) |
-| Testing | pytest + pytest-asyncio, 396+ tests, Ruff lint, GitHub Actions CI |
+| Testing | pytest + pytest-asyncio, 396 tests, Ruff lint, GitHub Actions CI |
 | Containers | Docker Compose (Postgres + Redis + backend + frontend + nginx + Prometheus + Grafana) |
 | Orchestration | Kubernetes manifests — 2 backend + 2 frontend replicas, Postgres StatefulSet, Redis, NGINX Ingress, domain routing (`app.stockresearch.local`) |
 
@@ -254,9 +254,14 @@ docker compose up -d        # postgres, redis, backend, frontend, nginx, prometh
 # API docs → http://localhost:8010/docs
 ```
 
-### Kubernetes (Docker Desktop K8s or any cluster)
+### Kubernetes (Docker Desktop K8s, shown below — a non-Docker-Desktop cluster
+### additionally needs the images loaded/pushed, since `imagePullPolicy: Never`
+### assumes Docker Desktop's shared local image cache, plus an Ingress controller)
 ```powershell
 .\k8s\build.ps1                      # builds stockresearch-backend:latest, stockresearch-frontend:k8s
+kubectl create secret generic stockresearch-secret -n stockresearch \
+  --from-literal=POSTGRES_PASSWORD=... --from-literal=DATABASE_URL=... \
+  --from-literal=ANTHROPIC_API_KEY="$env:ANTHROPIC_API_KEY" ...   # kept out of git, applied imperatively
 kubectl apply -k k8s\                # namespace, configmap, postgres, redis, backend, frontend, ingress
 kubectl rollout status deployment/backend deployment/frontend -n stockresearch
 # Frontend → http://app.stockresearch.local (Ingress) or NodePort 30300
@@ -288,7 +293,7 @@ StockRecommendationPlatform/
 │   └── contexts/             # AnalysisContext (SSE), ApiKeyContext
 ├── k8s/                       # Kubernetes manifests + build.ps1
 ├── monitoring/                 # Prometheus + Grafana provisioning
-├── tests/                      # 396+ pytest tests
+├── tests/                      # 396 pytest tests
 ├── docker-compose.yml
 ├── launch.ps1                  # single-command local dev startup
 ├── README.md

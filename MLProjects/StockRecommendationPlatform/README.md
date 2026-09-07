@@ -1186,6 +1186,10 @@ kind create cluster --config k8s\kind-cluster.yaml
 kind load docker-image stockresearch-backend:latest --name stockresearch
 kind load docker-image stockresearch-frontend:k8s --name stockresearch
 
+# Create the namespace first — the Secret below references it and
+# apply -f (unlike apply -k) does not create it implicitly
+kubectl --context kind-stockresearch apply -f k8s\namespace.yaml
+
 # Create secret + deploy
 kubectl --context kind-stockresearch apply -f k8s\secret.yaml
 kubectl --context kind-stockresearch apply -k k8s\

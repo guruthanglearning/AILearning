@@ -879,11 +879,11 @@ A degraded agent does **not** stop the analysis — the Supervisor proceeds with
 | Database | PostgreSQL 16 (asyncpg driver) |
 | Cache | Redis 7 (optional) |
 | Market data | yfinance (default), Polygon.io REST + WebSocket (optional) |
-| LLM decision engine | Multi-provider, selectable per-analysis from UI — Anthropic Claude (Opus 4.8 default, Sonnet 4.6, Haiku 4.5, Fable 5) or OpenAI (GPT-4o mini) |
+| LLM decision engine | Multi-provider, selectable per-analysis from UI — Anthropic Claude (Opus 4.8 default, Sonnet 4.6, Haiku 4.5, Fable 5.1, Fable 5 legacy) or OpenAI (GPT-4o mini) |
 | ML sentiment | FinBERT via HuggingFace Transformers / external StockPrediction API |
 | Rate limiting | SlowAPI (redis-backed in prod) |
 | Observability | structlog · OpenTelemetry · Prometheus |
-| Testing | pytest + pytest-asyncio · 363 tests · ≥ 80% coverage |
+| Testing | pytest + pytest-asyncio · 396 tests · ≥ 80% coverage |
 | Linting | Ruff |
 
 ### Frontend
@@ -1053,7 +1053,7 @@ pytest -q --cov=app --cov-report=term-missing
 pytest tests/test_agents.py -v
 ```
 
-**Test suite:** 363 tests across 21 test files covering agents, supervisor, providers (yfinance, Polygon, Redis cache), watchlists router, alerts trigger, batch jobs, API hardening, observability, options metrics, options robustness (concurrent safety + semaphore), Polygon WebSocket relay, decision support extras, and main cache/endpoints.
+**Test suite:** 396 tests across 22 test files covering agents, supervisor, providers (yfinance, Polygon, Redis cache), watchlists router, alerts trigger, batch jobs, API hardening, observability, options metrics, options robustness (concurrent safety + semaphore), Polygon WebSocket relay, decision support extras, per-model LLM cost accounting, and main cache/endpoints.
 
 ---
 
@@ -1149,18 +1149,22 @@ Docker Desktop's built-in Kubernetes is the easiest local option — it shares t
 # 1. Build images
 .\k8s\build.ps1
 
-# 2. Create secret (copy template, fill in real keys — never commit this file)
+# 2. Create the namespace first — the Secret in step 4 references it and
+#    kubectl apply -f (unlike apply -k) does not create it implicitly
+kubectl config use-context docker-desktop
+kubectl apply -f k8s\namespace.yaml
+
+# 3. Create secret (copy template, fill in real keys — never commit this file)
 Copy-Item k8s\secret.yaml.example k8s\secret.yaml
 # Edit k8s\secret.yaml and set ANTHROPIC_API_KEY, OPENAI_API_KEY, POLYGON_API_KEY, etc.
 
-# 3. Apply the secret (outside kustomize — keeps it out of git)
+# 4. Apply the secret (outside kustomize — keeps it out of git)
 kubectl --context docker-desktop apply -f k8s\secret.yaml
 
-# 4. Deploy everything else
-kubectl config use-context docker-desktop
+# 5. Deploy everything else
 kubectl apply -k k8s\
 
-# 5. Wait for all pods
+# 6. Wait for all pods
 kubectl get pods -n stockresearch -w
 ```
 
@@ -1181,6 +1185,10 @@ kind create cluster --config k8s\kind-cluster.yaml
 # Load images into the cluster (kind doesn't share the Docker image cache)
 kind load docker-image stockresearch-backend:latest --name stockresearch
 kind load docker-image stockresearch-frontend:k8s --name stockresearch
+
+# Create the namespace first — the Secret below references it and
+# apply -f (unlike apply -k) does not create it implicitly
+kubectl --context kind-stockresearch apply -f k8s\namespace.yaml
 
 # Create secret + deploy
 kubectl --context kind-stockresearch apply -f k8s\secret.yaml

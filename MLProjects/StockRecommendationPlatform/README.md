@@ -1149,18 +1149,22 @@ Docker Desktop's built-in Kubernetes is the easiest local option — it shares t
 # 1. Build images
 .\k8s\build.ps1
 
-# 2. Create secret (copy template, fill in real keys — never commit this file)
+# 2. Create the namespace first — the Secret in step 4 references it and
+#    kubectl apply -f (unlike apply -k) does not create it implicitly
+kubectl config use-context docker-desktop
+kubectl apply -f k8s\namespace.yaml
+
+# 3. Create secret (copy template, fill in real keys — never commit this file)
 Copy-Item k8s\secret.yaml.example k8s\secret.yaml
 # Edit k8s\secret.yaml and set ANTHROPIC_API_KEY, OPENAI_API_KEY, POLYGON_API_KEY, etc.
 
-# 3. Apply the secret (outside kustomize — keeps it out of git)
+# 4. Apply the secret (outside kustomize — keeps it out of git)
 kubectl --context docker-desktop apply -f k8s\secret.yaml
 
-# 4. Deploy everything else
-kubectl config use-context docker-desktop
+# 5. Deploy everything else
 kubectl apply -k k8s\
 
-# 5. Wait for all pods
+# 6. Wait for all pods
 kubectl get pods -n stockresearch -w
 ```
 

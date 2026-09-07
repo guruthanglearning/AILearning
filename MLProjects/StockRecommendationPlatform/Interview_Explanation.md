@@ -259,10 +259,11 @@ docker compose up -d        # postgres, redis, backend, frontend, nginx, prometh
 ### assumes Docker Desktop's shared local image cache, plus an Ingress controller)
 ```powershell
 .\k8s\build.ps1                      # builds stockresearch-backend:latest, stockresearch-frontend:k8s
+kubectl apply -f k8s\namespace.yaml  # must exist before the secret below references it
 kubectl create secret generic stockresearch-secret -n stockresearch \
   --from-literal=POSTGRES_PASSWORD=... --from-literal=DATABASE_URL=... \
   --from-literal=ANTHROPIC_API_KEY="$env:ANTHROPIC_API_KEY" ...   # kept out of git, applied imperatively
-kubectl apply -k k8s\                # namespace, configmap, postgres, redis, backend, frontend, ingress
+kubectl apply -k k8s\                # configmap, postgres, redis, backend, frontend, ingress
 kubectl rollout status deployment/backend deployment/frontend -n stockresearch
 # Frontend → http://app.stockresearch.local (Ingress) or NodePort 30300
 # API      → http://api.stockresearch.local/docs or NodePort 30810

@@ -8,19 +8,19 @@ A stock analysis pipeline combining XGBoost price forecasting, XGBoost trend cla
 
 ## Commands
 
-Run everything from the `StockPrediction` project root (scripts use `os.getcwd()`-relative paths and `Src.` package imports):
+Run everything from the `StockPrediction` project root (scripts use `os.getcwd()`-relative paths). Most modules do `from Src.X import ...`, which only resolves if `Src` is importable as a package — running them as `python Src/Foo.py` puts `Src/` itself on `sys.path`, not the project root, so those imports fail. Invoke them with `-m Src.<module>` instead:
 
 ```powershell
 cd D:\Study\AILearning\MLProjects\StockPrediction
 
 D:/Study/AILearning/shared_Environment/Scripts/pip.exe install -r requirements.txt
 
-D:/Study/AILearning/shared_Environment/Scripts/python.exe Src/Data_loader.py          # fetch + cache historical/fundamental data for a symbol
-D:/Study/AILearning/shared_Environment/Scripts/python.exe Src/Technical_Indicators.py # compute technical indicators from cached data
-D:/Study/AILearning/shared_Environment/Scripts/python.exe Src/Price_Forecast.py       # train the XGBoost price-forecasting model
-D:/Study/AILearning/shared_Environment/Scripts/python.exe Src/Trend_Classification.py # train the XGBoost trend-classification model
-D:/Study/AILearning/shared_Environment/Scripts/python.exe Src/Real_Time_Predict.py    # load-or-train models, predict on live data
-D:/Study/AILearning/shared_Environment/Scripts/python.exe Src/Clean_Symbol_Information.py  # wipes Data/<symbol> and Models/*/<symbol> — irreversible, confirm the symbol before running
+D:/Study/AILearning/shared_Environment/Scripts/python.exe -m Src.Data_loader              # fetch + cache historical/fundamental data for a symbol (no Src.* imports, but -m works too)
+D:/Study/AILearning/shared_Environment/Scripts/python.exe -m Src.Technical_Indicators     # compute technical indicators from cached data
+D:/Study/AILearning/shared_Environment/Scripts/python.exe -m Src.Price_Forecast           # train the XGBoost price-forecasting model
+D:/Study/AILearning/shared_Environment/Scripts/python.exe -m Src.Trend_Classification     # train the XGBoost trend-classification model
+D:/Study/AILearning/shared_Environment/Scripts/python.exe -m Src.Real_Time_Predict        # load-or-train models, predict on live data
+D:/Study/AILearning/shared_Environment/Scripts/python.exe Src/Clean_Symbol_Information.py  # no Src.* imports, safe to run directly — wipes Data/<symbol> and Models/*/<symbol>, irreversible, confirm the symbol before running
 
 D:/Study/AILearning/shared_Environment/Scripts/python.exe -m uvicorn Src.API:app --reload   # FastAPI server (note: actual file is Src/API.py, not Src/Api.py as older docs say)
 D:/Study/AILearning/shared_Environment/Scripts/python.exe -m streamlit run Src/UI.py         # Streamlit dashboard, calls the API at 127.0.0.1:8000
@@ -30,7 +30,7 @@ No test suite is configured (`README.md`'s "Development Guidelines" mention unit
 
 ## Architecture
 
-Per-symbol data flows through `Data/<SYMBOL>/` (raw OHLCV + fundamentals) and `Data/Sentiment_Analysis/` (news sentiment history), with trained models under `Models/Price_Forecast/<SYMBOL>/` and `Models/Trend_Classification/<SYMBOL>/`. Everything is keyed by stock symbol and by day — `Data/last_run_date.txt` tracks the last processed date so `Clean_Symbol_Information.py` can be triggered once per new trading day to force a refresh, rather than reusing stale same-day model/data files.
+Per-symbol data flows through `Data/<SYMBOL>/` (raw OHLCV + fundamentals) and `Data/Sentiment_Analysis/` (news sentiment history), with trained models under `Models/Price_Forecast/<SYMBOL>/` and `Models/Trend_Classification/<SYMBOL>/`. Everything is keyed by stock symbol and by day — `Data/last_run_date.txt` tracks the last processed date so `Clean_Symbol_Information.py` can be triggered once per new calendar day to force a refresh (`IsCleanRequired()` in `API.py` does a plain date comparison with no market-calendar awareness, so it also fires on weekends/holidays), rather than reusing stale same-day model/data files.
 
 Module dependency chain (each script imports from the last rather than duplicating logic):
 - `Data_loader.py` — `yfinance` for OHLCV, `finnhub` (needs `FINNHUB_API_KEY`) for fundamentals. No API key is needed for the yfinance calls.
@@ -42,4 +42,4 @@ Module dependency chain (each script imports from the last rather than duplicati
 
 ## Known issue
 
-`.env` in this directory is tracked by git (not covered by `.gitignore`) and holds `FINNHUB_API_KEY`/`NEWS_API_KEY` — this violates the repo-root policy that secrets must never be committed. Flag this before making any further commits here; don't add new secrets to tracked files.
+`.env` in this directory (holding `FINNHUB_API_KEY`/`NEWS_API_KEY`) was previously committed to git before being untracked and gitignored. The old commits still contain those key values in history, so both must be treated as compromised — rotate them rather than reusing, and never add new secrets to a tracked file.

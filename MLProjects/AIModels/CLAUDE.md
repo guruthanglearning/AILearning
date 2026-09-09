@@ -11,17 +11,19 @@ A learning sandbox for ML experimentation, not a production app. Two independent
 
 ## Commands (StockPredictionModels)
 
-Use the shared virtual environment for this workspace, not a local venv (see repo-root instructions):
+Use the shared virtual environment for this workspace, not a local venv (see repo-root instructions). All scripts live in `Learning/StockPredictionModels/`, not the `AIModels` root:
 
 ```powershell
+cd D:\Study\AILearning\MLProjects\AIModels\Learning\StockPredictionModels
+
+D:/Study/AILearning/shared_Environment/Scripts/pip.exe install -r requirements.txt
+
 D:/Study/AILearning/shared_Environment/Scripts/python.exe simple_stock_predictor.py   # full pipeline: fetch AAPL data, engineer features, train & compare all 6 models
 D:/Study/AILearning/shared_Environment/Scripts/python.exe interactive_tester.py       # menu-driven: pick a symbol/period, compare stocks, inspect feature importance
 D:/Study/AILearning/shared_Environment/Scripts/python.exe predict_direction.py        # one-off UP/DOWN prediction for a symbol
 D:/Study/AILearning/shared_Environment/Scripts/python.exe model_tester.py             # validation framework: precision/recall/F1/confusion matrix + regression metrics
 D:/Study/AILearning/shared_Environment/Scripts/python.exe threshold_validator.py      # checks results against the project's minimum-performance thresholds
 D:/Study/AILearning/shared_Environment/Scripts/python.exe threshold_demo.py           # standalone explainer of how thresholds are applied (no data fetch)
-
-D:/Study/AILearning/shared_Environment/Scripts/pip.exe install -r Learning/StockPredictionModels/requirements.txt
 ```
 
 There is no test suite, linter, or build step — these are standalone, directly-executed scripts.

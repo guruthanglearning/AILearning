@@ -12,7 +12,7 @@ A hybrid log-classification system that routes log messages to one of three clas
 D:/Study/AILearning/shared_Environment/Scripts/pip.exe install -r requirement.txt
 
 D:/Study/AILearning/shared_Environment/Scripts/python.exe classify.py   # runs classify_csv() on Datasets/Logs.csv -> Datasets/Result.csv
-D:/Study/AILearning/shared_Environment/Scripts/python.exe server.py     # FastAPI server; POST a CSV to /classify
+D:/Study/AILearning/shared_Environment/Scripts/python.exe -m uvicorn server:app --reload   # FastAPI server; POST a CSV to /classify (server.py only defines `app`, it has no uvicorn.run() entry point)
 ```
 
 There is no test suite or linter configured. `Training/Training.ipynb` is the notebook used to retrain the BERT-embeddings + Logistic Regression model that gets saved to `Model/log_classifier_model.joblib`.
@@ -35,4 +35,4 @@ Batch entry points (`classify_csv`, `classify`, and the FastAPI `/classify` rout
 
 ## Known issue
 
-`.env` in this directory is currently tracked by git (not covered by `.gitignore`) and appears to contain a real key, not a placeholder — this violates the repo-root policy that secrets must never be committed. Flag this before making any further commits here; don't add new secrets to tracked files.
+`.env` in this directory (holding a real `GROQ_API_KEY`) was previously committed to git before being untracked and gitignored. The old commits still contain that key value in history, so it must be treated as compromised — rotate the Groq key rather than reusing it, and never add new secrets to a tracked file.

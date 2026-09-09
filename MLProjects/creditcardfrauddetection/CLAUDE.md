@@ -141,6 +141,10 @@ pytest tests/test_ui_playwright.py --browser chromium
 - Run tests locally before committing; CI must be green before merging
 - Do not commit `.env`, `*.pyc`, `__pycache__/`, `htmlcov/`, or model binary files
 
+### Pull Request & Code Review Workflow
+
+Follows the workspace-wide policy in the root `D:\Study\AILearning\CLAUDE.md` (Pull Request & Code Review Workflow section): once a PR is opened, get it reviewed by the Codex CLI (`codex exec`, non-interactive), address every finding with a reply on its comment thread, get re-reviewed, and only then merge — for code changes and documentation (`*.md`) alike. This applies on top of, not instead of, the Permissions & Approvals section above — pushing and opening/merging PRs still require explicit user confirmation for this project; the Codex-review step happens once that confirmation is given.
+
 ---
 
 ## Security Practices

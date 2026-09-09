@@ -29,6 +29,12 @@ Claude Code is granted **full autonomous permission** to work on this project â€
 
 ---
 
+## Pull Request & Code Review Workflow
+
+Follows the workspace-wide policy in the root `D:\Study\AILearning\CLAUDE.md` (Pull Request & Code Review Workflow section): once `git push` is authorized (per the rule above), push to a feature branch and open a PR rather than pushing directly to `main`. Get the PR reviewed by the Codex CLI (`codex exec`, non-interactive), address every finding with a reply on its comment thread, get re-reviewed, and only then merge â€” for code changes and documentation (`*.md`, e.g. `Interview_Explanation.md`) alike. Skip this only when the user explicitly says to push a specific change straight to `main`.
+
+---
+
 ## Project Overview
 
 **MultiAgentDevTeam** is a C# .NET 10 multi-agent AI system that takes plain-English software requirements and produces a complete software package using 8 specialized AI agents powered by the Anthropic Claude API.

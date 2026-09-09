@@ -26,6 +26,20 @@ Proceed without asking for confirmation on any of the following within `D:\Study
 - If a file or output appears to contain PII, stop and flag it to the user before proceeding
 - API keys and secrets must never be committed to git; verify `.gitignore` covers them before any commit
 
+## Pull Request & Code Review Workflow
+
+Once a change is ready and pushing has been authorized (per the Permissions Policy above), the default flow for **every project** in this workspace is branch → PR → Codex review → merge — not a direct push to `main`. This applies to **any** file change, code or documentation (`*.md` files — README, Interview_Explanation guides, etc. included), not just application code.
+
+1. Push to a feature branch (never directly to `main`) and open a PR.
+2. Request a review from the **Codex CLI** (`codex exec`, installed and ChatGPT-authenticated locally on this machine — not a GitHub App; none is installed on these repos). Run it non-interactively (e.g. `-s workspace-write -c approval_policy="never"`) so it can inspect the diff and report findings without blocking on approval prompts. For a docs-only PR this means a factual-accuracy review — checking claims, commands, and counts against the real code/tests — not a code-quality review.
+3. Address every finding Codex reports: fix it (or explain why no change is needed), and reply on the corresponding PR comment thread — pushing a fix commit alone is not sufficient, the thread itself needs a reply so it's visible that the finding was addressed.
+4. Ask Codex to re-review; repeat step 3 until it confirms the PR is good to merge.
+5. Merge, then deploy/validate per that project's own process (Docker, Kubernetes, a local dev server — whatever applies to that project), and report the outcome.
+
+Skip this cycle only when the user explicitly says to push a specific change straight to `main`. A subproject's own `CLAUDE.md` being silent on PR process, or only gating `git push` behind confirmation, is not an exception — this workflow applies workspace-wide regardless of what an individual project's instructions do or don't say about it.
+
+---
+
 ## Bash Command Safety
 
 Never construct bash commands that contain a newline followed by `#` inside a quoted argument. This triggers Claude Code's path-validation warning: *"Newline followed by # inside a quoted argument can hide arguments from path validation"*.

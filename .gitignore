@@ -6,3 +6,9 @@
 
 # Claude Code local settings (machine-specific, not for sharing)
 .claude/settings.local.json
+
+# Environment files containing secrets/API keys - never commit these
+.env
+.env.*
+!.env.example
+!.env.*.example

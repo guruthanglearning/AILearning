@@ -2,7 +2,7 @@
 
 ## Browser
 
-Always open the StockRecommendationPlatform UI (and any other local web app in this workspace) in **Microsoft Edge** (`msedge`). Never use Chrome or any other browser. Edge is at `C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`.
+Always open the all the project UI in AILearning folder  (and any other local web app in this workspace) in **Microsoft Edge** (`msedge`). Never use Chrome or any other browser. Edge is at `C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`.
 
 ## Permissions Policy
 

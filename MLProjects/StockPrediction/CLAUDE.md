@@ -43,3 +43,5 @@ Module dependency chain (each script imports from the last rather than duplicati
 ## Known issue
 
 `.env` in this directory (holding `FINNHUB_API_KEY`/`NEWS_API_KEY`) was previously committed to git before being untracked and gitignored. The old commits still contain those key values in history, so both must be treated as compromised — rotate them rather than reusing, and never add new secrets to a tracked file.
+
+`README.md`'s "Environment Variables" section (under Configuration) documents the news API key as `NEWSAPI_KEY`, but `MarketSentimentAnalysis.py` actually reads `os.getenv("NEWS_API_KEY")` — following the README's `.env` template literally sets the wrong variable name and sentiment analysis silently gets no key. Use `NEWS_API_KEY`, not `NEWSAPI_KEY`.

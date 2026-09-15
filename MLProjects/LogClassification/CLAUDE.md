@@ -15,13 +15,15 @@ D:/Study/AILearning/shared_Environment/Scripts/python.exe classify.py   # runs c
 D:/Study/AILearning/shared_Environment/Scripts/python.exe -m uvicorn server:app --reload   # FastAPI server; POST a CSV to /classify (server.py only defines `app`, it has no uvicorn.run() entry point)
 ```
 
+`requirement.txt` does not list `fastapi`, `uvicorn`, or `python-multipart` (needed for FastAPI's `UploadFile`/multipart form parsing) even though `server.py` requires all three — installing strictly from `requirement.txt` is not enough to run the server; they must already be present in the shared environment or installed separately.
+
 There is no test suite or linter configured. `Training/Training.ipynb` is the notebook used to retrain the BERT-embeddings + Logistic Regression model that gets saved to `Model/log_classifier_model.joblib`.
 
 ## Architecture
 
 Classification is a **source-based routing decision**, not a model ensemble — each log goes to exactly one classifier, chosen in `classify_logs()` in `classify.py`:
 
-1. `source == "LegacyCRM"` → `processor_llm.classify_with_LLM()` (Groq API, `llama-3.3-70b-versatile`). Legacy logs are unstructured/business-specific, so they always skip straight to the LLM.
+1. `source == "LegacyCRM"` → `processor_llm.classify_with_LLM()` (Groq API, `llama-3.3-70b-versatile`). Legacy logs are unstructured/business-specific, so they always skip straight to the LLM. The prompt only asks the model to choose between `"Workflow error"`, `"Deprecation Warning"`, or `"Unclassified"` — it is not free to return any of the other categories (e.g. `"Security Alert"`, `"Critical Error"`) that the regex/BERT path can produce, and nothing enforces that constraint structurally (a stray Groq response outside those three strings would pass through as-is).
 2. Everything else tries `processor_regex.classify_with_regex()` first (8 hardcoded patterns for logins, backups, uploads, account creation, etc.) — this is the fast path for the ~5 "modern" source systems (ModernCRM, BillingSystem, AnalyticsEngine, ModernHR, ThirdPartyAPI).
 3. If regex returns `None` (no pattern matched), it falls back to `processor_bert.classify_with_BERT()`: embeds the message with `all-MiniLM-L6-v2` (Sentence-BERT) and runs the saved Logistic Regression classifier; predictions with max probability < 0.5 are returned as `"Unknown"`.
 

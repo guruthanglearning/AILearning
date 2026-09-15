@@ -93,7 +93,7 @@ pytest tests/test_ui_playwright.py --browser chromium
 
 ## Key Architecture Notes
 
-- `app/api/models/` (package) shadows `app/api/models.py` — actual Pydantic models are in `app/api/models_base.py`, re-exported via `app/api/models/__init__.py`
+- There is no `app/api/models.py` (despite a stale comment inside `app/api/models/__init__.py` that still refers to one) — actual Pydantic models live in `app/api/models_base.py`, re-exported via `app/api/models/__init__.py` alongside the metrics models from `app/api/models/metrics.py`
 - Auth: `X-API-Key` header; dev key = `development_api_key_for_testing`; auth bypassed when `AUTH_REQUIRED=False`
 - LLM fallback chain: OpenAI → Online Ollama → Local Ollama → Enhanced Mock
 - `llm_service_type="local"` in health response does **not** mean Ollama is running — actual availability is checked at call time

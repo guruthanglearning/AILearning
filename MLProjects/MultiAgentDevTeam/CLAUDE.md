@@ -60,6 +60,8 @@ Phase 6: Docs Agent         → Documentation
 src/
   MultiAgentDevTeam.Orchestrator/   - ASP.NET Core API host + pipeline orchestration
   MultiAgentDevTeam.Shared/         - Shared models, interfaces, base agent, config
+  MultiAgentDevTeam.BlazorUI/       - Blazor Server frontend (in the .slnx) — see "Frontends" below
+  MultiAgentDevTeam.UI/             - React + Vite + TS frontend (NOT in the .slnx, separate npm project) — see "Frontends" below
   Agents/
     MultiAgentDevTeam.PMAgent/
     MultiAgentDevTeam.ArchitectAgent/
@@ -72,10 +74,20 @@ src/
 tests/
   MultiAgentDevTeam.UnitTests/
   MultiAgentDevTeam.IntegrationTests/
+  MultiAgentDevTeam.BlazorUI.UnitTests/
+  MultiAgentDevTeam.BlazorUI.E2ETests/
 docker/
 k8s/
 scripts/
 ```
+
+### Frontends (two parallel UIs — neither is documented in README.md)
+
+Two separate frontends exist, both consuming the same Orchestrator API:
+- **`MultiAgentDevTeam.BlazorUI`** — Blazor Server (net10.0), part of the `.slnx`. Pages: `Home`, `Sessions`, `SessionDetail`; talks to the API via `Services/PipelineClient.cs` and `Services/SessionApiClient.cs`.
+- **`MultiAgentDevTeam.UI`** — React 18 + Vite + TypeScript, a standalone npm project (own `package.json`, **not** referenced by `MultiAgentDevTeam.slnx`). Components: `PipelineForm`, `ArtifactViewer`, `ProgressLog`, `SessionsList`. Commands: `npm run dev` / `npm run build` / `npm run test` (Vitest) / `npm run test:e2e` (Playwright, config in `playwright.config.ts`).
+
+The Orchestrator also exposes two endpoints that support these UIs but aren't in README's API Reference: `POST /api/run/stream` (SSE progress events, backed by `IOrchestratorService.StreamAsync`) and `GET /api/sessions` / `GET /api/sessions/{sessionId}` (backed by `ISessionRepository` / `FileSessionRepository.cs`, which persists past runs so the UIs can list/reload them).
 
 ---
 
@@ -85,7 +97,8 @@ scripts/
 - **LLM Provider:** Anthropic Claude API via `Anthropic.SDK`
 - **Default Model:** `claude-opus-4-6`
 - **Fast Model:** `claude-haiku-4-5-20251001`
-- **Test Framework:** xUnit + Moq + FluentAssertions
+- **Test Framework:** xUnit + Moq + FluentAssertions (.NET); Vitest + Playwright (React UI)
+- **Frontends:** Blazor Server (`MultiAgentDevTeam.BlazorUI`, in the `.slnx`) and React 18 + Vite + TypeScript (`MultiAgentDevTeam.UI`, separate npm project) — see "Frontends" above
 - **Containerization:** Docker + Docker Compose
 - **Orchestration:** Kubernetes (Docker Desktop)
 - **NuGet Cache:** `D:\Study\AILearning\shared_Environment\.nuget\packages\`
@@ -188,9 +201,18 @@ dotnet test tests/MultiAgentDevTeam.UnitTests/
 # Run only integration tests
 dotnet test tests/MultiAgentDevTeam.IntegrationTests/
 
+# Run only Blazor UI unit / E2E tests
+dotnet test tests/MultiAgentDevTeam.BlazorUI.UnitTests/
+dotnet test tests/MultiAgentDevTeam.BlazorUI.E2ETests/
+
 # Run the API locally
 dotnet run --project src/MultiAgentDevTeam.Orchestrator/
+
+# Run the Blazor UI locally
+dotnet run --project src/MultiAgentDevTeam.BlazorUI/
 ```
+
+The React UI (`src/MultiAgentDevTeam.UI/`) is a separate npm project, not part of `dotnet build`/`dotnet test` at all — see "Frontends" above for its own commands.
 
 ---
 
@@ -271,9 +293,11 @@ tests/
 
 ## Known Issues / Next Steps
 
-- [ ] Fix redundant NuGet package warnings (NU1510) in Orchestrator and Shared projects
-- [ ] Add persistent artifact storage (replace in-memory ArtifactStore with database)
-- [ ] Add streaming/progress responses for long-running pipeline
-- [ ] Add rate limiting middleware
+Verified against current code (2026-09) — several items below were already done and are no longer accurate as open TODOs:
+
+- [x] ~~Add streaming/progress responses for long-running pipeline~~ — done: `POST /api/run/stream` (SSE) via `IOrchestratorService.StreamAsync`
+- [x] ~~Add rate limiting middleware~~ — done: `AddRateLimiter`/`UseRateLimiter` in `Program.cs`, applied to the pipeline endpoints via `.RequireRateLimiting("pipeline")`
+- [x] ~~Add persistent artifact storage~~ — partially done: sessions are now persisted via `FileSessionRepository` (JSON files, not in-memory-only), retrievable via `GET /api/sessions`/`GET /api/sessions/{id}`; this is file-based, not a database, if that distinction still matters
+- [ ] NU1510 is gone, but a full `dotnet build` now emits different warnings on `tests/MultiAgentDevTeam.BlazorUI.UnitTests/`: NU1603 (bunit 1.36.5 requested, 1.37.7 resolved) and NU1902 (AngleSharp 1.1.2 has a known moderate-severity advisory) — don't assume the old NU1510 note still applies
 - [ ] Support custom model selection per agent
 - [ ] Support multi-language code generation (currently C# .NET 10 only)

@@ -94,7 +94,7 @@ pytest tests/test_ui_playwright.py --browser chromium
 ## Key Architecture Notes
 
 - There is no `app/api/models.py` (despite a stale comment inside `app/api/models/__init__.py` that still refers to one) — actual Pydantic models live in `app/api/models_base.py`, re-exported via `app/api/models/__init__.py` alongside the metrics models from `app/api/models/metrics.py`
-- Auth: `X-API-Key` header; dev key = `development_api_key_for_testing`; auth bypassed when `AUTH_REQUIRED=False`
+- Auth: `X-API-Key` header (`app/api/dependencies.py`); dev key = `development_api_key_for_testing` (`app/core/config.py`'s `API_KEY` default); auth is bypassed only when **both** `APP_ENV=="development"` (the default) **and** `AUTH_REQUIRED` is false — setting `AUTH_REQUIRED=False` alone does not bypass auth outside development
 - LLM fallback chain: OpenAI → Online Ollama → Local Ollama → Enhanced Mock
 - `llm_service_type="local"` in health response does **not** mean Ollama is running — actual availability is checked at call time
 - All API routes under `/api/v1/` prefix; `/predict` is an alias for `/detect-fraud`
@@ -182,11 +182,11 @@ Follows the workspace-wide policy in the root `D:\Study\AILearning\CLAUDE.md` (P
 
 | Issue | Reason |
 |-------|--------|
-| `h11` version conflict (`httpcore` vs `wsproto`) | Irresolvable circular constraint; runtime works fine |
-| `numpy 1.26.4` (langchain wants `>=2.1.0`) | Upgrading numpy breaks xgboost/scikit-learn in `shared_Environment` |
-| FastAPI `on_event` deprecation warning | Requires lifespan refactor; low priority |
-| LangChain `HuggingFaceEmbeddings`/`Chroma` deprecation | Needs `langchain-huggingface`/`langchain-chroma` migration; low priority |
+| FastAPI `on_event` deprecation warning (`app/main.py`, `startup`/`shutdown`) | Requires lifespan refactor; low priority |
+| LangChain `HuggingFaceEmbeddings`/`Chroma` deprecation | Partially migrated: `app/services/llm_service.py` already uses `langchain_huggingface`, but `app/services/vector_db_service.py` still imports `HuggingFaceEmbeddings`/`Chroma` from `langchain_community` (`langchain-chroma` isn't in `requirements.txt` yet); low priority |
 | Ghost socket on port 8000 after unclean shutdown | Windows kernel artifact; clear by closing all terminals or rebooting |
+
+**Resolved, no longer applicable (verified during this audit):** the `numpy 1.26.4` / `h11`-`httpcore`-`wsproto` conflicts this table used to list are stale — `shared_Environment` currently has `numpy 2.3.5`, `xgboost 3.2.0`, `scikit-learn 1.8.0`, `langchain 1.2.10` (well past `requirements.txt`'s `langchain>=0.0.310` floor), `wsproto` isn't even installed, and `pip check` reports "No broken requirements found." Don't assume these constraints still hold — if a dependency question comes up, run `pip check` in `shared_Environment` rather than trusting this table's history.
 
 ---
 

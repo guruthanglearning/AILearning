@@ -19,7 +19,7 @@ docker compose up -d postgres redis                          # infra only
 pip install -r requirements.txt
 alembic upgrade head
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8024    # backend
-cd frontend && npm install && npm run dev                     # frontend, :3001
+cd frontend && npm install && npm run dev -- --port 3001       # frontend; plain `npm run dev` defaults to :3000, not :3001
 ```
 
 ### Tests & lint
@@ -27,7 +27,7 @@ cd frontend && npm install && npm run dev                     # frontend, :3001
 pytest -q                                    # full suite
 pytest -q --cov=app --cov-report=term-missing
 pytest tests/test_agents.py -v               # single file
-pytest tests/test_agents.py::test_name -v    # single test
+pytest tests/test_agents.py::test_market_data_agent_complete -v   # single test
 ruff check app/ tests/                       # lint (config: pyproject.toml)
 ```
 
@@ -53,9 +53,9 @@ Frontend: `localhost:30300`. Backend docs: `localhost:30810/docs`.
 
 ## Architecture
 
-**Request flow:** rate limiter (slowapi) → `X-API-Key` auth (bcrypt hash looked up in the `api_key` table) → `Supervisor.stream_analysis()` (`app/supervisor.py`) fires all 7 agents concurrently via `asyncio.create_task` × 7; `asyncio.wait(FIRST_COMPLETED)` emits an SSE `agent_done` event as each agent finishes individually, not batched → once all 7 complete, `decision_support.py`'s `build_decision_aids()` scores stock-vs-options → that result plus all 7 agent outputs are fed as structured context to a Claude LLM call → `_validate_strike_guidance()` in `supervisor.py` cross-checks the LLM's proposed options strikes against real chain data before trusting them, stamping `chain_validated` → persisted to Postgres (one `analysis_run` row + one `agent_artifact` row per agent) → final SSE `verdict` + `done` events.
+**Request flow:** rate limiter (slowapi) → `Supervisor.stream_analysis()` (`app/supervisor.py`) fires all 7 agents concurrently via `asyncio.create_task` × 7; `asyncio.wait(FIRST_COMPLETED)` emits an SSE `agent_done` event as each agent finishes individually, not batched → once all 7 complete, `decision_support.py`'s `build_decision_aids()` scores stock-vs-options → the result plus **6 of the 7** agent outputs (`market_data`, `fundamentals`, `technicals`, `options`, `risk_pro`, `sentiment_ml` — `financials` is computed and displayed/persisted but is *not* passed into `get_claude_verdict()`) are fed as structured context to a Claude LLM call → `_validate_strike_guidance()` in `supervisor.py` cross-checks the LLM's proposed options strikes against real chain data before trusting them, stamping `chain_validated` → persisted to Postgres (one `analysis_run` row + one `agent_artifact` row per agent) → final SSE `verdict` + `done` events. Note: the analysis endpoints (`/v1/analysis/run`, `/v1/analysis/stream/{symbol}`) are rate-limited only, not `X-API-Key`-gated — API-key auth (`get_current_key` in `app/auth.py`, SHA-256 hash via `hashlib`, not bcrypt) is enforced on the `watchlists`, `alerts`, `portfolio`, `settings`, and `auth` routers instead.
 
-**The 7 agents** (`app/agents/`): `market_data.py`, `fundamentals.py`, `technicals.py` (SMA/EMA/RSI/MACD/ATR/OBV), `financials.py`, `options.py` (ATM IV, chain liquidity), `risk_pro.py` (earnings-window flag), `sentiment_ml.py` (FinBERT or external `STOCK_PREDICTION_API_URL`). All inherit generic `BaseAgent`/`safe_run()` from `app/agents/base.py` — a failed or timed-out agent (`AGENT_TIMEOUT_SECONDS`, default 45s) degrades to `status: failed` rather than aborting the whole run; downstream scoring still runs with fewer inputs rather than erroring out.
+**The 7 agents** (`app/agents/`): `market_data.py`, `fundamentals.py`, `technicals.py` (SMA/EMA/RSI/MACD/ATR/OBV), `financials.py`, `options.py` (ATM IV, chain liquidity), `risk_pro.py` (earnings-window flag), `sentiment_ml.py` (fetches headlines from Finnhub — needs `FINNHUB_API_KEY` — then scores them locally with `ProsusAI/finbert`). All inherit generic `BaseAgent`/`safe_run()` from `app/agents/base.py` — a failed or timed-out agent (`AGENT_TIMEOUT_SECONDS`, default 45s) degrades to `status: failed` rather than aborting the whole run; downstream scoring still runs with fewer inputs rather than erroring out.
 
 **Data providers** (`app/providers/`): `factory.py`'s `build_provider()` picks yfinance (default) or Polygon.io (if `POLYGON_API_KEY` is set), optionally wrapped in the `RedisCache` provider class (`redis_cache.py`) when `USE_REDIS=true`. `yfinance_provider.py` gates all calls behind a module-level `asyncio.Semaphore(3)` — yfinance isn't safe for unbounded concurrent calls, so don't remove that when touching this file.
 

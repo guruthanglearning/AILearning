@@ -1710,7 +1710,7 @@ sequenceDiagram
     Service->>Service: engineer_features()
 
     alt Hard block (sanctioned country, or category mismatch + high-risk country)
-        Service-->>API: Early fraud response (ML/LLM skipped)
+        Service-->>API: Early FraudDetectionResponse (ML/LLM/logging all skipped)
     else No hard block
         Service->>ML: predict(features)
         ML-->>Service: fraud_probability, ml_confidence (heuristic fallback in practice)
@@ -1726,9 +1726,9 @@ sequenceDiagram
         end
 
         Service->>Service: log transaction (application log only, no separate transaction store)
+        Service-->>API: FraudDetectionResponse
     end
 
-    Service-->>API: FraudDetectionResponse
     API-->>UI: JSON response
     UI-->>User: Display results
 ```
@@ -1779,8 +1779,8 @@ flowchart LR
 
 Notes on this diagram (verified against `app/` and `scripts/manage_models.py` on 2026-09-23):
 - There is no unified "learning pipeline." Two entirely separate, disconnected mechanisms exist:
-  1. **Vector pattern store** — analyst feedback, bulk pattern ingestion, and admin-created patterns all just add a new text document (embedded via HuggingFace, stored in Chroma/Pinecone) that future `search_similar_patterns()` calls can retrieve. Nothing here retrains any model.
-  2. **Offline XGBoost training** — `scripts/manage_models.py` is a real, working script that engineers features from a CSV, does an 80/20 `train_test_split` (not k-fold cross-validation, despite the old diagram's "Cross Validation" label), fits an XGBoost model, and saves it to `data/models/*.joblib`. It must be run manually and is never invoked by the live API or by the feedback endpoint.
+  1. **Vector pattern store** — analyst feedback, bulk pattern ingestion, and admin-created patterns each add a new fraud-case document (embedded via HuggingFace, stored in Chroma/Pinecone, and chunked by `RecursiveCharacterTextSplitter` if long) that future `search_similar_patterns()` calls can retrieve. Nothing here retrains any model.
+  2. **Offline XGBoost training** — `scripts/manage_models.py` is real code with the right *intent* (engineer features from a CSV, 80/20 `train_test_split` — not k-fold cross-validation, despite the old diagram's "Cross Validation" label — fit XGBoost, save to `data/models/*.joblib`), but it's currently broken: its `prepare_data()` builds a plain `dict` per row and passes it to `engineer_features()`, which requires attribute access (`transaction.timestamp`, `.transaction_id`, `.customer_id`, etc.) — so `--action train` raises an `AttributeError` before training can happen. It's also never invoked by the live API or the feedback endpoint even when working.
 - Whatever `scripts/manage_models.py` produces is never picked up by the running service — `FraudDetectionService` always constructs `MLModel()` with no path (see the System Architecture Diagram notes above), so this training path has no effect on live predictions unless someone manually wires the saved path through.
 - The `/metrics` endpoint (`get_model_metrics()`) does **not** reflect either of these processes — it generates simulated metrics (hardcoded baseline values with ±2% random jitter) and a randomized `last_trained` timestamp, not measurements from a real training or evaluation run.
 
@@ -1791,10 +1791,10 @@ flowchart TD
     START[Transaction Input] --> FEAT[engineer_features]
     FEAT --> SANCTION{Sanctioned country?}
 
-    SANCTION -->|Yes| DENY["is_fraud=True, confidence=0.99<br/>requires_review=False<br/>(auto-denied, ML/LLM skipped)"]
+    SANCTION -->|Yes| DENY["Return immediately:<br/>is_fraud=True, confidence=0.99<br/>requires_review=False<br/>(auto-denied, ML/LLM/logging all skipped)"]
     SANCTION -->|No| MISMATCH{"category_mismatch > 0.8 AND<br/>country_risk > 0.7?"}
 
-    MISMATCH -->|Yes| FLAG["is_fraud=True, confidence=0.95<br/>requires_review=True<br/>(flagged, ML/LLM skipped)"]
+    MISMATCH -->|Yes| FLAG["Return immediately:<br/>is_fraud=True, confidence=0.95<br/>requires_review=True<br/>(flagged, ML/LLM/logging all skipped)"]
     MISMATCH -->|No| ML["ML/Heuristic predict:<br/>fraud_probability, ml_confidence"]
 
     ML --> NEEDLLM{"ml_confidence < 0.95, OR<br/>0.2 < fraud_probability < 0.8, OR<br/>amount > 1000, OR<br/>merchant_risk_score > 0.6?"}
@@ -1812,9 +1812,7 @@ flowchart TD
     REVIEW -->|Yes| NEEDSREVIEW[requires_review = True]
     REVIEW -->|No| NOREVIEW[requires_review = False]
 
-    DENY --> LOG["_log_transaction<br/>(application log only)"]
-    FLAG --> LOG
-    NEEDSREVIEW --> LOG
+    NEEDSREVIEW --> LOG["_log_transaction<br/>(application log only)"]
     NOREVIEW --> LOG
 
     style DENY fill:#f44336,color:#fff
@@ -1827,7 +1825,7 @@ flowchart TD
 Notes on this diagram (verified against `app/services/fraud_detection_service.py` on 2026-09-23):
 - The response is only ever two booleans, `is_fraud` and `requires_review` (plus a `confidence_score` and `decision_reason`) — there's no three-state `BLOCK`/`HOLD`/`APPROVE` classification, no XGBoost score tiering (High/Medium/Low), and no separate "Immediate Alert" or "Review Queue" system anywhere in the code. Any such routing would be entirely up to the API caller.
 - "Pattern Match: Strong/Weak" isn't a real branch — `search_similar_patterns()` always returns up to `k=5` documents (possibly zero) with no strength/confidence classification gating whether the LLM is called; the actual gate is the `NEEDLLM` condition shown above.
-- Every transaction is logged identically via `_log_transaction()` regardless of outcome — there's no outcome-specific "Immediate Alert" vs. "Review Queue" vs. "Log Transaction" branching.
+- `_log_transaction()` is **not** called for either hard-block path — both `DENY` and `FLAG` `return` immediately inside `detect_fraud()`, before the logging call is ever reached. It only runs for transactions that make it through the ML/LLM path (and not at all if an unhandled exception occurs, which returns a conservative default response with no logging either).
 
 ### ⚡ **Performance Characteristics**
 

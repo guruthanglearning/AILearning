@@ -38,47 +38,57 @@ class MLModel:
             "amount_velocity_24h", "unique_merchants_24h", "days_since_last_txn"
         ]
         
-        if model_path and os.path.exists(model_path):
-            self._load_model(model_path)
-            if scaler_path and os.path.exists(scaler_path):
-                self._load_scaler(scaler_path)
-            else:
-                logger.warning("No scaler file found. Creating a new scaler.")
-                self.scaler = StandardScaler()
+        # A fitted model paired with an unfitted (or mismatched) scaler is
+        # worse than either alone - it silently produces predictions from
+        # unscaled features instead of failing loudly or matching what the
+        # model was actually trained on. Load model+scaler atomically: both
+        # must exist and both must load successfully, or fall back to the
+        # demo model/scaler pair together.
+        if model_path and scaler_path and os.path.exists(model_path) and os.path.exists(scaler_path):
+            if self._load_model(model_path) and self._load_scaler(scaler_path):
+                return
+            logger.warning("Failed to load model/scaler pair. Falling back to a demo model.")
         else:
-            # Create a demo model if no model file exists
-            logger.warning("No model file found. Creating a demo model.")
-            self._create_demo_model()
-    
-    def _load_model(self, model_path: str):
+            logger.warning("Model and/or scaler file not found. Creating a demo model.")
+        self._create_demo_model()
+
+    def _load_model(self, model_path: str) -> bool:
         """
         Load the pre-trained XGBoost model from a file.
-        
+
         Args:
             model_path: Path to the saved model file
+
+        Returns:
+            True if the model loaded successfully, False otherwise
         """
         try:
             logger.info(f"Loading model from {model_path}")
             self.model = joblib.load(model_path)
             logger.info(f"Successfully loaded model from {model_path}")
+            return True
         except Exception as e:
             logger.error(f"Error loading model: {str(e)}")
-            self._create_demo_model()
-    
-    def _load_scaler(self, scaler_path: str):
+            return False
+
+    def _load_scaler(self, scaler_path: str) -> bool:
         """
         Load the pre-trained scaler from a file.
-        
+
         Args:
             scaler_path: Path to the saved scaler file
+
+        Returns:
+            True if the scaler loaded successfully, False otherwise
         """
         try:
             logger.info(f"Loading scaler from {scaler_path}")
             self.scaler = joblib.load(scaler_path)
             logger.info(f"Successfully loaded scaler from {scaler_path}")
+            return True
         except Exception as e:
             logger.error(f"Error loading scaler: {str(e)}")
-            self.scaler = StandardScaler()
+            return False
     
     def _create_demo_model(self):
         """

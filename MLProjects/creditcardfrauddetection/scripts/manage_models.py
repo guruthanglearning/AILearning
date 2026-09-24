@@ -57,16 +57,27 @@ def load_data(data_path, sample_size=None):
     return df
 
 def _clean(value, default=None):
-    """Convert a pandas NaN/missing cell to `default`; pass real values through unchanged."""
-    return default if pd.isna(value) else value
+    """Convert a pandas NaN/missing scalar cell to `default`; pass everything else through unchanged."""
+    try:
+        missing = pd.isna(value)
+    except (TypeError, ValueError):
+        return value  # not a scalar pd.isna can judge (e.g. list-valued cell) - leave as-is
+    return default if isinstance(missing, bool) and missing else value
 
-def _parse_bool(value):
-    """Coerce a CSV cell (Python bool, 0/1, or 'true'/'false' string) into an actual bool."""
+_TRUE_TOKENS = {"true", "1", "yes", "y"}
+_FALSE_TOKENS = {"false", "0", "no", "n"}
+
+def _parse_bool(value, field_name="value"):
+    """Strictly parse a CSV cell into a bool; raises ValueError rather than guessing on anything ambiguous."""
     if isinstance(value, bool):
         return value
-    if isinstance(value, str):
-        return value.strip().lower() in ("true", "1", "yes", "y")
-    return bool(value)
+    if isinstance(value, (int, float)) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str) and value.strip().lower() in _TRUE_TOKENS:
+        return True
+    if isinstance(value, str) and value.strip().lower() in _FALSE_TOKENS:
+        return False
+    raise ValueError(f"unrecognized boolean value {value!r} for {field_name}")
 
 def prepare_data(df):
     """
@@ -92,41 +103,54 @@ def prepare_data(df):
     skipped = 0
 
     for i, row in df.iterrows():
-        # engineer_features() requires a Transaction (attribute access, e.g.
-        # transaction.timestamp), not a plain dict - build one here, filling in
-        # required fields the sample CSVs don't carry with deterministic defaults.
-        timestamp = _clean(row.get("timestamp"))
-        amount = _clean(row.get("amount"))
-        merchant_category = _clean(row.get("merchant_category"))
-        merchant_country = _clean(row.get("merchant_country"))
-        if timestamp is None or amount is None or merchant_category is None or merchant_country is None:
-            logger.warning(f"Skipping row {i}: missing a required field (timestamp/amount/merchant_category/merchant_country)")
+        try:
+            # engineer_features() requires a Transaction (attribute access, e.g.
+            # transaction.timestamp), not a plain dict - build one here, filling in
+            # required fields the sample CSVs don't carry with deterministic defaults.
+            timestamp = _clean(row.get("timestamp"))
+            amount = _clean(row.get("amount"))
+            merchant_category = _clean(row.get("merchant_category"))
+            merchant_country = _clean(row.get("merchant_country"))
+            fraud_label = _clean(row.get("is_fraud"))
+            if None in (timestamp, amount, merchant_category, merchant_country, fraud_label):
+                raise ValueError("missing a required field (timestamp/amount/merchant_category/merchant_country/is_fraud)")
+
+            # ZIPs are frequently inferred as float by pandas (e.g. 98040.0)
+            # when the column has blank cells elsewhere; strip that artifact.
+            merchant_zip = _clean(row.get("merchant_zip"))
+            if merchant_zip is not None:
+                merchant_zip = str(merchant_zip)
+                if merchant_zip.endswith(".0"):
+                    merchant_zip = merchant_zip[:-2]
+
+            transaction = Transaction(
+                transaction_id=str(_clean(row.get("transaction_id"), f"tx_{i}")),
+                card_id=str(_clean(row.get("card_id"), f"card_{i}")),
+                merchant_id=str(_clean(row.get("merchant_id"), f"merch_{i}")),
+                timestamp=str(timestamp),
+                amount=float(amount),
+                merchant_category=str(merchant_category),
+                merchant_name=_clean(row.get("merchant_name")),
+                merchant_country=str(merchant_country),
+                merchant_zip=merchant_zip,
+                customer_id=str(_clean(row.get("customer_id"), f"cust_{i}")),
+                is_online=_parse_bool(_clean(row.get("is_online"), False), "is_online"),
+                currency=str(_clean(row.get("currency"), "USD")),
+                latitude=_clean(row.get("latitude")),
+                longitude=_clean(row.get("longitude")),
+            )
+
+            # Extract features
+            features = engineer_features(transaction)
+            ml_features = select_features_for_ml(features)
+            label = _parse_bool(fraud_label, "is_fraud")
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Skipping row {i}: {e}")
             skipped += 1
             continue
 
-        transaction = Transaction(
-            transaction_id=str(_clean(row.get("transaction_id"), f"tx_{i}")),
-            card_id=str(_clean(row.get("card_id"), f"card_{i}")),
-            merchant_id=str(_clean(row.get("merchant_id"), f"merch_{i}")),
-            timestamp=str(timestamp),
-            amount=float(amount),
-            merchant_category=str(merchant_category),
-            merchant_name=_clean(row.get("merchant_name")),
-            merchant_country=str(merchant_country),
-            merchant_zip=_clean(row.get("merchant_zip")),
-            customer_id=str(_clean(row.get("customer_id"), f"cust_{i}")),
-            is_online=_parse_bool(_clean(row.get("is_online"), False)),
-            currency=str(_clean(row.get("currency"), "USD")),
-            latitude=_clean(row.get("latitude")),
-            longitude=_clean(row.get("longitude")),
-        )
-
-        # Extract features
-        features = engineer_features(transaction)
-        ml_features = select_features_for_ml(features)
-
         features_list.append(ml_features)
-        labels.append(_parse_bool(_clean(row.get("is_fraud"), False)))
+        labels.append(label)
 
     if skipped:
         logger.warning(f"Skipped {skipped} row(s) with missing required fields")

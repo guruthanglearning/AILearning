@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 # Import the LLM service
 from app.services.llm_service import LLMService
-from langchain.schema import Document
+from langchain_core.documents import Document
 from app.core.config import settings
 
 def print_separator(title):

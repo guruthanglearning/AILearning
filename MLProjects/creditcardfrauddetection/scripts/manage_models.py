@@ -56,55 +56,88 @@ def load_data(data_path, sample_size=None):
     logger.info(f"Loaded {len(df)} transactions")
     return df
 
+def _clean(value, default=None):
+    """Convert a pandas NaN/missing cell to `default`; pass real values through unchanged."""
+    return default if pd.isna(value) else value
+
+def _parse_bool(value):
+    """Coerce a CSV cell (Python bool, 0/1, or 'true'/'false' string) into an actual bool."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in ("true", "1", "yes", "y")
+    return bool(value)
+
 def prepare_data(df):
     """
     Prepare data for training.
-    
+
     Args:
         df (DataFrame): Raw data
-        
+
     Returns:
         tuple: X (features), y (labels), feature_names
     """
     logger.info("Preparing data for training")
-    
+
+    # MLModel.predict() reads features through this same ordered column list
+    # (defaulting anything missing to 0.0) - reuse it here so a model trained
+    # from this script's output has the schema MLModel actually expects,
+    # regardless of which optional features (e.g. geo) a given row has.
+    feature_columns = MLModel().feature_columns
+
     # Engineer features
     features_list = []
     labels = []
-    
+    skipped = 0
+
     for i, row in df.iterrows():
         # engineer_features() requires a Transaction (attribute access, e.g.
         # transaction.timestamp), not a plain dict - build one here, filling in
         # required fields the sample CSVs don't carry with deterministic defaults.
+        timestamp = _clean(row.get("timestamp"))
+        amount = _clean(row.get("amount"))
+        merchant_category = _clean(row.get("merchant_category"))
+        merchant_country = _clean(row.get("merchant_country"))
+        if timestamp is None or amount is None or merchant_category is None or merchant_country is None:
+            logger.warning(f"Skipping row {i}: missing a required field (timestamp/amount/merchant_category/merchant_country)")
+            skipped += 1
+            continue
+
         transaction = Transaction(
-            transaction_id=str(row.get("transaction_id", f"tx_{i}")),
-            card_id=str(row.get("card_id", f"card_{i}")),
-            merchant_id=str(row.get("merchant_id", f"merch_{i}")),
-            timestamp=str(row["timestamp"]),
-            amount=float(row["amount"]),
-            merchant_category=str(row["merchant_category"]),
-            merchant_name=row.get("merchant_name"),
-            merchant_country=str(row["merchant_country"]),
-            merchant_zip=row.get("merchant_zip"),
-            customer_id=str(row.get("customer_id", f"cust_{i}")),
-            is_online=bool(row["is_online"]),
-            currency=str(row.get("currency", "USD")),
-            latitude=row.get("latitude"),
-            longitude=row.get("longitude"),
+            transaction_id=str(_clean(row.get("transaction_id"), f"tx_{i}")),
+            card_id=str(_clean(row.get("card_id"), f"card_{i}")),
+            merchant_id=str(_clean(row.get("merchant_id"), f"merch_{i}")),
+            timestamp=str(timestamp),
+            amount=float(amount),
+            merchant_category=str(merchant_category),
+            merchant_name=_clean(row.get("merchant_name")),
+            merchant_country=str(merchant_country),
+            merchant_zip=_clean(row.get("merchant_zip")),
+            customer_id=str(_clean(row.get("customer_id"), f"cust_{i}")),
+            is_online=_parse_bool(_clean(row.get("is_online"), False)),
+            currency=str(_clean(row.get("currency"), "USD")),
+            latitude=_clean(row.get("latitude")),
+            longitude=_clean(row.get("longitude")),
         )
 
         # Extract features
         features = engineer_features(transaction)
         ml_features = select_features_for_ml(features)
-        
+
         features_list.append(ml_features)
-        labels.append(row["is_fraud"])
-    
-    # Convert to arrays
-    X = np.array([list(f.values()) for f in features_list])
+        labels.append(_parse_bool(_clean(row.get("is_fraud"), False)))
+
+    if skipped:
+        logger.warning(f"Skipped {skipped} row(s) with missing required fields")
+
+    # Convert to arrays, using a fixed column order/width (0.0 for anything a
+    # given row's features are missing, e.g. geo features) so rows stay
+    # rectangular regardless of which optional features were computed.
+    X = np.array([[f.get(col, 0.0) for col in feature_columns] for f in features_list])
     y = np.array(labels)
-    feature_names = list(features_list[0].keys())
-    
+    feature_names = feature_columns
+
     logger.info(f"Prepared {len(X)} samples with {len(feature_names)} features")
     return X, y, feature_names
 

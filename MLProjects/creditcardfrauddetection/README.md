@@ -1643,7 +1643,7 @@ graph TB
         LLM[LLM Engine - RAG]
     end
 
-    subgraph "🌐 External LLM Services"
+    subgraph "🌐 LLM Providers / Fallbacks"
         OPENAI[OpenAI API]
         OLLAMA[Ollama API]
         MOCK[Enhanced Mock LLM]

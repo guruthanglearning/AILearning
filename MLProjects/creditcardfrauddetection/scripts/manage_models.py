@@ -22,6 +22,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.models.ml_model import MLModel
 from app.utils.feature_engineering import engineer_features, select_features_for_ml
+from app.api.models import Transaction
 from app.core.config import settings
 
 # Set up logging
@@ -55,46 +56,112 @@ def load_data(data_path, sample_size=None):
     logger.info(f"Loaded {len(df)} transactions")
     return df
 
+def _clean(value, default=None):
+    """Convert a pandas NaN/missing scalar cell to `default`; pass everything else through unchanged."""
+    try:
+        missing = pd.isna(value)
+    except (TypeError, ValueError):
+        return value  # not a scalar pd.isna can judge (e.g. list-valued cell) - leave as-is
+    return default if isinstance(missing, bool) and missing else value
+
+_TRUE_TOKENS = {"true", "1", "yes", "y"}
+_FALSE_TOKENS = {"false", "0", "no", "n"}
+
+def _parse_bool(value, field_name="value"):
+    """Strictly parse a CSV cell into a bool; raises ValueError rather than guessing on anything ambiguous."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str) and value.strip().lower() in _TRUE_TOKENS:
+        return True
+    if isinstance(value, str) and value.strip().lower() in _FALSE_TOKENS:
+        return False
+    raise ValueError(f"unrecognized boolean value {value!r} for {field_name}")
+
 def prepare_data(df):
     """
     Prepare data for training.
-    
+
     Args:
         df (DataFrame): Raw data
-        
+
     Returns:
         tuple: X (features), y (labels), feature_names
     """
     logger.info("Preparing data for training")
-    
+
+    # MLModel.predict() reads features through this same ordered column list
+    # (defaulting anything missing to 0.0) - reuse it here so a model trained
+    # from this script's output has the schema MLModel actually expects,
+    # regardless of which optional features (e.g. geo) a given row has.
+    feature_columns = MLModel().feature_columns
+
     # Engineer features
     features_list = []
     labels = []
-    
+    skipped = 0
+
     for i, row in df.iterrows():
-        # Convert row to Transaction-like object for feature engineering
-        transaction = {
-            "transaction_id": row.get("transaction_id", f"tx_{i}"),
-            "amount": row["amount"],
-            "is_online": row["is_online"],
-            "merchant_category": row["merchant_category"],
-            "merchant_country": row["merchant_country"],
-            "timestamp": row["timestamp"],
-            # Add more fields as needed
-        }
-        
-        # Extract features
-        features = engineer_features(transaction)
-        ml_features = select_features_for_ml(features)
-        
+        try:
+            # engineer_features() requires a Transaction (attribute access, e.g.
+            # transaction.timestamp), not a plain dict - build one here, filling in
+            # required fields the sample CSVs don't carry with deterministic defaults.
+            timestamp = _clean(row.get("timestamp"))
+            amount = _clean(row.get("amount"))
+            merchant_category = _clean(row.get("merchant_category"))
+            merchant_country = _clean(row.get("merchant_country"))
+            fraud_label = _clean(row.get("is_fraud"))
+            if None in (timestamp, amount, merchant_category, merchant_country, fraud_label):
+                raise ValueError("missing a required field (timestamp/amount/merchant_category/merchant_country/is_fraud)")
+
+            # ZIPs are frequently inferred as float by pandas (e.g. 98040.0)
+            # when the column has blank cells elsewhere; strip that artifact.
+            merchant_zip = _clean(row.get("merchant_zip"))
+            if merchant_zip is not None:
+                merchant_zip = str(merchant_zip)
+                if merchant_zip.endswith(".0"):
+                    merchant_zip = merchant_zip[:-2]
+
+            transaction = Transaction(
+                transaction_id=str(_clean(row.get("transaction_id"), f"tx_{i}")),
+                card_id=str(_clean(row.get("card_id"), f"card_{i}")),
+                merchant_id=str(_clean(row.get("merchant_id"), f"merch_{i}")),
+                timestamp=str(timestamp),
+                amount=float(amount),
+                merchant_category=str(merchant_category),
+                merchant_name=_clean(row.get("merchant_name")),
+                merchant_country=str(merchant_country),
+                merchant_zip=merchant_zip,
+                customer_id=str(_clean(row.get("customer_id"), f"cust_{i}")),
+                is_online=_parse_bool(_clean(row.get("is_online"), False), "is_online"),
+                currency=str(_clean(row.get("currency"), "USD")),
+                latitude=_clean(row.get("latitude")),
+                longitude=_clean(row.get("longitude")),
+            )
+
+            # Extract features
+            features = engineer_features(transaction)
+            ml_features = select_features_for_ml(features)
+            label = _parse_bool(fraud_label, "is_fraud")
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Skipping row {i}: {e}")
+            skipped += 1
+            continue
+
         features_list.append(ml_features)
-        labels.append(row["is_fraud"])
-    
-    # Convert to arrays
-    X = np.array([list(f.values()) for f in features_list])
+        labels.append(label)
+
+    if skipped:
+        logger.warning(f"Skipped {skipped} row(s) with missing required fields")
+
+    # Convert to arrays, using a fixed column order/width (0.0 for anything a
+    # given row's features are missing, e.g. geo features) so rows stay
+    # rectangular regardless of which optional features were computed.
+    X = np.array([[f.get(col, 0.0) for col in feature_columns] for f in features_list])
     y = np.array(labels)
-    feature_names = list(features_list[0].keys())
-    
+    feature_names = feature_columns
+
     logger.info(f"Prepared {len(X)} samples with {len(feature_names)} features")
     return X, y, feature_names
 

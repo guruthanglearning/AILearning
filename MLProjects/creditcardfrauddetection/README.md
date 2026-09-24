@@ -1629,60 +1629,68 @@ graph TB
         UI[Streamlit Dashboard]
         API[FastAPI Server]
     end
-    
-    subgraph "🧠 AI/ML Layer"
-        XGB[XGBoost Classifier]
-        LLM[LLM Engine]
-        VECTOR[Vector Similarity]
-        PATTERN[Pattern Recognition]
-        DECISION[Decision Engine]
-    end
-    
-    subgraph "📊 Data Processing Layer"
+
+    subgraph "🧩 Fraud Detection Service"
+        VALIDATION[Pydantic Input Validation]
+        DECISION[Decision Engine - detect_fraud]
         FEATURE[Feature Engineering]
-        PREPROCESS[Data Preprocessing]
-        VALIDATION[Input Validation]
     end
-    
-    subgraph "🌐 External Services"
+
+    subgraph "🧠 AI/ML Layer"
+        HARDBLOCK{Sanctioned country, or<br/>category mismatch + high-risk country?}
+        XGB[XGBoost path<br/>heuristic fallback in practice]
+        VECTOR[Vector Similarity Search]
+        LLM[LLM Engine - RAG]
+    end
+
+    subgraph "🌐 LLM Providers / Fallbacks"
         OPENAI[OpenAI API]
         OLLAMA[Ollama API]
-        MOCK[Mock LLM]
+        MOCK[Enhanced Mock LLM]
     end
-    
+
     subgraph "💾 Data Storage"
-        CHROMA[ChromaDB Vector Store]
-        PATTERNS[Fraud Patterns DB]
-        MODELS[ML Models Storage]
-        LOGS[Transaction Logs]
+        CHROMA[("ChromaDB (default)<br/>or Pinecone if configured")]
+        MODELS[("data/models/*.joblib<br/>not loaded by the live API")]
+        LOGS[Application Log Output]
     end
-    
+
     UI --> API
-    API --> DECISION
-    DECISION --> XGB
-    DECISION --> LLM
-    DECISION --> VECTOR
-    
-    XGB --> FEATURE
-    VECTOR --> PATTERN
+    API --> VALIDATION
+    VALIDATION --> DECISION
+    DECISION --> FEATURE
+    FEATURE --> HARDBLOCK
+    HARDBLOCK -->|"yes: early fraud response, skip ML/LLM -<br/>sanctioned country auto-denied,<br/>combined-risk case requires review"| DECISION
+    HARDBLOCK -->|no| XGB
+    XGB -->|"unfitted demo model errors,<br/>falls back to risk-factor heuristic"| DECISION
+
+    DECISION -->|"conditional: low ML confidence,<br/>borderline score, amount > 1000,<br/>or risky merchant"| VECTOR
+    VECTOR <--> CHROMA
+    VECTOR -->|retrieved patterns| LLM
     LLM --> OPENAI
     LLM --> OLLAMA
     LLM --> MOCK
-    
-    FEATURE --> PREPROCESS
-    PREPROCESS --> VALIDATION
-    PATTERN --> CHROMA
-    
-    XGB --> MODELS
-    VECTOR --> PATTERNS
-    API --> LOGS
-    
+    LLM -->|fraud_probability, reasoning| DECISION
+
+    DECISION --> LOGS
+
     style UI fill:#e3f2fd
     style API fill:#f3e5f5
     style XGB fill:#e8f5e8
     style LLM fill:#fff3e0
     style DECISION fill:#fff8e1
+    style MODELS fill:#eeeeee,stroke-dasharray: 5 5
 ```
+
+Notes on this diagram (verified against `app/` on 2026-09-23):
+- The "Pattern Recognition" component and separate "Fraud Patterns DB" store from the previous version of this diagram don't exist — `VectorDBService` is the only component.
+- ML screening is **not unconditional**: `detect_fraud()` returns early — before the ML step even runs — for a sanctioned merchant country, or for `category_mismatch > 0.8 and country_risk > 0.7`.
+- The "XGBoost Classifier" node is misleading as a label for what actually executes: `MLModel` constructs an unfitted demo `XGBClassifier`, so `predict_proba()` raises inside a try/except and the code falls through to a hand-written risk-factor heuristic — the live path is that heuristic, not a working (if untrained) XGBoost prediction.
+- The dashed "ML Models Storage" node exists on disk (`data/models/fraud_model.joblib`, `scaler.joblib`), but `FraudDetectionService` constructs `MLModel()` with no path, so the running API never loads it. The joblib files are only read by standalone scripts (`scripts/manage_models.py`, `scripts/test_model_loading.py`).
+- The vector store isn't always ChromaDB: `VectorDBService.initialize_vector_store()` uses Pinecone when `USE_PINECONE`, the Pinecone package, and an API key are all present; otherwise it falls back to persistent Chroma. Its documented "in-memory" fallback path (`_initialize_in_memory()`, reached only when the `Chroma` import itself failed) is actually broken — it still calls `Chroma(...)`, which raises `NameError` since that name was never bound.
+- Vector search and LLM analysis are **conditional**, not parallel siblings of the Decision Engine — they only run when `ml_confidence < 0.95`, the fraud probability is borderline (0.2–0.8), the amount exceeds $1000, or `merchant_risk_score > 0.6`; otherwise the ML/heuristic result is used directly.
+- When Vector/LLM do run, it's a genuine RAG chain: similar patterns are retrieved first and passed into the LLM call, not two independent branches.
+- "Transaction Logs" storage is just `logger.info(json.dumps(...))` inside the Decision Engine — there's no separate log database.
 
 ### ⚡ **Data Flow Architecture**
 

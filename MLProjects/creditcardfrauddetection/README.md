@@ -1629,60 +1629,63 @@ graph TB
         UI[Streamlit Dashboard]
         API[FastAPI Server]
     end
-    
+
+    subgraph "🧩 Fraud Detection Service"
+        VALIDATION[Pydantic Input Validation]
+        DECISION[Decision Engine - detect_fraud]
+        FEATURE[Feature Engineering]
+    end
+
     subgraph "🧠 AI/ML Layer"
         XGB[XGBoost Classifier]
-        LLM[LLM Engine]
-        VECTOR[Vector Similarity]
-        PATTERN[Pattern Recognition]
-        DECISION[Decision Engine]
+        VECTOR[Vector Similarity Search]
+        LLM[LLM Engine - RAG]
     end
-    
-    subgraph "📊 Data Processing Layer"
-        FEATURE[Feature Engineering]
-        PREPROCESS[Data Preprocessing]
-        VALIDATION[Input Validation]
-    end
-    
-    subgraph "🌐 External Services"
+
+    subgraph "🌐 External LLM Services"
         OPENAI[OpenAI API]
         OLLAMA[Ollama API]
-        MOCK[Mock LLM]
+        MOCK[Enhanced Mock LLM]
     end
-    
+
     subgraph "💾 Data Storage"
-        CHROMA[ChromaDB Vector Store]
-        PATTERNS[Fraud Patterns DB]
-        MODELS[ML Models Storage]
-        LOGS[Transaction Logs]
+        CHROMA[(ChromaDB<br/>fraud patterns + similarity index)]
+        MODELS[("data/models/*.joblib<br/>not loaded by the live API")]
+        LOGS[Application Log Output]
     end
-    
+
     UI --> API
-    API --> DECISION
-    DECISION --> XGB
+    API --> VALIDATION
+    VALIDATION --> DECISION
+    DECISION --> FEATURE
+    FEATURE --> XGB
+    XGB -->|always runs| DECISION
+
+    DECISION -->|"conditional: low ML confidence,<br/>borderline score, amount > 1000,<br/>or risky merchant"| VECTOR
+    VECTOR <--> CHROMA
+    VECTOR -->|retrieved patterns| LLM
     DECISION --> LLM
-    DECISION --> VECTOR
-    
-    XGB --> FEATURE
-    VECTOR --> PATTERN
     LLM --> OPENAI
     LLM --> OLLAMA
     LLM --> MOCK
-    
-    FEATURE --> PREPROCESS
-    PREPROCESS --> VALIDATION
-    PATTERN --> CHROMA
-    
-    XGB --> MODELS
-    VECTOR --> PATTERNS
-    API --> LOGS
-    
+    LLM -->|fraud_probability, reasoning| DECISION
+
+    DECISION --> LOGS
+
     style UI fill:#e3f2fd
     style API fill:#f3e5f5
     style XGB fill:#e8f5e8
     style LLM fill:#fff3e0
     style DECISION fill:#fff8e1
+    style MODELS fill:#eeeeee,stroke-dasharray: 5 5
 ```
+
+Notes on this diagram (verified against `app/` on 2026-09-23):
+- The "Pattern Recognition" component and separate "Fraud Patterns DB" store from the previous version of this diagram don't exist — `VectorDBService` is the only component, backed by a single ChromaDB store (`data/chroma_db`) used for both writes (`add_fraud_patterns`) and similarity search.
+- The dashed "ML Models Storage" node exists on disk (`data/models/fraud_model.joblib`, `scaler.joblib`), but `FraudDetectionService` constructs `MLModel()` with no path, so the running API never loads it — it always runs an in-memory, untrained demo XGBoost model. The joblib files are only read by standalone scripts (`scripts/manage_models.py`, `scripts/test_model_loading.py`).
+- Vector search and LLM analysis are **conditional**, not parallel siblings of the Decision Engine — they only run when `ml_confidence < 0.95`, the fraud probability is borderline (0.2–0.8), the amount exceeds $1000, or `merchant_risk_score > 0.6`; otherwise the ML result is used directly.
+- When Vector/LLM do run, it's a genuine RAG chain: similar patterns are retrieved first and passed into the LLM call, not two independent branches.
+- "Transaction Logs" storage is just `logger.info(json.dumps(...))` inside the Decision Engine — there's no separate log database.
 
 ### ⚡ **Data Flow Architecture**
 

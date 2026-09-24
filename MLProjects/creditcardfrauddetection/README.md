@@ -1637,7 +1637,8 @@ graph TB
     end
 
     subgraph "🧠 AI/ML Layer"
-        XGB[XGBoost Classifier]
+        HARDBLOCK{Sanctioned country, or<br/>category mismatch + high-risk country?}
+        XGB[XGBoost path<br/>heuristic fallback in practice]
         VECTOR[Vector Similarity Search]
         LLM[LLM Engine - RAG]
     end
@@ -1649,7 +1650,7 @@ graph TB
     end
 
     subgraph "💾 Data Storage"
-        CHROMA[(ChromaDB<br/>fraud patterns + similarity index)]
+        CHROMA[("ChromaDB (default)<br/>or Pinecone if configured")]
         MODELS[("data/models/*.joblib<br/>not loaded by the live API")]
         LOGS[Application Log Output]
     end
@@ -1658,8 +1659,10 @@ graph TB
     API --> VALIDATION
     VALIDATION --> DECISION
     DECISION --> FEATURE
-    FEATURE --> XGB
-    XGB -->|always runs| DECISION
+    FEATURE --> HARDBLOCK
+    HARDBLOCK -->|"yes: auto-block,<br/>skip ML/LLM entirely"| DECISION
+    HARDBLOCK -->|no| XGB
+    XGB -->|"unfitted demo model errors,<br/>falls back to risk-factor heuristic"| DECISION
 
     DECISION -->|"conditional: low ML confidence,<br/>borderline score, amount > 1000,<br/>or risky merchant"| VECTOR
     VECTOR <--> CHROMA
@@ -1681,9 +1684,12 @@ graph TB
 ```
 
 Notes on this diagram (verified against `app/` on 2026-09-23):
-- The "Pattern Recognition" component and separate "Fraud Patterns DB" store from the previous version of this diagram don't exist — `VectorDBService` is the only component, backed by a single ChromaDB store (`data/chroma_db`) used for both writes (`add_fraud_patterns`) and similarity search.
-- The dashed "ML Models Storage" node exists on disk (`data/models/fraud_model.joblib`, `scaler.joblib`), but `FraudDetectionService` constructs `MLModel()` with no path, so the running API never loads it — it always runs an in-memory, untrained demo XGBoost model. The joblib files are only read by standalone scripts (`scripts/manage_models.py`, `scripts/test_model_loading.py`).
-- Vector search and LLM analysis are **conditional**, not parallel siblings of the Decision Engine — they only run when `ml_confidence < 0.95`, the fraud probability is borderline (0.2–0.8), the amount exceeds $1000, or `merchant_risk_score > 0.6`; otherwise the ML result is used directly.
+- The "Pattern Recognition" component and separate "Fraud Patterns DB" store from the previous version of this diagram don't exist — `VectorDBService` is the only component.
+- ML screening is **not unconditional**: `detect_fraud()` returns early — before the ML step even runs — for a sanctioned merchant country, or for `category_mismatch > 0.8 and country_risk > 0.7`.
+- The "XGBoost Classifier" node is misleading as a label for what actually executes: `MLModel` constructs an unfitted demo `XGBClassifier`, so `predict_proba()` raises inside a try/except and the code falls through to a hand-written risk-factor heuristic — the live path is that heuristic, not a working (if untrained) XGBoost prediction.
+- The dashed "ML Models Storage" node exists on disk (`data/models/fraud_model.joblib`, `scaler.joblib`), but `FraudDetectionService` constructs `MLModel()` with no path, so the running API never loads it. The joblib files are only read by standalone scripts (`scripts/manage_models.py`, `scripts/test_model_loading.py`).
+- The vector store isn't always ChromaDB: `VectorDBService.initialize_vector_store()` uses Pinecone when `USE_PINECONE`, the Pinecone package, and an API key are all present; otherwise it falls back to persistent (or in-memory) Chroma.
+- Vector search and LLM analysis are **conditional**, not parallel siblings of the Decision Engine — they only run when `ml_confidence < 0.95`, the fraud probability is borderline (0.2–0.8), the amount exceeds $1000, or `merchant_risk_score > 0.6`; otherwise the ML/heuristic result is used directly.
 - When Vector/LLM do run, it's a genuine RAG chain: similar patterns are retrieved first and passed into the LLM call, not two independent branches.
 - "Transaction Logs" storage is just `logger.info(json.dumps(...))` inside the Decision Engine — there's no separate log database.
 

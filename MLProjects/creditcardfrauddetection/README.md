@@ -1660,7 +1660,7 @@ graph TB
     VALIDATION --> DECISION
     DECISION --> FEATURE
     FEATURE --> HARDBLOCK
-    HARDBLOCK -->|"yes: auto-block,<br/>skip ML/LLM entirely"| DECISION
+    HARDBLOCK -->|"yes: early fraud response, skip ML/LLM -<br/>sanctioned country auto-denied,<br/>combined-risk case requires review"| DECISION
     HARDBLOCK -->|no| XGB
     XGB -->|"unfitted demo model errors,<br/>falls back to risk-factor heuristic"| DECISION
 

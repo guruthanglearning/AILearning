@@ -9,6 +9,7 @@ import numpy as np
 from typing import Dict, Any, Tuple, List, Optional
 import xgboost as xgb
 from sklearn.preprocessing import StandardScaler
+from sklearn.utils.validation import check_is_fitted
 import joblib
 
 from app.core.config import settings
@@ -54,17 +55,22 @@ class MLModel:
 
     def _load_model(self, model_path: str) -> bool:
         """
-        Load the pre-trained XGBoost model from a file.
+        Load the pre-trained XGBoost model from a file. A file that
+        deserializes but was never actually fit (e.g. saved via the old
+        --action download path) is treated as a load failure, not a
+        success - predicting with it would raise NotFittedError.
 
         Args:
             model_path: Path to the saved model file
 
         Returns:
-            True if the model loaded successfully, False otherwise
+            True if a genuinely fitted model loaded successfully, False otherwise
         """
         try:
             logger.info(f"Loading model from {model_path}")
-            self.model = joblib.load(model_path)
+            model = joblib.load(model_path)
+            check_is_fitted(model)
+            self.model = model
             logger.info(f"Successfully loaded model from {model_path}")
             return True
         except Exception as e:
@@ -73,17 +79,31 @@ class MLModel:
 
     def _load_scaler(self, scaler_path: str) -> bool:
         """
-        Load the pre-trained scaler from a file.
+        Load the pre-trained scaler from a file. Rejects a scaler that
+        deserializes but isn't actually fitted, or that was fitted on a
+        different number of features than feature_columns - either would
+        otherwise be silently caught by _preprocess_features()'s
+        scaler.transform() try/except and fall through to predicting on
+        raw, unscaled features instead of failing loudly.
 
         Args:
             scaler_path: Path to the saved scaler file
 
         Returns:
-            True if the scaler loaded successfully, False otherwise
+            True if a genuinely fitted, feature-compatible scaler loaded successfully, False otherwise
         """
         try:
             logger.info(f"Loading scaler from {scaler_path}")
-            self.scaler = joblib.load(scaler_path)
+            scaler = joblib.load(scaler_path)
+            check_is_fitted(scaler)
+            expected_features = len(self.feature_columns)
+            actual_features = getattr(scaler, "n_features_in_", expected_features)
+            if actual_features != expected_features:
+                raise ValueError(
+                    f"scaler was fitted on {actual_features} features, "
+                    f"but MLModel.feature_columns has {expected_features}"
+                )
+            self.scaler = scaler
             logger.info(f"Successfully loaded scaler from {scaler_path}")
             return True
         except Exception as e:

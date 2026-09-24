@@ -1699,139 +1699,135 @@ sequenceDiagram
     participant User
     participant UI as Streamlit UI
     participant API as FastAPI
-    participant ML as ML Pipeline
+    participant Service as FraudDetectionService
+    participant ML as ML/Heuristic
     participant Vector as Vector DB
     participant LLM as LLM Service
-    participant DB as Data Storage
-    
+
     User->>UI: Submit Transaction
-    UI->>API: POST /analyze/transaction
-    
-    API->>ML: Validate & Process Transaction
-    
-    par Parallel Analysis
-        ML->>ML: XGBoost Classification
-        and
-        ML->>Vector: Pattern Similarity Search
-        Vector-->>ML: Similar Patterns Found
-        and
-        ML->>LLM: Advanced Analysis Request
-        LLM-->>ML: Fraud Explanation
+    UI->>API: POST /api/v1/detect-fraud
+    API->>Service: Pydantic-validated Transaction
+    Service->>Service: engineer_features()
+
+    alt Hard block (sanctioned country, or category mismatch + high-risk country)
+        Service-->>API: Early fraud response (ML/LLM skipped)
+    else No hard block
+        Service->>ML: predict(features)
+        ML-->>Service: fraud_probability, ml_confidence (heuristic fallback in practice)
+
+        alt Not a clear case (low ML confidence, borderline score, amount > $1000, or risky merchant)
+            Service->>Vector: search_similar_patterns(transaction_text)
+            Vector-->>Service: similar fraud patterns
+            Service->>LLM: analyze_transaction(text, patterns)
+            LLM-->>Service: fraud_probability, confidence, reasoning
+            Service->>Service: blend 40% ML + 60% LLM
+        else Clear case
+            Service->>Service: use ML/heuristic result directly
+        end
+
+        Service->>Service: log transaction (application log only, no separate transaction store)
     end
-    
-    ML->>API: Combined Risk Assessment
-    API->>DB: Store Transaction & Result
-    
-    API-->>UI: Fraud Analysis Response
-    UI-->>User: Display Results Dashboard
-    
-    Note over User,DB: Total processing time: ~200-500ms
+
+    Service-->>API: FraudDetectionResponse
+    API-->>UI: JSON response
+    UI-->>User: Display results
 ```
+
+Note: no processing-time SLA is benchmarked or enforced in code — actual latency depends heavily on whether the conditional Vector/LLM path runs, and which LLM backend answers (Enhanced Mock LLM is near-instant; live OpenAI/Ollama calls are much slower). The previous "~200-500ms" figure wasn't backed by any measurement in the codebase.
 
 ### 🔄 **Pattern Learning Pipeline**
 
 ```mermaid
 flowchart LR
-    subgraph "📥 Data Input"
-        A1[Transaction Data]
-        A2[Historical Fraud Cases]
-        A3[External Fraud Intel]
+    subgraph "📥 Pattern Inputs (live, automatic)"
+        A1["Analyst Feedback<br/>POST /feedback<br/>(only if actual_fraud + notes given)"]
+        A2["Bulk Historical Patterns<br/>POST /ingest-patterns"]
+        A3["Admin-created Pattern<br/>POST /fraud-patterns"]
     end
-    
-    subgraph "🔧 Processing"
-        B1[Feature Extraction]
-        B2[Pattern Recognition]
-        B3[Vector Embedding]
+
+    subgraph "🧩 Vector Pattern Store"
+        B1[add_fraud_patterns /<br/>add_feedback_as_pattern]
+        B2[HuggingFace Embedding]
+        B3[(ChromaDB, or Pinecone<br/>if configured)]
     end
-    
-    subgraph "🤖 Model Training"
-        C1[XGBoost Training]
-        C2[Pattern Database Update]
-        C3[Similarity Threshold Tuning]
+
+    subgraph "🛠️ Offline Model Training (manual, disconnected)"
+        C1["scripts/manage_models.py<br/>--action train --data-path ..."]
+        C2["engineer_features +<br/>train_test_split<br/>(NOT k-fold cross-validation)"]
+        C3[MLModel.train - fits XGBoost]
+        C4[("data/models/*.joblib")]
     end
-    
-    subgraph "✅ Validation"
-        D1[Cross Validation]
-        D2[Performance Metrics]
-        D3[Model Deployment]
-    end
-    
+
     A1 --> B1
-    A2 --> B2
-    A3 --> B3
-    
-    B1 --> C1
-    B2 --> C2
-    B3 --> C3
-    
-    C1 --> D1
-    C2 --> D1
-    C3 --> D1
-    D1 --> D2
-    D2 --> D3
-    
+    A2 --> B1
+    A3 --> B1
+    B1 --> B2
+    B2 --> B3
+
+    C1 --> C2
+    C2 --> C3
+    C3 --> C4
+
+    C4 -.->|"never loaded - FraudDetectionService<br/>constructs MLModel() with no path"| XGB[Live ML/Heuristic path]
+
     style A1 fill:#e1f5fe
     style A2 fill:#e1f5fe
     style A3 fill:#e1f5fe
-    style C1 fill:#e8f5e8
-    style C2 fill:#e8f5e8
-    style C3 fill:#e8f5e8
-    style D3 fill:#fff8e1
+    style C4 fill:#eeeeee,stroke-dasharray: 5 5
+    style XGB fill:#ffebee
 ```
+
+Notes on this diagram (verified against `app/` and `scripts/manage_models.py` on 2026-09-23):
+- There is no unified "learning pipeline." Two entirely separate, disconnected mechanisms exist:
+  1. **Vector pattern store** — analyst feedback, bulk pattern ingestion, and admin-created patterns all just add a new text document (embedded via HuggingFace, stored in Chroma/Pinecone) that future `search_similar_patterns()` calls can retrieve. Nothing here retrains any model.
+  2. **Offline XGBoost training** — `scripts/manage_models.py` is a real, working script that engineers features from a CSV, does an 80/20 `train_test_split` (not k-fold cross-validation, despite the old diagram's "Cross Validation" label), fits an XGBoost model, and saves it to `data/models/*.joblib`. It must be run manually and is never invoked by the live API or by the feedback endpoint.
+- Whatever `scripts/manage_models.py` produces is never picked up by the running service — `FraudDetectionService` always constructs `MLModel()` with no path (see the System Architecture Diagram notes above), so this training path has no effect on live predictions unless someone manually wires the saved path through.
+- The `/metrics` endpoint (`get_model_metrics()`) does **not** reflect either of these processes — it generates simulated metrics (hardcoded baseline values with ±2% random jitter) and a randomized `last_trained` timestamp, not measurements from a real training or evaluation run.
 
 ### 🎯 **Fraud Decision Engine Logic**
 
 ```mermaid
-graph TD
-    START[Transaction Input] --> SCORE{XGBoost Score}
-    
-    SCORE -->|High (>0.8)| HIGH[🚨 High Risk]
-    SCORE -->|Medium (0.3-0.8)| MED[⚠️ Medium Risk]
-    SCORE -->|Low (<0.3)| LOW[✅ Low Risk]
-    
-    HIGH --> PATTERN_HIGH{Pattern Match}
-    MED --> PATTERN_MED{Pattern Match}
-    LOW --> PATTERN_LOW{Pattern Match}
-    
-    PATTERN_HIGH -->|Strong Match| LLM_HIGH[🤖 LLM Analysis]
-    PATTERN_HIGH -->|Weak Match| BLOCK[🛑 BLOCK - High Confidence]
-    
-    PATTERN_MED -->|Strong Match| LLM_MED[🤖 LLM Analysis]
-    PATTERN_MED -->|Weak Match| HOLD[⏸️ HOLD - Manual Review]
-    
-    PATTERN_LOW -->|Any Match| LLM_LOW[🤖 LLM Analysis]
-    PATTERN_LOW -->|No Match| APPROVE[✅ APPROVE - Low Risk]
-    
-    LLM_HIGH --> CONF_HIGH{LLM Confidence}
-    LLM_MED --> CONF_MED{LLM Confidence}
-    LLM_LOW --> CONF_LOW{LLM Confidence}
-    
-    CONF_HIGH -->|High| BLOCK_LLM[🛑 BLOCK - AI Confirmed]
-    CONF_HIGH -->|Low| HOLD_LLM[⏸️ HOLD - Mixed Signals]
-    
-    CONF_MED -->|High| HOLD_MED[⏸️ HOLD - Requires Review]
-    CONF_MED -->|Low| APPROVE_MED[✅ APPROVE - Low Confidence Fraud]
-    
-    CONF_LOW -->|Any| APPROVE_LOW[✅ APPROVE - AI Verified]
-    
-    BLOCK --> NOTIFY[📱 Immediate Alert]
-    BLOCK_LLM --> NOTIFY
-    HOLD --> QUEUE[📋 Review Queue]
-    HOLD_LLM --> QUEUE
-    HOLD_MED --> QUEUE
-    APPROVE --> LOG[📊 Log Transaction]
-    APPROVE_MED --> LOG
-    APPROVE_LOW --> LOG
-    
-    style BLOCK fill:#f44336
-    style BLOCK_LLM fill:#f44336
-    style HOLD fill:#ff9800
-    style HOLD_LLM fill:#ff9800
-    style HOLD_MED fill:#ff9800
-    style APPROVE fill:#4caf50
-    style APPROVE_MED fill:#4caf50
-    style APPROVE_LOW fill:#4caf50
+flowchart TD
+    START[Transaction Input] --> FEAT[engineer_features]
+    FEAT --> SANCTION{Sanctioned country?}
+
+    SANCTION -->|Yes| DENY["is_fraud=True, confidence=0.99<br/>requires_review=False<br/>(auto-denied, ML/LLM skipped)"]
+    SANCTION -->|No| MISMATCH{"category_mismatch > 0.8 AND<br/>country_risk > 0.7?"}
+
+    MISMATCH -->|Yes| FLAG["is_fraud=True, confidence=0.95<br/>requires_review=True<br/>(flagged, ML/LLM skipped)"]
+    MISMATCH -->|No| ML["ML/Heuristic predict:<br/>fraud_probability, ml_confidence"]
+
+    ML --> NEEDLLM{"ml_confidence < 0.95, OR<br/>0.2 < fraud_probability < 0.8, OR<br/>amount > 1000, OR<br/>merchant_risk_score > 0.6?"}
+    NEEDLLM -->|No| DIRECT["confidence_score = ml_confidence<br/>decision_reason = high-confidence ML result"]
+    NEEDLLM -->|Yes| RAG[Vector search + LLM analysis]
+    RAG --> BLEND["fraud_probability = 0.4·ML + 0.6·LLM<br/>confidence_score = max(ml_confidence, llm_confidence)<br/>decision_reason = LLM reasoning"]
+
+    DIRECT --> FINAL{fraud_probability > 0.5?}
+    BLEND --> FINAL
+    FINAL -->|Yes| ISFRAUD[is_fraud = True]
+    FINAL -->|No| NOTFRAUD[is_fraud = False]
+
+    ISFRAUD --> REVIEW{"confidence_score <<br/>CONFIDENCE_THRESHOLD (0.7)?"}
+    NOTFRAUD --> REVIEW
+    REVIEW -->|Yes| NEEDSREVIEW[requires_review = True]
+    REVIEW -->|No| NOREVIEW[requires_review = False]
+
+    DENY --> LOG["_log_transaction<br/>(application log only)"]
+    FLAG --> LOG
+    NEEDSREVIEW --> LOG
+    NOREVIEW --> LOG
+
+    style DENY fill:#f44336,color:#fff
+    style FLAG fill:#ff9800
+    style NEEDSREVIEW fill:#ff9800
+    style ISFRAUD fill:#f44336,color:#fff
+    style NOTFRAUD fill:#4caf50
 ```
+
+Notes on this diagram (verified against `app/services/fraud_detection_service.py` on 2026-09-23):
+- The response is only ever two booleans, `is_fraud` and `requires_review` (plus a `confidence_score` and `decision_reason`) — there's no three-state `BLOCK`/`HOLD`/`APPROVE` classification, no XGBoost score tiering (High/Medium/Low), and no separate "Immediate Alert" or "Review Queue" system anywhere in the code. Any such routing would be entirely up to the API caller.
+- "Pattern Match: Strong/Weak" isn't a real branch — `search_similar_patterns()` always returns up to `k=5` documents (possibly zero) with no strength/confidence classification gating whether the LLM is called; the actual gate is the `NEEDLLM` condition shown above.
+- Every transaction is logged identically via `_log_transaction()` regardless of outcome — there's no outcome-specific "Immediate Alert" vs. "Review Queue" vs. "Log Transaction" branching.
 
 ### ⚡ **Performance Characteristics**
 

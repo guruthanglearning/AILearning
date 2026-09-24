@@ -1667,7 +1667,6 @@ graph TB
     DECISION -->|"conditional: low ML confidence,<br/>borderline score, amount > 1000,<br/>or risky merchant"| VECTOR
     VECTOR <--> CHROMA
     VECTOR -->|retrieved patterns| LLM
-    DECISION --> LLM
     LLM --> OPENAI
     LLM --> OLLAMA
     LLM --> MOCK

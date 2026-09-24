@@ -22,6 +22,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.models.ml_model import MLModel
 from app.utils.feature_engineering import engineer_features, select_features_for_ml
+from app.api.models import Transaction
 from app.core.config import settings
 
 # Set up logging
@@ -72,17 +73,26 @@ def prepare_data(df):
     labels = []
     
     for i, row in df.iterrows():
-        # Convert row to Transaction-like object for feature engineering
-        transaction = {
-            "transaction_id": row.get("transaction_id", f"tx_{i}"),
-            "amount": row["amount"],
-            "is_online": row["is_online"],
-            "merchant_category": row["merchant_category"],
-            "merchant_country": row["merchant_country"],
-            "timestamp": row["timestamp"],
-            # Add more fields as needed
-        }
-        
+        # engineer_features() requires a Transaction (attribute access, e.g.
+        # transaction.timestamp), not a plain dict - build one here, filling in
+        # required fields the sample CSVs don't carry with deterministic defaults.
+        transaction = Transaction(
+            transaction_id=str(row.get("transaction_id", f"tx_{i}")),
+            card_id=str(row.get("card_id", f"card_{i}")),
+            merchant_id=str(row.get("merchant_id", f"merch_{i}")),
+            timestamp=str(row["timestamp"]),
+            amount=float(row["amount"]),
+            merchant_category=str(row["merchant_category"]),
+            merchant_name=row.get("merchant_name"),
+            merchant_country=str(row["merchant_country"]),
+            merchant_zip=row.get("merchant_zip"),
+            customer_id=str(row.get("customer_id", f"cust_{i}")),
+            is_online=bool(row["is_online"]),
+            currency=str(row.get("currency", "USD")),
+            latitude=row.get("latitude"),
+            longitude=row.get("longitude"),
+        )
+
         # Extract features
         features = engineer_features(transaction)
         ml_features = select_features_for_ml(features)

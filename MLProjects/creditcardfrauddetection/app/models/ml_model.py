@@ -55,21 +55,30 @@ class MLModel:
 
     def _load_model(self, model_path: str) -> bool:
         """
-        Load the pre-trained XGBoost model from a file. A file that
-        deserializes but was never actually fit (e.g. saved via the old
-        --action download path) is treated as a load failure, not a
-        success - predicting with it would raise NotFittedError.
+        Load the pre-trained XGBoost model from a file. Rejects a model that
+        deserializes but wasn't actually fit (e.g. saved via the old
+        --action download path), or that was fitted on a different number
+        of features than feature_columns - either would otherwise pass
+        silently here and only surface later as a predict_proba() failure
+        that _preprocess_features() can't see coming.
 
         Args:
             model_path: Path to the saved model file
 
         Returns:
-            True if a genuinely fitted model loaded successfully, False otherwise
+            True if a genuinely fitted, feature-compatible model loaded successfully, False otherwise
         """
         try:
             logger.info(f"Loading model from {model_path}")
             model = joblib.load(model_path)
             check_is_fitted(model)
+            expected_features = len(self.feature_columns)
+            actual_features = getattr(model, "n_features_in_", expected_features)
+            if actual_features != expected_features:
+                raise ValueError(
+                    f"model was fitted on {actual_features} features, "
+                    f"but MLModel.feature_columns has {expected_features}"
+                )
             self.model = model
             logger.info(f"Successfully loaded model from {model_path}")
             return True

@@ -81,6 +81,82 @@ def test_model_save_load(tmp_path):
     assert loaded_model.model is not None
     assert loaded_model.scaler is not None
 
+def test_load_unfitted_model_falls_back_to_demo(tmp_path):
+    """An unfitted model/scaler pair on disk (what --action download used to
+    produce, before manage_models.py always trained) must not be silently
+    accepted - MLModel should fall back to a fresh demo model instead."""
+    import joblib
+    import xgboost as xgb
+    from sklearn.preprocessing import StandardScaler
+
+    model_path = os.path.join(tmp_path, "unfitted_model.joblib")
+    scaler_path = os.path.join(tmp_path, "unfitted_scaler.joblib")
+    joblib.dump(xgb.XGBClassifier(), model_path)
+    joblib.dump(StandardScaler(), scaler_path)
+
+    with patch.object(MLModel, "_create_demo_model", autospec=True) as mock_create:
+        MLModel(model_path, scaler_path)
+        assert mock_create.called
+
+def test_load_feature_mismatched_scaler_falls_back_to_demo(tmp_path):
+    """A scaler fitted on a different feature count than feature_columns
+    must be rejected, not silently paired with the real model."""
+    import joblib
+    from sklearn.preprocessing import StandardScaler
+
+    model_path = os.path.join(tmp_path, "model.joblib")
+    scaler_path = os.path.join(tmp_path, "scaler.joblib")
+
+    trained = MLModel()
+    trained.train(np.random.rand(30, 16), np.random.randint(0, 2, 30))
+    trained.save_model(model_path, scaler_path)
+
+    # Overwrite with a scaler fitted on the wrong number of features
+    joblib.dump(StandardScaler().fit(np.random.rand(10, 3)), scaler_path)
+
+    with patch.object(MLModel, "_create_demo_model", autospec=True) as mock_create:
+        MLModel(model_path, scaler_path)
+        assert mock_create.called
+
+def test_load_feature_mismatched_model_falls_back_to_demo(tmp_path):
+    """A model fitted on a different feature count than feature_columns
+    must be rejected, not silently paired with the real scaler."""
+    import joblib
+    import xgboost as xgb
+
+    model_path = os.path.join(tmp_path, "model.joblib")
+    scaler_path = os.path.join(tmp_path, "scaler.joblib")
+
+    trained = MLModel()
+    trained.train(np.random.rand(30, 16), np.random.randint(0, 2, 30))
+    trained.save_model(model_path, scaler_path)
+
+    # Overwrite with a model fitted on the wrong number of features
+    bad_model = xgb.XGBClassifier(n_estimators=5, max_depth=2).fit(
+        np.random.rand(20, 15), np.random.randint(0, 2, 20)
+    )
+    joblib.dump(bad_model, model_path)
+
+    with patch.object(MLModel, "_create_demo_model", autospec=True) as mock_create:
+        MLModel(model_path, scaler_path)
+        assert mock_create.called
+
+def test_load_valid_fitted_pair_does_not_fall_back(tmp_path):
+    """A genuinely fitted, feature-compatible model+scaler pair should load
+    as-is, without triggering the demo-model fallback."""
+    model_path = os.path.join(tmp_path, "model.joblib")
+    scaler_path = os.path.join(tmp_path, "scaler.joblib")
+
+    trained = MLModel()
+    trained.train(np.random.rand(30, 16), np.random.randint(0, 2, 30))
+    trained.save_model(model_path, scaler_path)
+
+    with patch.object(MLModel, "_create_demo_model", autospec=True) as mock_create:
+        loaded = MLModel(model_path, scaler_path)
+        assert not mock_create.called
+        assert loaded.model.n_features_in_ == 16
+        assert loaded.scaler.n_features_in_ == 16
+
 def test_model_train_evaluate():
     """Test model training and evaluation."""
     # Create a model

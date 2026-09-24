@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 from app.services.llm_service import LLMService 
 from app.services.local_llm_service import LocalLLMService
 from app.services.enhanced_mock_llm import EnhancedMockLLM
-from langchain.schema import Document
+from langchain_core.documents import Document
 from app.core.config import settings
 
 def print_header(title):
@@ -282,7 +282,7 @@ def main():
         # Print summary
         print_header("TEST RESULTS SUMMARY")
         for name, success in results.items():
-            status = "✅ SUCCESS" if success else "❌ FAILED"
+            status = "SUCCESS" if success else "FAILED"
             print(f"{name}: {status}")
             
     except Exception as e:

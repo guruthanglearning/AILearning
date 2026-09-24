@@ -122,7 +122,7 @@ def check_llm_service():
         llm_service = LLMService()
         
         # Create a test document
-        from langchain.schema import Document
+        from langchain_core.documents import Document
         doc = Document(
             page_content="This is a test fraud pattern for high-value electronics purchase.",
             metadata={

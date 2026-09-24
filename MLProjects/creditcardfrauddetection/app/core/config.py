@@ -74,6 +74,11 @@ class Settings(BaseSettings):
     
     # Vector DB settings
     USE_PINECONE: bool = os.getenv("USE_PINECONE", "False").lower() in ("true", "1", "t")
+
+    # ML model persistence - produced by scripts/manage_models.py --action train.
+    # If either file doesn't exist, MLModel falls back to an in-memory demo model.
+    ML_MODEL_PATH: str = os.getenv("ML_MODEL_PATH", os.path.join("data", "models", "fraud_model.joblib"))
+    ML_SCALER_PATH: str = os.getenv("ML_SCALER_PATH", os.path.join("data", "models", "scaler.joblib"))
     
     class Config:
         env_file = ".env"

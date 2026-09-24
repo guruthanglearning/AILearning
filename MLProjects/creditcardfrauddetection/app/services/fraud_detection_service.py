@@ -34,8 +34,13 @@ class FraudDetectionService:
         try:
             logger.info("Initializing fraud detection components...")
             
-            # Initialize the ML model
-            self.ml_model = MLModel()
+            # Initialize the ML model - loads the trained model/scaler if
+            # they exist at these paths, otherwise MLModel falls back to an
+            # in-memory demo model (see MLModel.__init__).
+            self.ml_model = MLModel(
+                model_path=settings.ML_MODEL_PATH,
+                scaler_path=settings.ML_SCALER_PATH,
+            )
             logger.info("ML model initialized")
             
             # Initialize the vector database service

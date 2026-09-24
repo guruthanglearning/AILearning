@@ -11,6 +11,10 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+# Project root (creditcardfrauddetection/), independent of the process's
+# working directory - app/core/config.py is two levels below it.
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 class Settings(BaseSettings):
     """Configuration settings for the application."""
     
@@ -74,6 +78,14 @@ class Settings(BaseSettings):
     
     # Vector DB settings
     USE_PINECONE: bool = os.getenv("USE_PINECONE", "False").lower() in ("true", "1", "t")
+
+    # ML model persistence - produced by scripts/manage_models.py --action train.
+    # Absolute by default (anchored to the project root, not the process's
+    # working directory) so it resolves the same way regardless of how/where
+    # the app is launched from. If either file doesn't exist, MLModel falls
+    # back to an in-memory demo model.
+    ML_MODEL_PATH: str = os.getenv("ML_MODEL_PATH", os.path.join(_PROJECT_ROOT, "data", "models", "fraud_model.joblib"))
+    ML_SCALER_PATH: str = os.getenv("ML_SCALER_PATH", os.path.join(_PROJECT_ROOT, "data", "models", "scaler.joblib"))
     
     class Config:
         env_file = ".env"

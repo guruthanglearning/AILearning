@@ -214,8 +214,11 @@ def evaluate_model(model, X_test, y_test):
     # Print metrics
     logger.info(f"Model evaluation metrics: {metrics}")
     
-    # Generate classification report
-    y_pred = model.model.predict(X_test)
+    # Generate classification report - model.model was fit on scaled features
+    # (see MLModel.train()), so predicting on raw X_test here would silently
+    # score against the wrong distribution; scale it the same way first.
+    X_test_scaled = model.scaler.transform(X_test) if model.scaler is not None else X_test
+    y_pred = model.model.predict(X_test_scaled)
     report = classification_report(y_test, y_pred, output_dict=True)
     
     # Generate confusion matrix

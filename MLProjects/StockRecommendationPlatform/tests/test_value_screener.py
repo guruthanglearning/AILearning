@@ -7,7 +7,14 @@ import pytest
 from starlette.testclient import TestClient
 
 from app.limiter import limiter
-from app.main import _MOMENTUM_UNIVERSE, _SECTOR_ETFS, _compute_value_score_pro, app
+from app.main import (
+    _MOMENTUM_UNIVERSE,
+    _SECTOR_ETFS,
+    _compute_value_score_pro,
+    _fetch_stock_raw,
+    _percentile_ranks,
+    app,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -106,6 +113,71 @@ def test_value_score_clamped_to_100():
         debt_to_equity_pct=0.0,
     )
     assert score == 100.0
+
+
+def test_value_score_negative_debt_to_equity_is_penalized_not_rewarded():
+    """Negative Debt/Equity means negative shareholder equity (balance-sheet
+    stress), not "low debt" — it must not earn the conservative-financing bonus."""
+    base_kwargs = dict(
+        pct_earnings_yield=50.0,
+        pct_book_yield=50.0,
+        pct_fcf_yield=50.0,
+        pct_peg_inv=50.0,
+        pct_dividend=50.0,
+        return_on_equity_pct=10.0,
+    )
+    healthy_debt = _compute_value_score_pro(**base_kwargs, debt_to_equity_pct=30.0)
+    negative_equity = _compute_value_score_pro(**base_kwargs, debt_to_equity_pct=-300.0)
+    zero_debt = _compute_value_score_pro(**base_kwargs, debt_to_equity_pct=0.0)
+    assert negative_equity < healthy_debt
+    assert negative_equity < zero_debt
+
+
+# ---------------------------------------------------------------------------
+# _percentile_ranks — tie handling
+# ---------------------------------------------------------------------------
+
+
+def test_percentile_ranks_identical_values_share_the_same_rank():
+    ranks = _percentile_ranks([5.0] * 10)
+    assert all(r == 50.0 for r in ranks)
+
+
+def test_percentile_ranks_partial_ties_get_average_rank():
+    # [10, 20, 20, 30] -> the two 20s tie for ranks 1 and 2 (0-indexed), average rank 1.5
+    ranks = _percentile_ranks([10.0, 20.0, 20.0, 30.0])
+    assert ranks[0] == pytest.approx(0.0)
+    assert ranks[1] == ranks[2] == pytest.approx(50.0)
+    assert ranks[3] == pytest.approx(100.0)
+
+
+def test_percentile_ranks_none_values_excluded_from_ranking():
+    ranks = _percentile_ranks([10.0, None, 30.0])
+    assert ranks[1] is None
+    assert ranks[0] < ranks[2]
+
+
+# ---------------------------------------------------------------------------
+# _fetch_stock_raw — PEG fallback
+# ---------------------------------------------------------------------------
+
+
+def test_fetch_stock_raw_falls_back_to_trailing_peg_ratio(monkeypatch):
+    ticker = MagicMock()
+    ticker.info = {"pegRatio": None, "trailingPegRatio": 1.42}
+    monkeypatch.setattr("app.main.yf.Ticker", lambda sym: ticker)
+
+    data = _fetch_stock_raw("TEST")
+    assert data["peg_ratio"] == 1.42
+
+
+def test_fetch_stock_raw_prefers_peg_ratio_when_present(monkeypatch):
+    ticker = MagicMock()
+    ticker.info = {"pegRatio": 2.0, "trailingPegRatio": 1.42}
+    monkeypatch.setattr("app.main.yf.Ticker", lambda sym: ticker)
+
+    data = _fetch_stock_raw("TEST")
+    assert data["peg_ratio"] == 2.0
 
 
 # ---------------------------------------------------------------------------

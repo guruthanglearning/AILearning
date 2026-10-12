@@ -1082,16 +1082,32 @@ def _fetch_universe_history() -> pd.DataFrame | None:
 
 
 def _percentile_ranks(values: list[float | None]) -> list[float | None]:
-    """Cross-sectional percentile rank (0–100) within the non-null values."""
+    """Cross-sectional percentile rank (0–100) within the non-null values.
+
+    Ties share the group's average rank, so identical inputs (e.g. the many
+    non-dividend-payers that all report dividend_yield == 0) get the same
+    percentile instead of being spread arbitrarily by list position.
+    """
     indexed = [(i, v) for i, v in enumerate(values) if v is not None]
     if not indexed:
         return [None] * len(values)
     ranked = sorted(indexed, key=lambda x: x[1])
     n = len(ranked)
-    rank_map: dict[int, float] = {
-        i: (r / (n - 1)) * 100.0 if n > 1 else 50.0
-        for r, (i, _) in enumerate(ranked)
-    }
+    if n == 1:
+        return [50.0 if v is not None else None for v in values]
+
+    rank_map: dict[int, float] = {}
+    j = 0
+    while j < n:
+        k = j
+        while k + 1 < n and ranked[k + 1][1] == ranked[j][1]:
+            k += 1
+        avg_rank = (j + k) / 2.0
+        pct = (avg_rank / (n - 1)) * 100.0
+        for idx, _ in ranked[j : k + 1]:
+            rank_map[idx] = pct
+        j = k + 1
+
     return [rank_map.get(i) for i in range(len(values))]
 
 
@@ -1197,7 +1213,11 @@ def _fetch_stock_raw(sym: str) -> dict:
             "pe_ratio": info.get("trailingPE"),
             "forward_pe": info.get("forwardPE"),
             "price_to_book": info.get("priceToBook"),
-            "peg_ratio": info.get("pegRatio"),
+            # yfinance has deprecated "pegRatio" in favor of "trailingPegRatio" on some
+            # tickers/versions — fall back to it when the primary key is absent.
+            "peg_ratio": (
+                info["pegRatio"] if info.get("pegRatio") is not None else info.get("trailingPegRatio")
+            ),
             "dividend_yield_pct": info.get("dividendYield"),
             "debt_to_equity_pct": info.get("debtToEquity"),
             "return_on_equity_pct": (
@@ -1393,8 +1413,9 @@ def _compute_value_score_pro(
     Quality overlay (15 pts): rewards profitable, conservatively financed businesses,
     so a high score isn't just a melting ice cube.
       - ROE > 15%: +8 pts; 8-15%: +4 pts
-      - Debt/Equity < 50%: +7 pts; 50-100%: +3 pts
-    Overleverage penalty: -5 pts if Debt/Equity > 200%.
+      - Debt/Equity < 50%: +7 pts; 50-100%: +3 pts (only when non-negative — a
+        negative Debt/Equity means negative shareholder equity, not low debt)
+    Balance-sheet-stress penalty: -5 pts if Debt/Equity > 200% or < 0%.
     """
     cross, total_w = 0.0, 0.0
     for pct, w in [
@@ -1418,13 +1439,15 @@ def _compute_value_score_pro(
             quality += 8.0
         elif return_on_equity_pct > 8.0:
             quality += 4.0
-    if debt_to_equity_pct is not None:
+    if debt_to_equity_pct is not None and debt_to_equity_pct >= 0.0:
         if debt_to_equity_pct < 50.0:
             quality += 7.0
         elif debt_to_equity_pct < 100.0:
             quality += 3.0
 
-    penalty = -5.0 if (debt_to_equity_pct is not None and debt_to_equity_pct > 200.0) else 0.0
+    penalty = -5.0 if (
+        debt_to_equity_pct is not None and (debt_to_equity_pct > 200.0 or debt_to_equity_pct < 0.0)
+    ) else 0.0
 
     raw = cross_score + quality + penalty
     return round(min(100.0, max(0.0, raw)), 1)

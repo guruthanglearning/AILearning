@@ -482,6 +482,12 @@ export function ValueGrid({ onAnalyze }: ValueGridProps) {
     : [...rankedRows].sort((a, b) => {
         const av = getValue(a.row, sortKey as keyof ValueStockRow);
         const bv = getValue(b.row, sortKey as keyof ValueStockRow);
+        // Missing values (-Infinity sentinel) always sort last, regardless of
+        // direction — otherwise "ascending" on a lower-is-better column like
+        // P/E would put "no data" rows above real ones.
+        const aMissing = av === -Infinity;
+        const bMissing = bv === -Infinity;
+        if (aMissing || bMissing) return aMissing === bMissing ? 0 : aMissing ? 1 : -1;
         if (av === bv) return 0;
         const cmp = typeof av === "string" && typeof bv === "string"
           ? av.localeCompare(bv)

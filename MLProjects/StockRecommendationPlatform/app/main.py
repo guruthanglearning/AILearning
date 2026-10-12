@@ -58,7 +58,10 @@ from app.schemas.agents import (
     MomentumSectorsResponse,
     MomentumStockRow,
     SectorMomentum,
+    SectorValue,
     SupervisorVerdict,
+    ValueSectorsResponse,
+    ValueStockRow,
 )
 from app.schemas.batch import BatchJobRequest, BatchJobResponse, BatchJobStatus
 from app.services.claude_service import CLAUDE_MODELS, ClaudeServiceError, get_session_usage
@@ -1188,6 +1191,19 @@ def _fetch_stock_raw(sym: str) -> dict:
             "sma50": info.get("fiftyDayAverage"),
             "sma200": info.get("twoHundredDayAverage"),
             "market_cap": info.get("marketCap"),
+            # Value factors (yfinance returns dividendYield/debtToEquity already as
+            # percent numbers, e.g. 2.4 == 2.4% — returnOnEquity is a fraction, so we
+            # convert it to the same percent scale here).
+            "pe_ratio": info.get("trailingPE"),
+            "forward_pe": info.get("forwardPE"),
+            "price_to_book": info.get("priceToBook"),
+            "peg_ratio": info.get("pegRatio"),
+            "dividend_yield_pct": info.get("dividendYield"),
+            "debt_to_equity_pct": info.get("debtToEquity"),
+            "return_on_equity_pct": (
+                info["returnOnEquity"] * 100.0 if info.get("returnOnEquity") is not None else None
+            ),
+            "free_cashflow": info.get("freeCashflow"),
         }
     except Exception:
         return {"symbol": sym}
@@ -1347,3 +1363,197 @@ async def get_momentum_sectors(
         for sector, rows, etf_info in all_sector_rows
     ]
     return MomentumSectorsResponse(sectors=sectors, limit=limit, fetched_at_utc=fetched_at)
+
+
+# ── Value Sectors ──────────────────────────────────────────────────────────────
+
+# Same thundering-herd guard as _MOMENTUM_FETCH_LOCK, for the value screener's
+# independent cache key.
+_VALUE_FETCH_LOCK = asyncio.Lock()
+
+
+def _compute_value_score_pro(
+    pct_earnings_yield: float | None,
+    pct_book_yield: float | None,
+    pct_fcf_yield: float | None,
+    pct_peg_inv: float | None,
+    pct_dividend: float | None,
+    return_on_equity_pct: float | None,
+    debt_to_equity_pct: float | None,
+) -> float | None:
+    """
+    Cross-sectional value score (0-100).
+
+    Cheapness factors, percentile-ranked within the universe (85 pts):
+      - Earnings yield (1/P/E) percentile rank   26 pts  (Fama-French E/P — primary value signal)
+      - Book yield (1/P/B) percentile rank       20 pts  (book-to-market)
+      - FCF yield percentile rank                19 pts  (cash generated per dollar paid)
+      - PEG percentile rank (inverted)            10 pts  (growth-adjusted cheapness — screens value traps)
+      - Dividend yield percentile rank            10 pts  (shareholder-yield tilt)
+    Quality overlay (15 pts): rewards profitable, conservatively financed businesses,
+    so a high score isn't just a melting ice cube.
+      - ROE > 15%: +8 pts; 8-15%: +4 pts
+      - Debt/Equity < 50%: +7 pts; 50-100%: +3 pts
+    Overleverage penalty: -5 pts if Debt/Equity > 200%.
+    """
+    cross, total_w = 0.0, 0.0
+    for pct, w in [
+        (pct_earnings_yield, 26 / 85),
+        (pct_book_yield,     20 / 85),
+        (pct_fcf_yield,      19 / 85),
+        (pct_peg_inv,        10 / 85),
+        (pct_dividend,       10 / 85),
+    ]:
+        if pct is not None:
+            cross += pct * w
+            total_w += w
+
+    if total_w == 0:
+        return None
+    cross_score = (cross / total_w) * 0.85
+
+    quality = 0.0
+    if return_on_equity_pct is not None:
+        if return_on_equity_pct > 15.0:
+            quality += 8.0
+        elif return_on_equity_pct > 8.0:
+            quality += 4.0
+    if debt_to_equity_pct is not None:
+        if debt_to_equity_pct < 50.0:
+            quality += 7.0
+        elif debt_to_equity_pct < 100.0:
+            quality += 3.0
+
+    penalty = -5.0 if (debt_to_equity_pct is not None and debt_to_equity_pct > 200.0) else 0.0
+
+    raw = cross_score + quality + penalty
+    return round(min(100.0, max(0.0, raw)), 1)
+
+
+@app.get("/v1/value/sectors", response_model=ValueSectorsResponse)
+@limiter.limit("30/minute")
+async def get_value_sectors(
+    request: Request,
+    limit: int = Query(default=10, ge=1, le=25),
+) -> ValueSectorsResponse:
+    """Top-N value stocks per GICS sector, scored with a classic value-factor composite.
+
+    Shares the 110-stock universe with /v1/momentum/sectors (same 11 GICS sectors),
+    so a stock's momentum and value scores are directly comparable:
+      - Earnings yield (1/P/E), book yield (1/P/B), and FCF yield — percentile-ranked
+        within the universe
+      - PEG ratio (growth-adjusted cheapness) and dividend yield as secondary tilts
+      - Quality overlay: ROE and Debt/Equity, so a high score isn't a value trap
+    Not investment advice.
+    """
+    cache_key = "value_sectors_all"
+
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        all_sector_rows: list[tuple[str, list[ValueStockRow], dict]] = cached["rows"]
+        fetched_at: datetime = cached["fetched_at"]
+    else:
+        async with _VALUE_FETCH_LOCK:
+            cached = _cache_get(cache_key)
+            if cached is not None:
+                all_sector_rows = cached["rows"]
+                fetched_at = cached["fetched_at"]
+            else:
+                loop = asyncio.get_event_loop()
+                all_syms = [s for syms in _MOMENTUM_UNIVERSE.values() for s in syms]
+                etf_syms = list(_SECTOR_ETFS.values())
+
+                # ── Phase 1: per-symbol .info in parallel (reuses the same
+                # extraction helper as momentum, now carrying the value fields too) ──
+                info_tasks = [loop.run_in_executor(None, _fetch_stock_raw, s) for s in all_syms]
+                etf_tasks  = [loop.run_in_executor(None, _fetch_stock_raw, s) for s in etf_syms]
+                results = list(await asyncio.gather(*info_tasks, *etf_tasks))
+                raw_data: list[dict] = results[: len(all_syms)]
+                etf_data: list[dict] = results[len(all_syms):]
+                etf_map: dict[str, dict] = {d["symbol"]: d for d in etf_data}
+
+                # ── Phase 2: derive "higher is better" yield metrics ───────────
+                def _earnings_yield(d: dict) -> float | None:
+                    pe = d.get("pe_ratio")
+                    return (1.0 / pe) * 100.0 if pe and pe > 0 else None
+
+                def _book_yield(d: dict) -> float | None:
+                    pb = d.get("price_to_book")
+                    return (1.0 / pb) * 100.0 if pb and pb > 0 else None
+
+                def _fcf_yield(d: dict) -> float | None:
+                    fcf, mc = d.get("free_cashflow"), d.get("market_cap")
+                    return (fcf / mc) * 100.0 if fcf is not None and mc else None
+
+                def _peg_inv(d: dict) -> float | None:
+                    peg = d.get("peg_ratio")
+                    return (1.0 / peg) * 100.0 if peg and peg > 0 else None
+
+                fcf_vals = [_fcf_yield(d) for d in raw_data]
+                pct_ey  = _percentile_ranks([_earnings_yield(d) for d in raw_data])
+                pct_by  = _percentile_ranks([_book_yield(d) for d in raw_data])
+                pct_fy  = _percentile_ranks(fcf_vals)
+                pct_peg = _percentile_ranks([_peg_inv(d) for d in raw_data])
+                pct_div = _percentile_ranks([d.get("dividend_yield_pct") for d in raw_data])
+
+                # ── Phase 3: build ValueStockRow objects with final scores ─────
+                fetched: list[ValueStockRow] = []
+                for i, d in enumerate(raw_data):
+                    score = _compute_value_score_pro(
+                        pct_ey[i], pct_by[i], pct_fy[i], pct_peg[i], pct_div[i],
+                        d.get("return_on_equity_pct"),
+                        d.get("debt_to_equity_pct"),
+                    )
+                    fetched.append(ValueStockRow(
+                        symbol=d["symbol"],
+                        company_name=d.get("company_name"),
+                        sector=d.get("sector"),
+                        industry=d.get("industry"),
+                        close_price=d.get("close_price"),
+                        day_change_pct=d.get("day_change_pct"),
+                        week_52_high=d.get("week_52_high"),
+                        week_52_low=d.get("week_52_low"),
+                        market_cap=d.get("market_cap"),
+                        value_score=score,
+                        pe_ratio=d.get("pe_ratio"),
+                        forward_pe=d.get("forward_pe"),
+                        price_to_book=d.get("price_to_book"),
+                        peg_ratio=d.get("peg_ratio"),
+                        fcf_yield_pct=fcf_vals[i],
+                        dividend_yield_pct=d.get("dividend_yield_pct"),
+                        return_on_equity_pct=d.get("return_on_equity_pct"),
+                        debt_to_equity_pct=d.get("debt_to_equity_pct"),
+                    ))
+
+                # ── Phase 4: group by sector, sort by score, cache ─────────────
+                by_sym = {r.symbol: r for r in fetched}
+                all_sector_rows = []
+                for sector, syms in _MOMENTUM_UNIVERSE.items():
+                    sector_rows = [by_sym[s] for s in syms if s in by_sym]
+                    sector_rows.sort(
+                        key=lambda r: r.value_score if r.value_score is not None else -1.0,
+                        reverse=True,
+                    )
+                    etf_sym = _SECTOR_ETFS.get(sector)
+                    etf_info = etf_map.get(etf_sym, {}) if etf_sym else {}
+                    all_sector_rows.append((sector, sector_rows, etf_info))
+
+                fetched_at = datetime.now(UTC)
+                _cache_set(cache_key, {"rows": all_sector_rows, "fetched_at": fetched_at})
+
+    sectors = [
+        SectorValue(
+            sector=sector,
+            stocks=rows[:limit],
+            etf_symbol=_SECTOR_ETFS.get(sector),
+            etf_price=etf_info.get("close_price"),
+            etf_change_pct=etf_info.get("day_change_pct"),
+            etf_prev_close=(
+                etf_info.get("close_price") / (1 + etf_info["day_change_pct"] / 100)
+                if etf_info.get("close_price") and etf_info.get("day_change_pct") is not None
+                else None
+            ),
+        )
+        for sector, rows, etf_info in all_sector_rows
+    ]
+    return ValueSectorsResponse(sectors=sectors, limit=limit, fetched_at_utc=fetched_at)

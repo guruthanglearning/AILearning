@@ -398,3 +398,40 @@ class MomentumSectorsResponse(BaseModel):
     sectors: list[SectorMomentum]
     limit: int
     fetched_at_utc: datetime
+
+
+class ValueStockRow(BaseModel):
+    symbol: str
+    company_name: str | None = None
+    sector: str | None = None
+    industry: str | None = None
+    close_price: float | None = None
+    day_change_pct: float | None = None
+    week_52_high: float | None = None
+    week_52_low: float | None = None
+    market_cap: float | None = None
+    value_score: float | None = None
+    # Value factors
+    pe_ratio: float | None = None             # trailing P/E
+    forward_pe: float | None = None
+    price_to_book: float | None = None
+    peg_ratio: float | None = None
+    fcf_yield_pct: float | None = None        # free cash flow / market cap, %
+    dividend_yield_pct: float | None = None
+    return_on_equity_pct: float | None = None
+    debt_to_equity_pct: float | None = None
+
+
+class SectorValue(BaseModel):
+    sector: str
+    stocks: list[ValueStockRow]
+    etf_symbol: str | None = None
+    etf_price: float | None = None
+    etf_change_pct: float | None = None
+    etf_prev_close: float | None = None
+
+
+class ValueSectorsResponse(BaseModel):
+    sectors: list[SectorValue]
+    limit: int
+    fetched_at_utc: datetime

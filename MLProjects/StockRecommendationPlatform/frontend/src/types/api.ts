@@ -405,6 +405,43 @@ export interface MomentumSectorsResponse {
   fetched_at_utc: string;
 }
 
+export interface ValueStockRow {
+  symbol: string;
+  company_name: string | null;
+  sector: string | null;
+  industry: string | null;
+  close_price: number | null;
+  day_change_pct: number | null;
+  week_52_high: number | null;
+  week_52_low: number | null;
+  market_cap: number | null;
+  value_score: number | null;
+  // Value factors
+  pe_ratio: number | null;
+  forward_pe: number | null;
+  price_to_book: number | null;
+  peg_ratio: number | null;
+  fcf_yield_pct: number | null;
+  dividend_yield_pct: number | null;
+  return_on_equity_pct: number | null;
+  debt_to_equity_pct: number | null;
+}
+
+export interface SectorValue {
+  sector: string;
+  stocks: ValueStockRow[];
+  etf_symbol: string | null;
+  etf_price: number | null;
+  etf_change_pct: number | null;
+  etf_prev_close: number | null;
+}
+
+export interface ValueSectorsResponse {
+  sectors: SectorValue[];
+  limit: number;
+  fetched_at_utc: string;
+}
+
 export interface MarketQuoteRow {
   symbol: string;
   pre_mkt_price: number | null;

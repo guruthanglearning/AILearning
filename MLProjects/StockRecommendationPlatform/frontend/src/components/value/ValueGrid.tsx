@@ -363,7 +363,7 @@ const DETAIL_COLS: ColDef[] = [
   { key: "peg_ratio",             label: "PEG",        numeric: true, w: 50,
     title: "P/E divided by expected earnings growth. Below ~1.5 suggests the stock isn't overpaying for its growth." },
   { key: "fcf_yield_pct",         label: "FCF Yld",    numeric: true, w: 62,
-    title: "Free cash flow ÷ Enterprise Value. Higher means more cash generated per dollar of the whole business (equity + debt), not just per dollar of market cap." },
+    title: "Free cash flow ÷ market cap. Higher means more cash generated per dollar paid for the shares. Free cash flow here is after interest, so it's measured against equity value; EV/EBITDA is the debt-aware factor." },
   { key: "dividend_yield_pct",    label: "Div Yld",    numeric: true, w: 60, title: "Trailing dividend yield" },
   { key: "return_on_assets_pct",  label: "ROA",        numeric: true, w: 54,
     title: "Return on assets — profitability without ROE's leverage/buyback distortion (ROE can exceed 100% from buybacks alone). >15% is strong." },
@@ -376,7 +376,7 @@ const DETAIL_COLS: ColDef[] = [
   { key: "graham_number",         label: "Graham #",   numeric: true, w: 72,
     title: "Benjamin Graham's quick intrinsic-value estimate: sqrt(22.5 x EPS x Book Value per share). An ABSOLUTE anchor, not a sector-relative rank — not part of the Score. A 1930s heuristic, not a DCF; distorted for REITs and high-leverage financials." },
   { key: "margin_of_safety_pct",  label: "Margin",     numeric: true, w: 64,
-    title: "How far the current price sits below (positive) or above (negative) the Graham Number. Positive = potential margin of safety by this measure." },
+    title: "Graham's margin of safety: (Graham Number − price) ÷ Graham Number. Positive = price is that % below the estimated value; negative = price is above it." },
   { key: "day_change_pct",        label: "Today",      numeric: true, w: 58, title: "Today's price change %" },
 ];
 
@@ -581,7 +581,7 @@ function InfoPanel({ isAllSectors }: { isAllSectors: boolean }) {
               <div><span className="text-indigo-300 font-mono">P/B</span> / <span className="text-indigo-300 font-mono">P/S</span> — price vs. book value / revenue; lower is cheaper</div>
               <div><span className="text-indigo-300 font-mono">EV/EBITDA</span> — debt-aware cheapness (Greenblatt &ldquo;Magic Formula&rdquo; style); the score&apos;s primary cheapness factor</div>
               <div><span className="text-indigo-300 font-mono">PEG</span> — P/E adjusted for growth; below ~1.5 avoids overpaying for growth</div>
-              <div><span className="text-indigo-300 font-mono">FCF Yld</span> — free cash flow ÷ Enterprise Value; higher is better</div>
+              <div><span className="text-indigo-300 font-mono">FCF Yld</span> — free cash flow ÷ market cap; higher is better</div>
               <div><span className="text-indigo-300 font-mono">Div Yld</span> — trailing dividend yield; higher adds shareholder return</div>
               <div>
                 <span className="text-indigo-300 font-mono">ROA</span> / <span className="text-indigo-300 font-mono">Curr R</span> / <span className="text-indigo-300 font-mono">FCF/NI</span> / <span className="text-indigo-300 font-mono">D/E</span> — quality overlay:{" "}
@@ -598,7 +598,7 @@ function InfoPanel({ isAllSectors }: { isAllSectors: boolean }) {
 
           <p className="text-gray-600 italic border-t border-gray-800 pt-2">
             Score formula (sector-relative): EV/EBITDA-yield rank (28 pts) + book-yield rank (15 pts) +
-            FCF/EV-yield rank (17 pts) + sales-yield rank (10 pts) + PEG rank (8 pts) + dividend-yield rank (7 pts) +
+            FCF-yield rank (17 pts) + sales-yield rank (10 pts) + PEG rank (8 pts) + dividend-yield rank (7 pts) +
             ROA/liquidity/earnings-quality/Debt-Equity overlay (15 pts) − 5 pt penalty if Debt/Equity is above
             200% or negative (marked <span className="text-red-400 not-italic">*</span>). The indigo part of the
             score bar is the cheapness points, the green part the quality points.
@@ -668,10 +668,13 @@ export function ValueGrid({ onAnalyze }: ValueGridProps) {
   const allSymbols = Array.from(new Set(allStocksFlat.map((r) => r.symbol)));
   const { livePrices, connected: wsConnected } = useMarketGridWs(allSymbols);
 
-  // All-sectors: top 5 per sector+industry combination, then sorted by score globally
+  // All-sectors: top 5 per sector+industry combination, then sorted by score globally.
+  // Value + Momentum filters BEFORE the top-5 cut so a qualifying stock ranked
+  // 6th in its industry is not discarded.
   const allSectorsByIndustry = (() => {
     const groups = new Map<string, ValueStockRow[]>();
     for (const stock of allStocksFlat) {
+      if (valueMomentumOnly && !passesValueMomentum(stock)) continue;
       const key = `${stock.sector ?? ""}||${stock.industry ?? ""}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(stock);

@@ -272,7 +272,16 @@ def test_graham_number_and_margin_basic():
     graham, margin = _graham_number_and_margin(trailing_eps=5.0, book_value_per_share=20.0, price=80.0)
     expected_graham = (22.5 * 5.0 * 20.0) ** 0.5
     assert graham == pytest.approx(expected_graham, abs=0.01)
-    assert margin == pytest.approx((expected_graham - 80.0) / 80.0 * 100.0, abs=0.1)
+    # Graham's margin of safety is measured against intrinsic value, not price.
+    assert margin == pytest.approx((expected_graham - 80.0) / expected_graham * 100.0, abs=0.1)
+
+
+def test_graham_margin_uses_intrinsic_value_as_denominator():
+    # EPS 5, BVPS 80 -> Graham Number sqrt(22.5*5*80) = 94.87; at price 47.43 the
+    # price is ~50% below value. Dividing by price instead would report ~100%.
+    graham, margin = _graham_number_and_margin(trailing_eps=5.0, book_value_per_share=80.0, price=47.43)
+    assert graham == pytest.approx(94.87, abs=0.01)
+    assert margin == pytest.approx(50.0, abs=0.1)
 
 
 def test_graham_number_none_when_eps_non_positive():
@@ -376,6 +385,8 @@ def test_value_sectors_endpoint_returns_all_universe_sectors(monkeypatch):
     assert row["return_on_assets_pct"] == pytest.approx(10.0)
     assert row["current_ratio"] == 1.5
     assert row["fcf_to_net_income"] == pytest.approx(1.25)
+    # Levered FCF over market cap (2.5B / 50B), not over enterprise value.
+    assert row["fcf_yield_pct"] == pytest.approx(5.0)
     assert row["graham_number"] is not None
     assert row["margin_of_safety_pct"] is not None
 
@@ -499,3 +510,19 @@ def test_value_sectors_trend_falls_back_to_sma_without_history(monkeypatch):
     row = next(s for s in resp.json()["sectors"] if s["sector"] == "Technology")["stocks"][0]
     assert row["return_6m_pct"] is None
     assert row["trend_signal"] == "up"
+
+
+@pytest.mark.parametrize("market_cap", [None, 0, -50_000_000_000])
+def test_value_sectors_fcf_yield_none_without_positive_market_cap(monkeypatch, market_cap):
+    # Negative FCF over a non-positive denominator must never become a positive yield.
+    monkeypatch.setattr(
+        "app.main.yf.Ticker",
+        lambda sym: _mock_value_ticker(freeCashflow=-10_000_000, marketCap=market_cap),
+    )
+
+    with TestClient(app) as client:
+        resp = client.get("/v1/value/sectors?limit=5")
+
+    assert resp.status_code == 200
+    row = next(s for s in resp.json()["sectors"] if s["sector"] == "Technology")["stocks"][0]
+    assert row["fcf_yield_pct"] is None

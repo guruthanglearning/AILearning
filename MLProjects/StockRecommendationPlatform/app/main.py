@@ -1474,7 +1474,11 @@ def _value_score_breakdown(
                                                             e.g. banks — correctly excluded, not
                                                             a data gap)
       - Book yield (1/P-B) percentile rank         15 pts
-      - FCF/EV yield percentile rank                17 pts  (cash generation net of debt load)
+      - FCF yield (FCF / market cap) percentile rank 17 pts  (equity cash generation — yfinance's
+                                                            freeCashflow is levered, i.e. after
+                                                            interest, so it's matched to equity
+                                                            value, not EV; EBITDA/EV above is the
+                                                            debt-aware factor)
       - Sales yield (1/P-S) percentile rank         10 pts  (stays meaningful when earnings are
                                                             depressed or EBITDA isn't reported)
       - PEG percentile rank (inverted)               8 pts  (growth-adjusted cheapness)
@@ -1579,8 +1583,9 @@ def _graham_number_and_margin(
     """Benjamin Graham's quick intrinsic-value anchor: sqrt(22.5 x EPS x Book Value).
 
     This is an ABSOLUTE valuation estimate (unlike the sector-relative value_score)
-    — margin_of_safety_pct is how far the current price sits below (positive) or
-    above (negative) that estimate. It's a 1930s-era heuristic, not a DCF: it
+    — margin_of_safety_pct is Graham's margin of safety, (value - price) / value:
+    the share of the estimated value the price sits below it (positive), or how
+    far above it the price is, as a share of that value (negative). It's a 1930s-era heuristic, not a DCF: it
     understates value for asset-light/high-growth businesses and is distorted for
     REITs and heavy-leverage financials where GAAP EPS doesn't track cash earnings
     — treat it as one more data point, not a verdict.
@@ -1588,7 +1593,7 @@ def _graham_number_and_margin(
     if trailing_eps is None or book_value_per_share is None or trailing_eps <= 0 or book_value_per_share <= 0:
         return None, None
     graham_number = (22.5 * trailing_eps * book_value_per_share) ** 0.5
-    margin_pct = ((graham_number - price) / price * 100.0) if price and price > 0 else None
+    margin_pct = ((graham_number - price) / graham_number * 100.0) if price and price > 0 else None
     return round(graham_number, 2), (round(margin_pct, 1) if margin_pct is not None else None)
 
 
@@ -1605,7 +1610,7 @@ async def get_value_sectors(
     so both screens cover the same stocks — but the two scores are not on the same
     scale (value adds absolute quality-overlay points on top of percentile ranks;
     momentum's trend/RSI overlay differs too), so don't compare the numbers directly:
-      - EBITDA/EV earnings yield, book yield (1/P-B), FCF/EV yield, and sales yield
+      - EBITDA/EV earnings yield, book yield (1/P-B), FCF yield, and sales yield
         (1/P-S) — each percentile-ranked against SECTOR peers only (not the full
         cross-sector universe), since sectors trade at structurally different multiples
       - PEG ratio (growth-adjusted cheapness) and dividend yield as secondary tilts
@@ -1666,8 +1671,11 @@ async def get_value_sectors(
                     return (1.0 / pb) * 100.0 if pb and pb > 0 else None
 
                 def _fcf_yield(d: dict) -> float | None:
-                    fcf, ev = d.get("free_cashflow"), d.get("enterprise_value")
-                    return (fcf / ev) * 100.0 if fcf is not None and ev else None
+                    # Levered FCF (after interest) belongs over equity value, not EV.
+                    # Require a positive denominator so negative FCF can never flip
+                    # into a positive yield.
+                    fcf, mcap = d.get("free_cashflow"), d.get("market_cap")
+                    return (fcf / mcap) * 100.0 if fcf is not None and mcap and mcap > 0 else None
 
                 def _sales_yield(d: dict) -> float | None:
                     ps = d.get("price_to_sales")

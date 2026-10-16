@@ -7,19 +7,16 @@ import { useValueSectors } from "@/hooks/useValueSectors";
 import type { ValueStockRow } from "@/types/api";
 
 // ── Skeleton loading ──────────────────────────────────────────────────────────
-
-// All Sectors: #, Symbol, Score, Company, Sector, Industry, Mkt Cap, Price, P/E, Fwd P/E, P/B, PEG, FCF Yld, Div Yld, ROE, D/E, Day%
-const SKELETON_ALL    = ["w-6","w-12","w-20","w-28","w-20","w-20","w-14","w-14","w-12","w-12","w-12","w-10","w-12","w-12","w-10","w-12","w-12"];
-// Per-sector:   #, Symbol, Score, Company, Industry, Mkt Cap, Price, P/E, Fwd P/E, P/B, PEG, FCF Yld, Div Yld, ROE, D/E, Day%
-const SKELETON_SECTOR = ["w-6","w-12","w-20","w-28","w-20","w-14","w-14","w-12","w-12","w-12","w-10","w-12","w-12","w-10","w-12","w-12"];
+// Widths are derived from getColumns() (defined below) so the skeleton always
+// matches the real column count — no separate list to keep in sync by hand.
 
 function SkeletonRow({ showSector }: { showSector: boolean }) {
-  const widths = showSector ? SKELETON_ALL : SKELETON_SECTOR;
+  const columns = getColumns(showSector);
   return (
     <tr className="border-b border-gray-800/70">
-      {widths.map((w, i) => (
-        <td key={i} className="px-3 py-3">
-          <div className={`h-2.5 bg-gray-800 rounded animate-pulse ${w}`} />
+      {columns.map((col) => (
+        <td key={String(col.key)} className="px-3 py-3">
+          <div className="h-2.5 bg-gray-800 rounded animate-pulse" style={{ width: Math.max(16, col.w - 20) }} />
         </td>
       ))}
     </tr>
@@ -67,6 +64,55 @@ function fmtMarketCap(v: number | null): string {
   return "$" + v.toLocaleString();
 }
 
+// ── Data hygiene: "n/m" (not meaningful) ─────────────────────────────────────
+// Ratios that are negative (losses / negative equity) or absurdly large (earnings
+// near zero, cyclical troughs) aren't comparable — professional screeners show
+// them as "n/m" rather than as a raw number, and exclude them from sorting.
+
+const MEANINGFUL_MAX: Partial<Record<keyof ValueStockRow, number>> = {
+  pe_ratio: 100,
+  forward_pe: 100,
+  price_to_book: 50,
+  price_to_sales: 50,
+  ev_to_ebitda: 100,
+  peg_ratio: 5,
+  fcf_to_net_income: 5,
+};
+
+function nmReason(key: keyof ValueStockRow, v: number | null): string | null {
+  const max = MEANINGFUL_MAX[key];
+  if (v == null || max == null) return null;
+  if (v < 0) {
+    return key === "price_to_book"
+      ? `Negative book value (${v.toFixed(2)}) — shareholder equity is below zero, often from buybacks; not comparable`
+      : key === "fcf_to_net_income"
+        ? `Negative free cash flow (${v.toFixed(2)}x) — not comparable`
+        : `Negative (${v.toFixed(2)}) — earnings or growth are negative; not comparable`;
+  }
+  if (v > max) {
+    return `Extreme value (${v.toFixed(2)}, above ${max}) — usually earnings near zero or a cyclical trough; not comparable`;
+  }
+  return null;
+}
+
+function NotMeaningful({ reason }: { reason: string }) {
+  return (
+    <span className="text-gray-500 italic cursor-help border-b border-dotted border-gray-600" title={reason}>
+      n/m
+    </span>
+  );
+}
+
+function RatioCell({ row, field, className }: { row: ValueStockRow; field: keyof ValueStockRow; className: string }) {
+  const v = row[field] as number | null;
+  const reason = nmReason(field, v);
+  return (
+    <td className={`${TD} font-mono ${className}`}>
+      {reason ? <NotMeaningful reason={reason} /> : fmtRatio(v)}
+    </td>
+  );
+}
+
 function pctColor(v: number | null): string {
   if (v == null) return "text-gray-500";
   return v > 0 ? "text-green-400" : v < 0 ? "text-red-400" : "text-gray-400";
@@ -84,36 +130,131 @@ function LivePriceCell({ live, fallback }: { live: LivePriceUpdate | null; fallb
 
 // ── Score bar ─────────────────────────────────────────────────────────────────
 
-function ScoreBar({ score }: { score: number | null }) {
+// Stacked bar: cheapness (indigo, out of 85) + quality (emerald, out of 15), so
+// the reader sees WHY a stock scored what it did, not just the blended number.
+// Hover shows the exact parts, including any balance-sheet penalty.
+
+function ScoreBar({ row }: { row: ValueStockRow }) {
+  const score = row.value_score;
   if (score == null) return <span className="text-gray-600 text-xs">--</span>;
   const pct = Math.max(0, Math.min(100, score));
-  const color = pct >= 70 ? "bg-green-500" : pct >= 40 ? "bg-amber-500" : "bg-red-500";
   const label = pct >= 70 ? "text-green-300" : pct >= 40 ? "text-amber-300" : "text-red-300";
+  const cheap = row.score_cheapness_pts;
+  const quality = row.score_quality_pts;
+  const penalty = row.score_penalty_pts ?? 0;
+  const hasParts = cheap != null && quality != null;
   return (
-    <div className="flex items-center gap-2 min-w-[80px]">
-      <div className="flex-1 h-1.5 bg-gray-700 rounded-full overflow-hidden">
-        <div className={`h-full ${color} rounded-full`} style={{ width: `${pct}%` }} />
+    <div className="group relative flex items-center gap-2 min-w-[80px] cursor-help">
+      <div className="flex-1 h-1.5 bg-gray-700 rounded-full overflow-hidden flex">
+        {hasParts ? (
+          <>
+            <div className="h-full bg-indigo-500" style={{ width: `${Math.max(0, cheap)}%` }} />
+            <div className="h-full bg-emerald-400" style={{ width: `${Math.max(0, quality)}%` }} />
+          </>
+        ) : (
+          <div className="h-full bg-indigo-500" style={{ width: `${pct}%` }} />
+        )}
       </div>
       <span className={`text-xs font-mono font-semibold w-8 text-right shrink-0 ${label}`}>
         {pct.toFixed(0)}
+        {penalty < 0 && <span className="text-red-400" aria-label="penalised">*</span>}
       </span>
+      {hasParts && (
+        <div
+          role="tooltip"
+          className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 z-30 hidden group-hover:block w-52 rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-[11px] shadow-xl"
+        >
+          <div className="flex justify-between text-gray-300">
+            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-indigo-500" />Cheapness</span>
+            <span className="font-mono">{cheap.toFixed(1)} / 85</span>
+          </div>
+          <div className="flex justify-between text-gray-300 mt-1">
+            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-emerald-400" />Quality</span>
+            <span className="font-mono">{quality.toFixed(0)} / 15</span>
+          </div>
+          {penalty < 0 && (
+            <div className="flex justify-between text-red-300 mt-1">
+              <span>Debt/Equity penalty</span>
+              <span className="font-mono">{penalty.toFixed(0)}</span>
+            </div>
+          )}
+          <div className="flex justify-between text-gray-100 font-semibold border-t border-gray-700 mt-1.5 pt-1.5">
+            <span>Score</span>
+            <span className="font-mono">{pct.toFixed(1)}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// ── Quality badges (ROE / Debt-Equity) ───────────────────────────────────────
+// ── Trend badge (value + momentum falling-knife guard) ──────────────────────
 
-function RoeBadge({ roe }: { roe: number | null }) {
-  if (roe == null) return <span className="text-gray-600 text-xs">--</span>;
+const TREND_STYLE = {
+  up:    { cls: "bg-green-900/50 text-green-300 border-green-700/50", label: "▲ Up" },
+  mixed: { cls: "bg-gray-800 text-gray-300 border-gray-600",          label: "◆ Mixed" },
+  down:  { cls: "bg-red-900/50 text-red-300 border-red-700/50",       label: "▼ Down" },
+} as const;
+
+function TrendBadge({ row }: { row: ValueStockRow }) {
+  const t = row.trend_signal;
+  if (t == null) return <span className="text-gray-600 text-xs">--</span>;
+  const parts: string[] = [];
+  if (row.return_6m_pct != null) parts.push(`6-month return ${fmtPct(row.return_6m_pct)}`);
+  if (row.above_sma200 != null) parts.push(`price ${row.above_sma200 ? "above" : "below"} its 200-day average`);
+  const verdict = t === "down"
+    ? "Still falling — possible value trap (\"falling knife\")"
+    : t === "up" ? "Cheap and already trending up" : "Trend signals disagree";
+  return (
+    <span className={`text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap ${TREND_STYLE[t].cls}`} title={`${verdict}: ${parts.join(", ")}`}>
+      {TREND_STYLE[t].label}
+    </span>
+  );
+}
+
+// ── Quality badges (ROA / liquidity / earnings-quality / Debt-Equity) ───────
+
+function RoaBadge({ roa }: { roa: number | null }) {
+  if (roa == null) return <span className="text-gray-600 text-xs">--</span>;
   let cls: string;
   let hint: string;
-  if (roe > 15)       { cls = "bg-green-900/60 text-green-300 border-green-700/50"; hint = "Strong profitability"; }
-  else if (roe > 8)   { cls = "bg-amber-900/60 text-amber-300 border-amber-700/50"; hint = "Moderate profitability"; }
-  else if (roe > 0)   { cls = "bg-gray-800 text-gray-400 border-gray-600";          hint = "Weak profitability"; }
+  if (roa > 15)       { cls = "bg-green-900/60 text-green-300 border-green-700/50"; hint = "Strong profitability (ROA, unaffected by leverage/buybacks unlike ROE)"; }
+  else if (roa > 8)   { cls = "bg-amber-900/60 text-amber-300 border-amber-700/50"; hint = "Moderate profitability"; }
+  else if (roa > 0)   { cls = "bg-gray-800 text-gray-400 border-gray-600";          hint = "Weak profitability"; }
   else                { cls = "bg-red-900/60 text-red-300 border-red-700/50";       hint = "Unprofitable"; }
   return (
     <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${cls}`} title={hint}>
-      {roe.toFixed(1)}%
+      {roa.toFixed(1)}%
+    </span>
+  );
+}
+
+function CurrentRatioBadge({ cr }: { cr: number | null }) {
+  if (cr == null) return <span className="text-gray-600 text-xs">--</span>;
+  let cls: string;
+  let hint: string;
+  if (cr >= 1.5)      { cls = "bg-green-900/60 text-green-300 border-green-700/50"; hint = "Strong short-term liquidity"; }
+  else if (cr >= 1.0) { cls = "bg-amber-900/60 text-amber-300 border-amber-700/50"; hint = "Adequate liquidity"; }
+  else                { cls = "bg-red-900/60 text-red-300 border-red-700/50";       hint = "Current liabilities exceed current assets"; }
+  return (
+    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${cls}`} title={hint}>
+      {cr.toFixed(2)}
+    </span>
+  );
+}
+
+function FcfQualityBadge({ ratio }: { ratio: number | null }) {
+  if (ratio == null) return <span className="text-gray-600 text-xs">--</span>;
+  const reason = nmReason("fcf_to_net_income", ratio);
+  if (reason) return <NotMeaningful reason={reason} />;
+  let cls: string;
+  let hint: string;
+  if (ratio >= 1.0)      { cls = "bg-green-900/60 text-green-300 border-green-700/50"; hint = "Reported earnings are fully backed by cash flow"; }
+  else if (ratio >= 0.7) { cls = "bg-amber-900/60 text-amber-300 border-amber-700/50"; hint = "Earnings partially backed by cash flow"; }
+  else                   { cls = "bg-red-900/60 text-red-300 border-red-700/50";       hint = "Earnings not well backed by cash flow — possible earnings-quality concern"; }
+  return (
+    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${cls}`} title={hint}>
+      {ratio.toFixed(2)}x
     </span>
   );
 }
@@ -122,13 +263,26 @@ function DebtBadge({ de }: { de: number | null }) {
   if (de == null) return <span className="text-gray-600 text-xs">--</span>;
   let cls: string;
   let hint: string;
-  if (de < 50)        { cls = "bg-green-900/60 text-green-300 border-green-700/50"; hint = "Conservatively financed"; }
+  if (de < 0)         { cls = "bg-red-900/60 text-red-300 border-red-700/50";       hint = "Negative shareholder equity — balance-sheet risk"; }
+  else if (de < 50)   { cls = "bg-green-900/60 text-green-300 border-green-700/50"; hint = "Conservatively financed"; }
   else if (de < 100)  { cls = "bg-amber-900/60 text-amber-300 border-amber-700/50"; hint = "Moderate leverage"; }
   else if (de < 200)  { cls = "bg-gray-800 text-gray-400 border-gray-600";          hint = "Leveraged"; }
   else                { cls = "bg-red-900/60 text-red-300 border-red-700/50";       hint = "Overleveraged"; }
   return (
     <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${cls}`} title={hint}>
       {de.toFixed(0)}%
+    </span>
+  );
+}
+
+function MarginOfSafetyCell({ v }: { v: number | null }) {
+  if (v == null) return <span className="text-gray-600 text-xs">--</span>;
+  const hint = v >= 0
+    ? "Trading below the Graham Number — potential margin of safety"
+    : "Trading above the Graham Number — no margin of safety by this measure";
+  return (
+    <span className={`font-mono font-semibold ${pctColor(v)}`} title={hint}>
+      {fmtPct(v)}
     </span>
   );
 }
@@ -140,16 +294,27 @@ type SortDir = "asc" | "desc";
 
 const NUMERIC_STOCK_COLS: (keyof ValueStockRow)[] = [
   "close_price", "value_score", "day_change_pct", "week_52_high", "week_52_low", "market_cap",
-  "pe_ratio", "forward_pe", "price_to_book", "peg_ratio",
-  "fcf_yield_pct", "dividend_yield_pct", "return_on_equity_pct", "debt_to_equity_pct",
+  "pe_ratio", "forward_pe", "price_to_book", "price_to_sales", "ev_to_ebitda", "peg_ratio",
+  "fcf_yield_pct", "dividend_yield_pct",
+  "return_on_assets_pct", "current_ratio", "fcf_to_net_income", "debt_to_equity_pct",
+  "graham_number", "margin_of_safety_pct",
 ];
 
 // "Lower is cheaper" ratios — ascending sort reads better-to-worse by default.
-const LOWER_IS_BETTER_COLS: (keyof ValueStockRow)[] = ["pe_ratio", "forward_pe", "price_to_book", "peg_ratio", "debt_to_equity_pct"];
+const LOWER_IS_BETTER_COLS: (keyof ValueStockRow)[] = [
+  "pe_ratio", "forward_pe", "price_to_book", "price_to_sales", "ev_to_ebitda", "peg_ratio", "debt_to_equity_pct",
+];
+
+const TREND_ORDER = { down: 0, mixed: 1, up: 2 } as const;
 
 function getValue(row: ValueStockRow, key: keyof ValueStockRow): string | number {
+  if (key === "trend_signal") {
+    return row.trend_signal == null ? -Infinity : TREND_ORDER[row.trend_signal];
+  }
   const v = row[key];
   if (v == null) return NUMERIC_STOCK_COLS.includes(key) ? -Infinity : "";
+  // "n/m" values sort with the missing ones (always last), not as real numbers.
+  if (typeof v === "number" && nmReason(key, v)) return -Infinity;
   return v as string | number;
 }
 
@@ -172,7 +337,9 @@ const RANK_COL: ColDef = {
 const BASE_COLS: ColDef[] = [
   { key: "symbol",      label: "Symbol",  sticky: true, w: 68,  title: "Click to run AI analysis on this stock" },
   { key: "value_score", label: "Score",   numeric: true, w: 100,
-    title: "Composite score 0–100. Combines earnings yield, book yield, FCF yield, PEG, and dividend yield percentile ranks against the other 110 stocks in our universe, plus an ROE/Debt-Equity quality overlay." },
+    title: "Relative composite 0–100 = cheapness (indigo, out of 85: EV/EBITDA, book, FCF, sales, PEG and dividend yields ranked against SECTOR peers only) + quality (green, out of 15: ROA, liquidity, earnings quality, Debt-Equity). * = Debt/Equity penalty applied. Hover a score for its breakdown. Not an intrinsic valuation — see Graham # and Margin for that." },
+  { key: "trend_signal", label: "Trend",   w: 76,
+    title: "Value + momentum guard. Up = 6-month return positive AND price above its 200-day average; Down = both negative (a cheap stock still falling — possible value trap); Mixed = signals disagree." },
   { key: "company_name", label: "Company", w: 140, title: "Company name" },
 ];
 
@@ -182,22 +349,35 @@ const SECTOR_COL: ColDef = {
 };
 
 const DETAIL_COLS: ColDef[] = [
-  { key: "industry",              label: "Industry", w: 110, title: "Industry sub-group within the sector" },
-  { key: "market_cap",            label: "Mkt Cap",  numeric: true, w: 72, title: "Market capitalisation — total market value of all outstanding shares" },
-  { key: "close_price",           label: "Price",    numeric: true, w: 68, title: "Latest closing price (USD)" },
-  { key: "pe_ratio",              label: "P/E",       numeric: true, w: 56,
-    title: "Trailing price-to-earnings ratio. Lower generally means cheaper relative to current profits." },
-  { key: "forward_pe",            label: "Fwd P/E",   numeric: true, w: 62, title: "Forward P/E — priced against next year's expected earnings" },
-  { key: "price_to_book",         label: "P/B",       numeric: true, w: 56, title: "Price-to-book — price relative to net asset (book) value" },
-  { key: "peg_ratio",             label: "PEG",       numeric: true, w: 56,
+  { key: "industry",              label: "Industry",   w: 110, title: "Industry sub-group within the sector" },
+  { key: "market_cap",            label: "Mkt Cap",    numeric: true, w: 70, title: "Market capitalisation — total market value of all outstanding shares" },
+  { key: "close_price",           label: "Price",      numeric: true, w: 64, title: "Latest closing price (USD)" },
+  { key: "pe_ratio",              label: "P/E",        numeric: true, w: 50,
+    title: "Trailing price-to-earnings ratio. Lower generally means cheaper relative to current profits — but ignores debt, unlike EV/EBITDA." },
+  { key: "forward_pe",            label: "Fwd P/E",    numeric: true, w: 60, title: "Forward P/E — priced against next year's expected earnings" },
+  { key: "price_to_book",         label: "P/B",        numeric: true, w: 50, title: "Price-to-book — price relative to net asset (book) value" },
+  { key: "price_to_sales",        label: "P/S",        numeric: true, w: 50,
+    title: "Price-to-sales. Stays meaningful when earnings are temporarily depressed, or for sectors (e.g. Financials) where EBITDA-based metrics don't apply." },
+  { key: "ev_to_ebitda",          label: "EV/EBITDA",  numeric: true, w: 78,
+    title: "Enterprise Value ÷ EBITDA — the primary cheapness factor driving the score. Debt-aware (Greenblatt \"Magic Formula\" style), unlike raw P/E. Blank for sectors like banks where EBITDA isn't meaningful." },
+  { key: "peg_ratio",             label: "PEG",        numeric: true, w: 50,
     title: "P/E divided by expected earnings growth. Below ~1.5 suggests the stock isn't overpaying for its growth." },
-  { key: "fcf_yield_pct",         label: "FCF Yld",   numeric: true, w: 64, title: "Free cash flow ÷ market cap. Higher means more cash generated per dollar invested." },
-  { key: "dividend_yield_pct",    label: "Div Yld",   numeric: true, w: 62, title: "Trailing dividend yield" },
-  { key: "return_on_equity_pct",  label: "ROE",       numeric: true, w: 56,
-    title: "Return on equity — profitability relative to shareholder equity. >15% is strong." },
-  { key: "debt_to_equity_pct",    label: "D/E",       numeric: true, w: 56,
-    title: "Debt-to-equity ratio. <50% is conservatively financed; >200% is overleveraged." },
-  { key: "day_change_pct",        label: "Today",     numeric: true, w: 62, title: "Today's price change %" },
+  { key: "fcf_yield_pct",         label: "FCF Yld",    numeric: true, w: 62,
+    title: "Free cash flow ÷ Enterprise Value. Higher means more cash generated per dollar of the whole business (equity + debt), not just per dollar of market cap." },
+  { key: "dividend_yield_pct",    label: "Div Yld",    numeric: true, w: 60, title: "Trailing dividend yield" },
+  { key: "return_on_assets_pct",  label: "ROA",        numeric: true, w: 54,
+    title: "Return on assets — profitability without ROE's leverage/buyback distortion (ROE can exceed 100% from buybacks alone). >15% is strong." },
+  { key: "current_ratio",         label: "Curr R",     numeric: true, w: 56,
+    title: "Current assets ÷ current liabilities — short-term liquidity safety. >=1.5 is strong; <1.0 means current liabilities exceed current assets." },
+  { key: "fcf_to_net_income",     label: "FCF/NI",     numeric: true, w: 58,
+    title: "Free cash flow ÷ net income — an earnings-quality check. >=1.0 means cash flow fully backs reported profit; well below 1.0 can flag aggressive accounting." },
+  { key: "debt_to_equity_pct",    label: "D/E",        numeric: true, w: 54,
+    title: "Debt-to-equity ratio. <50% is conservatively financed; >200% is overleveraged; negative means negative shareholder equity." },
+  { key: "graham_number",         label: "Graham #",   numeric: true, w: 72,
+    title: "Benjamin Graham's quick intrinsic-value estimate: sqrt(22.5 x EPS x Book Value per share). An ABSOLUTE anchor, not a sector-relative rank — not part of the Score. A 1930s heuristic, not a DCF; distorted for REITs and high-leverage financials." },
+  { key: "margin_of_safety_pct",  label: "Margin",     numeric: true, w: 64,
+    title: "How far the current price sits below (positive) or above (negative) the Graham Number. Positive = potential margin of safety by this measure." },
+  { key: "day_change_pct",        label: "Today",      numeric: true, w: 58, title: "Today's price change %" },
 ];
 
 function getColumns(showSector: boolean): ColDef[] {
@@ -219,20 +399,27 @@ function Th({ col, sortKey, sortDir, onSort }: {
   const active = sortKey === col.key;
   return (
     <th
-      onClick={() => onSort(col.key)}
       title={col.title}
       style={{ width: col.w }}
+      aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
       className={[
-        "px-2 py-2 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap",
-        "select-none cursor-pointer transition-colors",
-        active
-          ? "text-indigo-300 bg-gray-800/60"
-          : "text-gray-400 hover:text-gray-200 hover:bg-gray-800/30",
+        "px-0 py-0 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap",
         col.sticky ? "sticky left-0 bg-gray-900 z-10" : "",
       ].join(" ")}
     >
-      {col.label}
-      <SortArrow active={active} dir={sortDir} />
+      <button
+        type="button"
+        onClick={() => onSort(col.key)}
+        className={[
+          "w-full px-2 py-2 text-left select-none cursor-pointer transition-colors",
+          active
+            ? "text-indigo-300 bg-gray-800/60"
+            : "text-gray-400 hover:text-gray-200 hover:bg-gray-800/30",
+        ].join(" ")}
+      >
+        {col.label}
+        <SortArrow active={active} dir={sortDir} />
+      </button>
     </th>
   );
 }
@@ -270,7 +457,11 @@ function StockRow({ row, rank, showSector, onAnalyze, liveInfo }: {
       </td>
       {/* Score */}
       <td className={TD}>
-        <ScoreBar score={row.value_score} />
+        <ScoreBar row={row} />
+      </td>
+      {/* Trend */}
+      <td className={TD}>
+        <TrendBadge row={row} />
       </td>
       {/* Company */}
       <td className={TD} title={row.company_name ?? ""}>
@@ -298,16 +489,23 @@ function StockRow({ row, rank, showSector, onAnalyze, liveInfo }: {
         </span>
       </td>
       {/* Valuation ratios */}
-      <td className={`${TD} font-mono text-gray-300`}>{fmtRatio(row.pe_ratio)}</td>
-      <td className={`${TD} font-mono text-gray-400`}>{fmtRatio(row.forward_pe)}</td>
-      <td className={`${TD} font-mono text-gray-300`}>{fmtRatio(row.price_to_book)}</td>
-      <td className={`${TD} font-mono text-gray-400`}>{fmtRatio(row.peg_ratio)}</td>
+      <RatioCell row={row} field="pe_ratio"       className="text-gray-300" />
+      <RatioCell row={row} field="forward_pe"     className="text-gray-400" />
+      <RatioCell row={row} field="price_to_book"  className="text-gray-300" />
+      <RatioCell row={row} field="price_to_sales" className="text-gray-400" />
+      <RatioCell row={row} field="ev_to_ebitda"   className="text-gray-200 font-semibold" />
+      <RatioCell row={row} field="peg_ratio"      className="text-gray-400" />
       {/* Yields */}
       <td className={`${TD} font-mono font-semibold ${pctColor(row.fcf_yield_pct)}`}>{fmtPctPlain(row.fcf_yield_pct)}</td>
       <td className={`${TD} font-mono font-semibold ${pctColor(row.dividend_yield_pct)}`}>{fmtPctPlain(row.dividend_yield_pct)}</td>
       {/* Quality badges */}
-      <td className={TD}><RoeBadge roe={row.return_on_equity_pct} /></td>
+      <td className={TD}><RoaBadge roa={row.return_on_assets_pct} /></td>
+      <td className={TD}><CurrentRatioBadge cr={row.current_ratio} /></td>
+      <td className={TD}><FcfQualityBadge ratio={row.fcf_to_net_income} /></td>
       <td className={TD}><DebtBadge de={row.debt_to_equity_pct} /></td>
+      {/* Absolute valuation anchor */}
+      <td className={`${TD} font-mono text-gray-300`}>{row.graham_number != null ? `$${fmtRatio(row.graham_number)}` : "--"}</td>
+      <td className={TD}><MarginOfSafetyCell v={row.margin_of_safety_pct} /></td>
       {/* Day change */}
       <td className={`${TD} font-mono font-semibold ${pctColor(row.day_change_pct)}`}>
         {fmtPct(row.day_change_pct)}
@@ -348,12 +546,17 @@ function InfoPanel({ isAllSectors }: { isAllSectors: boolean }) {
                 — so every industry gets fair representation, not just the sector with the lowest overall valuations.
               </p>
               <p>
-                Every stock is scored 0–100 by comparing its earnings yield, book yield, FCF yield, PEG,
-                and dividend yield against all other stocks in our universe — not against a fixed target.
-                A score of 80 means this stock is cheaper (and about as financially sound) than roughly
-                80% of all 110 stocks. This is called{" "}
-                <span className="text-gray-300">cross-sectional ranking</span> — the same approach the{" "}
-                <span className="text-gray-300">Momentum</span> page uses, so the two scores are directly comparable.
+                Every stock gets a 0–100 <span className="text-gray-300">relative composite score</span>, built the
+                way professional quant value screens do it: EV/EBITDA, book-yield, FCF-yield, sales-yield, PEG, and
+                dividend-yield are each ranked against <span className="text-gray-300">this stock&apos;s own GICS
+                sector peers only</span> — not the full 110-stock universe — because Energy and Financials trade
+                at structurally lower multiples than Tech, and comparing across sectors would just reward being in
+                a cheap sector, not being a mispriced stock within one. Those ranks are blended, then an ROA /
+                current-ratio / FCF-vs-net-income / Debt-Equity quality overlay adds or subtracts points on top so
+                a cheap score isn&apos;t a melting ice cube or an accounting mirage. Because of that overlay, the
+                score itself isn&apos;t a pure percentile, and it isn&apos;t on the same scale as the{" "}
+                <span className="text-gray-300">Momentum</span> page&apos;s score — don&apos;t compare the two
+                numbers directly.
                 Use the <span className="text-gray-300">Sector</span> and{" "}
                 <span className="text-gray-300">Industry</span> filters above the table to drill down.
               </p>
@@ -361,34 +564,51 @@ function InfoPanel({ isAllSectors }: { isAllSectors: boolean }) {
           ) : (
             <p>
               <span className="text-gray-200 font-medium">Single Sector</span> shows the top 10
-              value stocks within the selected GICS sector, ranked the same way — by how each
-              stock&apos;s valuation and quality metrics compare against the full 110-stock universe.
+              value stocks within the selected GICS sector, ranked by how each stock&apos;s valuation and
+              quality metrics compare against the other stocks in that <span className="text-gray-300">same
+              sector</span> (not the full 110-stock universe).
             </p>
           )}
 
           <div className="grid grid-cols-1 gap-2 mt-2">
             <p className="text-gray-300 font-medium">Column guide:</p>
             <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
-              <div><span className="text-indigo-300 font-mono">#</span> — Rank by value score (1 = cheapest relative to quality)</div>
-              <div><span className="text-indigo-300 font-mono">Score</span> — Composite 0–100: how cheap + financially sound this stock is vs. all 110 peers</div>
-              <div><span className="text-indigo-300 font-mono">P/E</span> &amp; <span className="text-indigo-300 font-mono">Fwd P/E</span> — price vs. current/expected earnings; lower is cheaper</div>
-              <div><span className="text-indigo-300 font-mono">P/B</span> — price vs. book (net asset) value; lower is cheaper</div>
+              <div><span className="text-indigo-300 font-mono">#</span> — Rank by value score (1 = cheapest relative to quality, within sector)</div>
+              <div><span className="text-indigo-300 font-mono">Score</span> — Relative composite 0–100: <span className="text-indigo-300">cheapness</span> (indigo bar, out of 85) + <span className="text-emerald-300">quality</span> (green bar, out of 15); <span className="text-red-400">*</span> = Debt/Equity penalty. Hover for the breakdown</div>
+              <div><span className="text-indigo-300 font-mono">Trend</span> — value + momentum guard: <span className="text-green-400">▲ Up</span> = 6-month return positive and price above its 200-day average; <span className="text-red-400">▼ Down</span> = both negative (cheap but still falling — a possible value trap); ◆ Mixed = signals disagree</div>
+              <div><span className="text-gray-500 italic">n/m</span> — not meaningful: a negative ratio (losses, negative equity) or an extreme one (e.g. P/E above 100, PEG above 5). Hover for why; these sort last</div>
+              <div><span className="text-indigo-300 font-mono">P/E</span> &amp; <span className="text-indigo-300 font-mono">Fwd P/E</span> — price vs. current/expected earnings; lower is cheaper, but ignores debt</div>
+              <div><span className="text-indigo-300 font-mono">P/B</span> / <span className="text-indigo-300 font-mono">P/S</span> — price vs. book value / revenue; lower is cheaper</div>
+              <div><span className="text-indigo-300 font-mono">EV/EBITDA</span> — debt-aware cheapness (Greenblatt &ldquo;Magic Formula&rdquo; style); the score&apos;s primary cheapness factor</div>
               <div><span className="text-indigo-300 font-mono">PEG</span> — P/E adjusted for growth; below ~1.5 avoids overpaying for growth</div>
-              <div><span className="text-indigo-300 font-mono">FCF Yld</span> — free cash flow ÷ market cap; higher is better</div>
+              <div><span className="text-indigo-300 font-mono">FCF Yld</span> — free cash flow ÷ Enterprise Value; higher is better</div>
               <div><span className="text-indigo-300 font-mono">Div Yld</span> — trailing dividend yield; higher adds shareholder return</div>
               <div>
-                <span className="text-indigo-300 font-mono">ROE</span> / <span className="text-indigo-300 font-mono">D/E</span> — quality overlay:{" "}
-                <span className="text-green-400">high ROE + low debt = sound business</span>,{" "}
-                <span className="text-red-400">weak ROE + high debt = possible value trap</span>
+                <span className="text-indigo-300 font-mono">ROA</span> / <span className="text-indigo-300 font-mono">Curr R</span> / <span className="text-indigo-300 font-mono">FCF/NI</span> / <span className="text-indigo-300 font-mono">D/E</span> — quality overlay:{" "}
+                <span className="text-green-400">profitable, liquid, cash-backed earnings, low debt = sound business</span>,{" "}
+                <span className="text-red-400">the opposite = possible value trap</span>
+              </div>
+              <div>
+                <span className="text-indigo-300 font-mono">Graham #</span> / <span className="text-indigo-300 font-mono">Margin</span> — Benjamin Graham&apos;s absolute intrinsic-value estimate and how far price sits below/above it.{" "}
+                <span className="text-gray-500">Not part of the Score — a separate, absolute signal, not a sector-relative rank.</span>
               </div>
               <div><span className="text-indigo-300 font-mono">Today</span> — Price change % today</div>
             </div>
           </div>
 
           <p className="text-gray-600 italic border-t border-gray-800 pt-2">
-            Score formula: earnings-yield rank (26 pts) + book-yield rank (20 pts) + FCF-yield rank (19 pts) +
-            PEG rank (10 pts) + dividend-yield rank (10 pts) + ROE/Debt-Equity quality overlay (15 pts) −
-            penalty if Debt/Equity is extreme. Not investment advice.
+            Score formula (sector-relative): EV/EBITDA-yield rank (28 pts) + book-yield rank (15 pts) +
+            FCF/EV-yield rank (17 pts) + sales-yield rank (10 pts) + PEG rank (8 pts) + dividend-yield rank (7 pts) +
+            ROA/liquidity/earnings-quality/Debt-Equity overlay (15 pts) − 5 pt penalty if Debt/Equity is above
+            200% or negative (marked <span className="text-red-400 not-italic">*</span>). The indigo part of the
+            score bar is the cheapness points, the green part the quality points.
+            Graham Number margin of safety is shown separately and is not part of this score. Neither is the
+            Trend signal (6-month return + price vs. 200-day average) — it&apos;s a separate falling-knife check;
+            the <span className="text-gray-400 not-italic">Value + Momentum</span> filter keeps only stocks scoring{" "}
+            {VALUE_MOMENTUM_MIN_SCORE}+ whose trend isn&apos;t Down. Ratios shown as n/m (negative, or extreme
+            such as P/E above 100 or PEG above 5) are excluded from sorting. This still isn&apos;t
+            a full DCF or a substitute for reading the business — treat it as a screen for candidates, not a verdict.
+            Not investment advice.
           </p>
         </div>
       )}
@@ -416,6 +636,14 @@ const SECTOR_COLORS: Record<string, string> = {
 
 const ALL_SECTORS_KEY = "__all__";
 
+// "Value + Momentum": cheap AND not still falling — the combination professional
+// value screens use to avoid buying a falling knife.
+const VALUE_MOMENTUM_MIN_SCORE = 70;
+
+function passesValueMomentum(r: ValueStockRow): boolean {
+  return (r.value_score ?? 0) >= VALUE_MOMENTUM_MIN_SCORE && r.trend_signal != null && r.trend_signal !== "down";
+}
+
 interface ValueGridProps {
   onAnalyze?: (symbol: string) => void;
 }
@@ -427,6 +655,7 @@ export function ValueGrid({ onAnalyze }: ValueGridProps) {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [filterSector, setFilterSector] = useState<string>("");
   const [filterIndustry, setFilterIndustry] = useState<string>("");
+  const [valueMomentumOnly, setValueMomentumOnly] = useState(false);
 
   const sectors = data?.sectors ?? [];
   const isAllSectors = activeSector === ALL_SECTORS_KEY;
@@ -472,6 +701,7 @@ export function ValueGrid({ onAnalyze }: ValueGridProps) {
   const baseRows = unfilteredRows.filter((r) => {
     if (filterSector && r.sector !== filterSector) return false;
     if (filterIndustry && r.industry !== filterIndustry) return false;
+    if (valueMomentumOnly && !passesValueMomentum(r)) return false;
     return true;
   });
 
@@ -502,7 +732,7 @@ export function ValueGrid({ onAnalyze }: ValueGridProps) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     } else {
       setSortKey(key);
-      const isNum = key === "__rank__" || NUMERIC_STOCK_COLS.includes(key as keyof ValueStockRow);
+      const isNum = key === "__rank__" || key === "trend_signal" || NUMERIC_STOCK_COLS.includes(key as keyof ValueStockRow);
       // Ratio columns where lower is cheaper default to ascending (cheapest first);
       // everything else (yields, score) defaults to descending (best first).
       const defaultsAsc = key === "__rank__" || LOWER_IS_BETTER_COLS.includes(key as keyof ValueStockRow);
@@ -530,6 +760,17 @@ export function ValueGrid({ onAnalyze }: ValueGridProps) {
             {isAllSectors
               ? `Top 5 per sector+industry — ${allSectorsByIndustry.length} stocks across all 11 GICS sectors`
               : `Top 10 value stocks in the ${activeSector} sector`}
+          </p>
+          <p className="text-[11px] text-gray-600 mt-1 max-w-2xl">
+            How a stock is identified as &ldquo;value&rdquo;: EV/EBITDA, book yield, FCF yield, sales yield,
+            PEG, and dividend yield are each ranked against the stock&apos;s own sector peers (not the whole
+            universe), then an ROA / liquidity / earnings-quality / Debt-Equity check adds or subtracts points
+            so a cheap score isn&apos;t a value trap — plus a separate Graham Number margin-of-safety estimate.
+            Hover a score to see its cheapness / quality split. The Trend column flags cheap stocks that are
+            still falling; turn on <span className="text-gray-400">Value + Momentum</span> to hide them.
+            Ratios shown as <span className="italic">n/m</span> are negative or extreme and not comparable.
+            See <span className="text-gray-400">&ldquo;What am I looking at?&rdquo;</span> below for the full
+            breakdown. Not investment advice.
           </p>
           {/* Metadata row: updated time + countdown */}
           <div className="flex items-center gap-3 mt-1 text-xs text-gray-600">
@@ -620,7 +861,7 @@ export function ValueGrid({ onAnalyze }: ValueGridProps) {
       {/* ── All-sectors context: which sectors are represented ── */}
       {isAllSectors && !isLoading && representedSectors.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-gray-500">Sectors in top 10:</span>
+          <span className="text-xs text-gray-500">Sectors represented:</span>
           {representedSectors.map((s) => {
             const count = allSectorsByIndustry.filter((r) => r.sector === s).length;
             return (
@@ -661,11 +902,28 @@ export function ValueGrid({ onAnalyze }: ValueGridProps) {
             <option value="">All Industries</option>
             {uniqueIndustries.map((i) => <option key={i} value={i}>{i}</option>)}
           </select>
-          {(filterSector || filterIndustry) && (
+          <button
+            type="button"
+            onClick={() => setValueMomentumOnly((v) => !v)}
+            aria-pressed={valueMomentumOnly}
+            title={`Show only stocks scoring ${VALUE_MOMENTUM_MIN_SCORE}+ whose trend isn't Down — cheap AND not still falling`}
+            className={[
+              "text-xs px-2.5 py-1.5 rounded border transition-colors",
+              valueMomentumOnly
+                ? "bg-indigo-600 border-indigo-500 text-white"
+                : "bg-gray-800 border-gray-700 text-gray-300 hover:border-gray-500",
+            ].join(" ")}
+          >
+            {valueMomentumOnly ? "✓ " : ""}Value + Momentum
+            <span className="ml-1.5 opacity-70">
+              (score ≥ {VALUE_MOMENTUM_MIN_SCORE}, trend not ▼)
+            </span>
+          </button>
+          {(filterSector || filterIndustry || valueMomentumOnly) && (
             <>
               <button
                 type="button"
-                onClick={() => { setFilterSector(""); setFilterIndustry(""); }}
+                onClick={() => { setFilterSector(""); setFilterIndustry(""); setValueMomentumOnly(false); }}
                 className="text-xs text-gray-500 hover:text-gray-200 px-2 py-1 rounded border border-gray-700 hover:border-gray-500 transition-colors"
               >
                 ✕ Clear
@@ -692,7 +950,7 @@ export function ValueGrid({ onAnalyze }: ValueGridProps) {
           </div>
         )}
         <div className="overflow-x-auto">
-          <table className="text-left min-w-[1250px] w-max">
+          <table className="text-left min-w-[1730px] w-max">
             <thead className="bg-gray-900 border-b border-gray-700">
               <tr>
                 {columns.map((col) => (
@@ -708,7 +966,7 @@ export function ValueGrid({ onAnalyze }: ValueGridProps) {
               ) : sortedPairs.length === 0 && !error ? (
                 <tr>
                   <td colSpan={columns.length} className="px-3 py-10 text-center text-xs text-gray-600">
-                    No data for this sector.
+                    {valueMomentumOnly || filterSector || filterIndustry ? "No stocks match the current filters." : "No data for this sector."}
                   </td>
                 </tr>
               ) : (

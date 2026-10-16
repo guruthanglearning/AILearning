@@ -1111,6 +1111,28 @@ def _percentile_ranks(values: list[float | None]) -> list[float | None]:
     return [rank_map.get(i) for i in range(len(values))]
 
 
+def _percentile_ranks_by_group(
+    values: list[float | None], groups: list[str | None]
+) -> list[float | None]:
+    """Percentile-rank each value against only its own group's peers (e.g. GICS
+    sector), not the full cross-sector universe. Sectors trade at structurally
+    different multiples — a "cheap" P/E in Energy isn't a mispricing, it's the
+    sector norm — so value's cheapness factors are ranked sector-relative while
+    momentum's return factors stay cross-sectional (relative strength genuinely
+    is comparable across sectors)."""
+    result: list[float | None] = [None] * len(values)
+    by_group: dict[str, list[int]] = {}
+    for i, g in enumerate(groups):
+        if g is None:
+            continue
+        by_group.setdefault(g, []).append(i)
+    for idxs in by_group.values():
+        sub_ranks = _percentile_ranks([values[i] for i in idxs])
+        for idx, r in zip(idxs, sub_ranks):
+            result[idx] = r
+    return result
+
+
 def _compute_momentum_score_pro(
     pct_6m: float | None,
     pct_3m: float | None,
@@ -1208,11 +1230,17 @@ def _fetch_stock_raw(sym: str) -> dict:
             "sma200": info.get("twoHundredDayAverage"),
             "market_cap": info.get("marketCap"),
             # Value factors (yfinance returns dividendYield/debtToEquity already as
-            # percent numbers, e.g. 2.4 == 2.4% — returnOnEquity is a fraction, so we
+            # percent numbers, e.g. 2.4 == 2.4% — returnOnAssets is a fraction, so we
             # convert it to the same percent scale here).
             "pe_ratio": info.get("trailingPE"),
             "forward_pe": info.get("forwardPE"),
             "price_to_book": info.get("priceToBook"),
+            "price_to_sales": info.get("priceToSalesTrailing12Months"),
+            # EV/EBITDA is the debt-aware, Magic-Formula-style cheapness metric — unlike
+            # P/E it isn't distorted by a company's capital structure. None for sectors
+            # where EBITDA isn't meaningful (e.g. banks), which is correct, not a gap.
+            "ev_to_ebitda": info.get("enterpriseToEbitda"),
+            "enterprise_value": info.get("enterpriseValue"),
             # yfinance has deprecated "pegRatio" in favor of "trailingPegRatio" on some
             # tickers/versions — fall back to it when the primary key is absent.
             "peg_ratio": (
@@ -1220,10 +1248,14 @@ def _fetch_stock_raw(sym: str) -> dict:
             ),
             "dividend_yield_pct": info.get("dividendYield"),
             "debt_to_equity_pct": info.get("debtToEquity"),
-            "return_on_equity_pct": (
-                info["returnOnEquity"] * 100.0 if info.get("returnOnEquity") is not None else None
+            "current_ratio": info.get("currentRatio"),
+            "return_on_assets_pct": (
+                info["returnOnAssets"] * 100.0 if info.get("returnOnAssets") is not None else None
             ),
             "free_cashflow": info.get("freeCashflow"),
+            "net_income": info.get("netIncomeToCommon"),
+            "book_value_per_share": info.get("bookValue"),
+            "trailing_eps": info.get("trailingEps"),
         }
     except Exception:
         return {"symbol": sym}
@@ -1391,39 +1423,84 @@ async def get_momentum_sectors(
 # independent cache key.
 _VALUE_FETCH_LOCK = asyncio.Lock()
 
+async def _gather_stock_raw(symbols: list[str], max_concurrency: int = 5) -> list[dict]:
+    """Bounded-concurrency .info fetch for a batch of symbols — the value screener's
+    121-symbol fan-out (110-stock universe + 11 sector ETFs) has no price-history
+    call sharing the burst like momentum does, so it's the sole source of load;
+    bound it the same way /v1/market/quotes bounds its .info fan-out. The
+    semaphore is scoped to this call (not module-level) so it's always bound to
+    the caller's own event loop."""
+    sem = asyncio.Semaphore(max_concurrency)
+    loop = asyncio.get_event_loop()
 
-def _compute_value_score_pro(
+    async def _one(sym: str) -> dict:
+        async with sem:
+            return await loop.run_in_executor(None, _fetch_stock_raw, sym)
+
+    return list(await asyncio.gather(*(_one(s) for s in symbols)))
+
+
+def _value_score_breakdown(
     pct_earnings_yield: float | None,
     pct_book_yield: float | None,
     pct_fcf_yield: float | None,
+    pct_sales_yield: float | None,
     pct_peg_inv: float | None,
     pct_dividend: float | None,
-    return_on_equity_pct: float | None,
+    return_on_assets_pct: float | None,
+    current_ratio: float | None,
+    fcf_to_net_income: float | None,
     debt_to_equity_pct: float | None,
-) -> float | None:
+) -> tuple[float, float, float, float] | None:
     """
-    Cross-sectional value score (0-100).
+    Relative value score (0-100) plus its parts, returned as
+    (score, cheapness_pts, quality_pts, penalty_pts) — or None when no cheapness
+    percentile is available at all. The parts are surfaced to the UI so a reader
+    can see WHY a stock scored what it did (cheap vs. sound business vs. penalised
+    balance sheet), not just the blended number.
 
-    Cheapness factors, percentile-ranked within the universe (85 pts):
-      - Earnings yield (1/P/E) percentile rank   26 pts  (Fama-French E/P — primary value signal)
-      - Book yield (1/P/B) percentile rank       20 pts  (book-to-market)
-      - FCF yield percentile rank                19 pts  (cash generated per dollar paid)
-      - PEG percentile rank (inverted)            10 pts  (growth-adjusted cheapness — screens value traps)
-      - Dividend yield percentile rank            10 pts  (shareholder-yield tilt)
-    Quality overlay (15 pts): rewards profitable, conservatively financed businesses,
-    so a high score isn't just a melting ice cube.
-      - ROE > 15%: +8 pts; 8-15%: +4 pts
-      - Debt/Equity < 50%: +7 pts; 50-100%: +3 pts (only when non-negative — a
-        negative Debt/Equity means negative shareholder equity, not low debt)
+    Relative value score (0-100) — sector-relative, debt-aware, Magic-Formula-inspired.
+
+    All percentiles are computed by the caller against SECTOR peers (not the
+    full cross-sector universe) via _percentile_ranks_by_group, so "cheap" means
+    cheap vs. the same industry, not vs. an unrelated sector that structurally
+    trades at different multiples. This is a RELATIVE score, not an intrinsic
+    valuation — see _graham_number_and_margin for the absolute-value signal.
+
+    Cheapness factors (85 pts):
+      - EBITDA/EV earnings yield percentile rank   28 pts  (Greenblatt "Magic Formula" style —
+                                                            debt-aware, unlike raw P/E; None for
+                                                            sectors where EBITDA isn't meaningful,
+                                                            e.g. banks — correctly excluded, not
+                                                            a data gap)
+      - Book yield (1/P-B) percentile rank         15 pts
+      - FCF/EV yield percentile rank                17 pts  (cash generation net of debt load)
+      - Sales yield (1/P-S) percentile rank         10 pts  (stays meaningful when earnings are
+                                                            depressed or EBITDA isn't reported)
+      - PEG percentile rank (inverted)               8 pts  (growth-adjusted cheapness)
+      - Dividend yield percentile rank               7 pts
+    Quality overlay (15 pts): rewards profitable, liquid, conservatively financed
+    businesses whose reported earnings are backed by actual cash, so a high
+    score isn't just a melting ice cube or an accounting mirage.
+      - ROA > 15%: +5 pts; 8-15%: +3 pts        (profitability without ROE's leverage/buyback
+                                                 distortion — ROE can exceed 100% on buybacks
+                                                 alone)
+      - Current ratio >= 1.5: +3 pts; >= 1.0: +1 pt   (short-term liquidity safety)
+      - FCF >= Net Income: +4 pts; FCF >= 70% of Net Income: +2 pts   (earnings-quality check —
+                                                 cash flow backing reported profit, not just
+                                                 accounting earnings)
+      - Debt/Equity < 50%: +3 pts; 50-100%: +1 pt (only when non-negative — a negative
+        Debt/Equity means negative shareholder equity, not low debt)
     Balance-sheet-stress penalty: -5 pts if Debt/Equity > 200% or < 0%.
     """
     cross, total_w = 0.0, 0.0
     for pct, w in [
-        (pct_earnings_yield, 26 / 85),
-        (pct_book_yield,     20 / 85),
-        (pct_fcf_yield,      19 / 85),
-        (pct_peg_inv,        10 / 85),
-        (pct_dividend,       10 / 85),
+        (pct_earnings_yield, 28 / 85),
+        (pct_book_yield,     15 / 85),
+        (pct_fcf_yield,      17 / 85),
+        (pct_sales_yield,    10 / 85),
+        (pct_peg_inv,         8 / 85),
+        (pct_dividend,        7 / 85),
     ]:
         if pct is not None:
             cross += pct * w
@@ -1434,23 +1511,85 @@ def _compute_value_score_pro(
     cross_score = (cross / total_w) * 0.85
 
     quality = 0.0
-    if return_on_equity_pct is not None:
-        if return_on_equity_pct > 15.0:
-            quality += 8.0
-        elif return_on_equity_pct > 8.0:
+    if return_on_assets_pct is not None:
+        if return_on_assets_pct > 15.0:
+            quality += 5.0
+        elif return_on_assets_pct > 8.0:
+            quality += 3.0
+    if current_ratio is not None:
+        if current_ratio >= 1.5:
+            quality += 3.0
+        elif current_ratio >= 1.0:
+            quality += 1.0
+    if fcf_to_net_income is not None:
+        if fcf_to_net_income >= 1.0:
             quality += 4.0
+        elif fcf_to_net_income >= 0.7:
+            quality += 2.0
     if debt_to_equity_pct is not None and debt_to_equity_pct >= 0.0:
         if debt_to_equity_pct < 50.0:
-            quality += 7.0
-        elif debt_to_equity_pct < 100.0:
             quality += 3.0
+        elif debt_to_equity_pct < 100.0:
+            quality += 1.0
 
     penalty = -5.0 if (
         debt_to_equity_pct is not None and (debt_to_equity_pct > 200.0 or debt_to_equity_pct < 0.0)
     ) else 0.0
 
     raw = cross_score + quality + penalty
-    return round(min(100.0, max(0.0, raw)), 1)
+    score = round(min(100.0, max(0.0, raw)), 1)
+    return score, round(cross_score, 1), quality, penalty
+
+
+def _compute_value_score_pro(*args, **kwargs) -> float | None:
+    """Relative value score (0-100) only — see _value_score_breakdown for the
+    factor weights and the cheapness / quality / penalty parts."""
+    breakdown = _value_score_breakdown(*args, **kwargs)
+    return breakdown[0] if breakdown is not None else None
+
+
+def _value_trend_signal(
+    return_6m: float | None, price: float | None, sma200: float | None
+) -> str | None:
+    """Value-plus-momentum guard against "falling knives" — cheap stocks still in
+    a downtrend tend to keep falling before the market re-rates them, which is why
+    professional value screens pair cheapness with a trend check. Returns:
+      - "up":    6-month return >= 0 AND price above its 200-day average
+      - "down":  6-month return < 0  AND price below its 200-day average
+      - "mixed": the two signals disagree
+      - None:    neither signal is available
+    When only one signal is available it decides on its own."""
+    signals: list[bool] = []
+    if return_6m is not None:
+        signals.append(return_6m >= 0.0)
+    if price is not None and sma200 is not None and sma200 > 0:
+        signals.append(price > sma200)
+    if not signals:
+        return None
+    if all(signals):
+        return "up"
+    if not any(signals):
+        return "down"
+    return "mixed"
+
+
+def _graham_number_and_margin(
+    trailing_eps: float | None, book_value_per_share: float | None, price: float | None
+) -> tuple[float | None, float | None]:
+    """Benjamin Graham's quick intrinsic-value anchor: sqrt(22.5 x EPS x Book Value).
+
+    This is an ABSOLUTE valuation estimate (unlike the sector-relative value_score)
+    — margin_of_safety_pct is how far the current price sits below (positive) or
+    above (negative) that estimate. It's a 1930s-era heuristic, not a DCF: it
+    understates value for asset-light/high-growth businesses and is distorted for
+    REITs and heavy-leverage financials where GAAP EPS doesn't track cash earnings
+    — treat it as one more data point, not a verdict.
+    """
+    if trailing_eps is None or book_value_per_share is None or trailing_eps <= 0 or book_value_per_share <= 0:
+        return None, None
+    graham_number = (22.5 * trailing_eps * book_value_per_share) ** 0.5
+    margin_pct = ((graham_number - price) / price * 100.0) if price and price > 0 else None
+    return round(graham_number, 2), (round(margin_pct, 1) if margin_pct is not None else None)
 
 
 @app.get("/v1/value/sectors", response_model=ValueSectorsResponse)
@@ -1459,14 +1598,21 @@ async def get_value_sectors(
     request: Request,
     limit: int = Query(default=10, ge=1, le=25),
 ) -> ValueSectorsResponse:
-    """Top-N value stocks per GICS sector, scored with a classic value-factor composite.
+    """Top-N value stocks per GICS sector, scored with a professional-grade,
+    sector-relative value-factor composite.
 
     Shares the 110-stock universe with /v1/momentum/sectors (same 11 GICS sectors),
-    so a stock's momentum and value scores are directly comparable:
-      - Earnings yield (1/P/E), book yield (1/P/B), and FCF yield — percentile-ranked
-        within the universe
+    so both screens cover the same stocks — but the two scores are not on the same
+    scale (value adds absolute quality-overlay points on top of percentile ranks;
+    momentum's trend/RSI overlay differs too), so don't compare the numbers directly:
+      - EBITDA/EV earnings yield, book yield (1/P-B), FCF/EV yield, and sales yield
+        (1/P-S) — each percentile-ranked against SECTOR peers only (not the full
+        cross-sector universe), since sectors trade at structurally different multiples
       - PEG ratio (growth-adjusted cheapness) and dividend yield as secondary tilts
-      - Quality overlay: ROE and Debt/Equity, so a high score isn't a value trap
+      - Quality overlay: ROA, current ratio, FCF-vs-net-income (earnings quality), and
+        Debt/Equity, so a high score isn't a value trap or an accounting mirage
+      - Graham Number margin-of-safety: a separate, absolute (non-relative) intrinsic-
+        value estimate shown alongside the score, not blended into it
     Not investment advice.
     """
     cache_key = "value_sectors_all"
@@ -1482,50 +1628,85 @@ async def get_value_sectors(
                 all_sector_rows = cached["rows"]
                 fetched_at = cached["fetched_at"]
             else:
-                loop = asyncio.get_event_loop()
+                sym_to_sector = {
+                    s: sector for sector, syms in _MOMENTUM_UNIVERSE.items() for s in syms
+                }
                 all_syms = [s for syms in _MOMENTUM_UNIVERSE.values() for s in syms]
                 etf_syms = list(_SECTOR_ETFS.values())
 
-                # ── Phase 1: per-symbol .info in parallel (reuses the same
-                # extraction helper as momentum, now carrying the value fields too) ──
-                info_tasks = [loop.run_in_executor(None, _fetch_stock_raw, s) for s in all_syms]
-                etf_tasks  = [loop.run_in_executor(None, _fetch_stock_raw, s) for s in etf_syms]
-                results = list(await asyncio.gather(*info_tasks, *etf_tasks))
+                # ── Phase 1: per-symbol .info, bounded concurrency (reuses the same
+                # extraction helper as momentum, now carrying the value fields too),
+                # then ONE batch price-history download for the trend guard. Run
+                # sequentially, not concurrently: overlapping yf.download with the
+                # first .info calls returned fundamentals-less .info for the first
+                # batch of symbols (yfinance session/crumb contention) ──
+                results = await _gather_stock_raw(all_syms + etf_syms)
+                close_df = await asyncio.get_event_loop().run_in_executor(None, _fetch_universe_history)
+                return_6m_map: dict[str, float | None] = {}
+                if close_df is not None:
+                    for sym in all_syms:
+                        if sym in close_df.columns:
+                            return_6m_map[sym] = _stock_returns(close_df[sym])[2]
                 raw_data: list[dict] = results[: len(all_syms)]
                 etf_data: list[dict] = results[len(all_syms):]
                 etf_map: dict[str, dict] = {d["symbol"]: d for d in etf_data}
 
+                # Rank against the UNIVERSE's own sector bucket, not yfinance's live
+                # sector string — guarantees the ranking group matches the sector the
+                # UI groups/displays under.
+                sector_labels = [sym_to_sector.get(d["symbol"]) for d in raw_data]
+
                 # ── Phase 2: derive "higher is better" yield metrics ───────────
                 def _earnings_yield(d: dict) -> float | None:
-                    pe = d.get("pe_ratio")
-                    return (1.0 / pe) * 100.0 if pe and pe > 0 else None
+                    ev_ebitda = d.get("ev_to_ebitda")
+                    return (1.0 / ev_ebitda) * 100.0 if ev_ebitda and ev_ebitda > 0 else None
 
                 def _book_yield(d: dict) -> float | None:
                     pb = d.get("price_to_book")
                     return (1.0 / pb) * 100.0 if pb and pb > 0 else None
 
                 def _fcf_yield(d: dict) -> float | None:
-                    fcf, mc = d.get("free_cashflow"), d.get("market_cap")
-                    return (fcf / mc) * 100.0 if fcf is not None and mc else None
+                    fcf, ev = d.get("free_cashflow"), d.get("enterprise_value")
+                    return (fcf / ev) * 100.0 if fcf is not None and ev else None
+
+                def _sales_yield(d: dict) -> float | None:
+                    ps = d.get("price_to_sales")
+                    return (1.0 / ps) * 100.0 if ps and ps > 0 else None
 
                 def _peg_inv(d: dict) -> float | None:
                     peg = d.get("peg_ratio")
                     return (1.0 / peg) * 100.0 if peg and peg > 0 else None
 
+                def _fcf_to_net_income(d: dict) -> float | None:
+                    fcf, ni = d.get("free_cashflow"), d.get("net_income")
+                    return (fcf / ni) if fcf is not None and ni and ni > 0 else None
+
                 fcf_vals = [_fcf_yield(d) for d in raw_data]
-                pct_ey  = _percentile_ranks([_earnings_yield(d) for d in raw_data])
-                pct_by  = _percentile_ranks([_book_yield(d) for d in raw_data])
-                pct_fy  = _percentile_ranks(fcf_vals)
-                pct_peg = _percentile_ranks([_peg_inv(d) for d in raw_data])
-                pct_div = _percentile_ranks([d.get("dividend_yield_pct") for d in raw_data])
+                pct_ey  = _percentile_ranks_by_group([_earnings_yield(d) for d in raw_data], sector_labels)
+                pct_by  = _percentile_ranks_by_group([_book_yield(d) for d in raw_data], sector_labels)
+                pct_fy  = _percentile_ranks_by_group(fcf_vals, sector_labels)
+                pct_sy  = _percentile_ranks_by_group([_sales_yield(d) for d in raw_data], sector_labels)
+                pct_peg = _percentile_ranks_by_group([_peg_inv(d) for d in raw_data], sector_labels)
+                pct_div = _percentile_ranks_by_group([d.get("dividend_yield_pct") for d in raw_data], sector_labels)
 
                 # ── Phase 3: build ValueStockRow objects with final scores ─────
                 fetched: list[ValueStockRow] = []
                 for i, d in enumerate(raw_data):
-                    score = _compute_value_score_pro(
-                        pct_ey[i], pct_by[i], pct_fy[i], pct_peg[i], pct_div[i],
-                        d.get("return_on_equity_pct"),
+                    fcf_to_ni = _fcf_to_net_income(d)
+                    breakdown = _value_score_breakdown(
+                        pct_ey[i], pct_by[i], pct_fy[i], pct_sy[i], pct_peg[i], pct_div[i],
+                        d.get("return_on_assets_pct"),
+                        d.get("current_ratio"),
+                        fcf_to_ni,
                         d.get("debt_to_equity_pct"),
+                    )
+                    score, cheap_pts, quality_pts, penalty_pts = (
+                        breakdown if breakdown is not None else (None, None, None, None)
+                    )
+                    r6m = return_6m_map.get(d["symbol"])
+                    price, sma200 = d.get("close_price"), d.get("sma200")
+                    graham_number, margin_of_safety_pct = _graham_number_and_margin(
+                        d.get("trailing_eps"), d.get("book_value_per_share"), d.get("close_price"),
                     )
                     fetched.append(ValueStockRow(
                         symbol=d["symbol"],
@@ -1538,14 +1719,26 @@ async def get_value_sectors(
                         week_52_low=d.get("week_52_low"),
                         market_cap=d.get("market_cap"),
                         value_score=score,
+                        score_cheapness_pts=cheap_pts,
+                        score_quality_pts=quality_pts,
+                        score_penalty_pts=penalty_pts,
+                        return_6m_pct=(r6m * 100.0 if r6m is not None else None),
+                        above_sma200=(price > sma200 if price is not None and sma200 else None),
+                        trend_signal=_value_trend_signal(r6m, price, sma200),
                         pe_ratio=d.get("pe_ratio"),
                         forward_pe=d.get("forward_pe"),
                         price_to_book=d.get("price_to_book"),
+                        price_to_sales=d.get("price_to_sales"),
+                        ev_to_ebitda=d.get("ev_to_ebitda"),
                         peg_ratio=d.get("peg_ratio"),
                         fcf_yield_pct=fcf_vals[i],
                         dividend_yield_pct=d.get("dividend_yield_pct"),
-                        return_on_equity_pct=d.get("return_on_equity_pct"),
+                        return_on_assets_pct=d.get("return_on_assets_pct"),
+                        current_ratio=d.get("current_ratio"),
+                        fcf_to_net_income=fcf_to_ni,
                         debt_to_equity_pct=d.get("debt_to_equity_pct"),
+                        graham_number=graham_number,
+                        margin_of_safety_pct=margin_of_safety_pct,
                     ))
 
                 # ── Phase 4: group by sector, sort by score, cache ─────────────

@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -396,5 +396,59 @@ class SectorMomentum(BaseModel):
 
 class MomentumSectorsResponse(BaseModel):
     sectors: list[SectorMomentum]
+    limit: int
+    fetched_at_utc: datetime
+
+
+class ValueStockRow(BaseModel):
+    symbol: str
+    company_name: str | None = None
+    sector: str | None = None
+    industry: str | None = None
+    close_price: float | None = None
+    day_change_pct: float | None = None
+    week_52_high: float | None = None
+    week_52_low: float | None = None
+    market_cap: float | None = None
+    value_score: float | None = None
+    # value_score's parts: cheapness (0-85) + quality (0-15) + penalty (0 or -5),
+    # before the 0-100 clamp
+    score_cheapness_pts: float | None = None
+    score_quality_pts: float | None = None
+    score_penalty_pts: float | None = None
+    # Value + momentum "falling knife" guard (see _value_trend_signal)
+    return_6m_pct: float | None = None
+    above_sma200: bool | None = None
+    trend_signal: Literal["up", "mixed", "down"] | None = None
+    # Cheapness factors (sector-relative, debt-aware)
+    pe_ratio: float | None = None              # trailing P/E
+    forward_pe: float | None = None
+    price_to_book: float | None = None
+    price_to_sales: float | None = None
+    ev_to_ebitda: float | None = None          # None where EBITDA isn't meaningful (e.g. banks)
+    peg_ratio: float | None = None
+    fcf_yield_pct: float | None = None         # free cash flow / enterprise value, %
+    dividend_yield_pct: float | None = None
+    # Quality overlay
+    return_on_assets_pct: float | None = None
+    current_ratio: float | None = None
+    fcf_to_net_income: float | None = None     # earnings-quality: cash backing of reported profit
+    debt_to_equity_pct: float | None = None
+    # Absolute valuation anchor — NOT part of value_score (see _graham_number_and_margin)
+    graham_number: float | None = None
+    margin_of_safety_pct: float | None = None
+
+
+class SectorValue(BaseModel):
+    sector: str
+    stocks: list[ValueStockRow]
+    etf_symbol: str | None = None
+    etf_price: float | None = None
+    etf_change_pct: float | None = None
+    etf_prev_close: float | None = None
+
+
+class ValueSectorsResponse(BaseModel):
+    sectors: list[SectorValue]
     limit: int
     fetched_at_utc: datetime

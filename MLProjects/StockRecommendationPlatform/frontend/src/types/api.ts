@@ -405,6 +405,59 @@ export interface MomentumSectorsResponse {
   fetched_at_utc: string;
 }
 
+export interface ValueStockRow {
+  symbol: string;
+  company_name: string | null;
+  sector: string | null;
+  industry: string | null;
+  close_price: number | null;
+  day_change_pct: number | null;
+  week_52_high: number | null;
+  week_52_low: number | null;
+  market_cap: number | null;
+  value_score: number | null;
+  // value_score's parts: cheapness (0-85) + quality (0-15) + penalty (0 or -5)
+  score_cheapness_pts: number | null;
+  score_quality_pts: number | null;
+  score_penalty_pts: number | null;
+  // Value + momentum "falling knife" guard
+  return_6m_pct: number | null;
+  above_sma200: boolean | null;
+  trend_signal: "up" | "mixed" | "down" | null;
+  // Cheapness factors (sector-relative, debt-aware)
+  pe_ratio: number | null;
+  forward_pe: number | null;
+  price_to_book: number | null;
+  price_to_sales: number | null;
+  ev_to_ebitda: number | null;
+  peg_ratio: number | null;
+  fcf_yield_pct: number | null;
+  dividend_yield_pct: number | null;
+  // Quality overlay
+  return_on_assets_pct: number | null;
+  current_ratio: number | null;
+  fcf_to_net_income: number | null;
+  debt_to_equity_pct: number | null;
+  // Absolute valuation anchor — not part of value_score
+  graham_number: number | null;
+  margin_of_safety_pct: number | null;
+}
+
+export interface SectorValue {
+  sector: string;
+  stocks: ValueStockRow[];
+  etf_symbol: string | null;
+  etf_price: number | null;
+  etf_change_pct: number | null;
+  etf_prev_close: number | null;
+}
+
+export interface ValueSectorsResponse {
+  sectors: SectorValue[];
+  limit: number;
+  fetched_at_utc: string;
+}
+
 export interface MarketQuoteRow {
   symbol: string;
   pre_mkt_price: number | null;

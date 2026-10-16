@@ -23,6 +23,7 @@ import type {
   SupervisorVerdict,
   UserSettingsPayload,
   UserSettingsResponse,
+  ValueSectorsResponse,
   WatchlistCreate,
   WatchlistResponse,
   WatchlistSymbolAdd,
@@ -422,6 +423,12 @@ export async function getPeers(symbol: string): Promise<PeersResponse> {
 
 export async function getMomentumSectors(limit = 10): Promise<MomentumSectorsResponse> {
   const res = await fetch(`${API_URL}/v1/momentum/sectors?limit=${limit}`);
+  await checkResponse(res);
+  return res.json();
+}
+
+export async function getValueSectors(limit = 10): Promise<ValueSectorsResponse> {
+  const res = await fetch(`${API_URL}/v1/value/sectors?limit=${limit}`);
   await checkResponse(res);
   return res.json();
 }

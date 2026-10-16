@@ -9,6 +9,7 @@ const NAV_LINKS = [
   { href: "/", label: "Analysis" },
   { href: "/market-grid", label: "Market Grid" },
   { href: "/momentum", label: "Momentum" },
+  { href: "/value", label: "Value" },
   { href: "/sector-heat", label: "Sector Heat" },
   { href: "/earnings", label: "Earnings" },
   { href: "/compare", label: "Compare" },

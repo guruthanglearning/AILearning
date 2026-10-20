@@ -1597,6 +1597,296 @@ def _graham_number_and_margin(
     return round(graham_number, 2), (round(margin_pct, 1) if margin_pct is not None else None)
 
 
+# Annual statements only change once a year, so they're cached per symbol for a
+# day rather than re-fetched on every 5-minute value-screener refresh. A symbol
+# whose statements couldn't be fetched is retried after an hour, not every refresh.
+_STATEMENT_TTL_SECS = 24 * 3600
+_STATEMENT_MISS_TTL_SECS = 3600
+
+
+def _stmt_values(df: Any, dates: list, *names: str) -> list[float | None]:
+    """One value per fiscal-year column in `dates` (most recent first): for each
+    year, the first of the alias rows in `names` with a real number that year, so
+    an alias that's blank in one year falls back to the next alias for that year
+    only. None where no alias has a value."""
+    if not isinstance(df, pd.DataFrame) or df.empty:
+        return [None] * len(dates)
+    rows = [n for n in names if n in df.index]
+    out: list[float | None] = []
+    for d in dates:
+        value: float | None = None
+        if d in df.columns:
+            for name in rows:
+                v = df.at[name, d]
+                try:
+                    if v is not None and not pd.isna(v):
+                        value = float(v)
+                        break
+                except (TypeError, ValueError):
+                    continue
+        out.append(value)
+    return out
+
+
+def _consecutive_fiscal_years(dates: list, limit: int = 3) -> list:
+    """Most recent first, stopping at the first gap: each date must sit roughly a
+    year (300-430 days) before the previous one, so a missing year in Yahoo's data
+    never turns "vs the year before" into a comparison with two years earlier."""
+    ordered = sorted(dates, reverse=True)
+    out = ordered[:1]
+    for d in ordered[1:]:
+        if len(out) == limit:
+            break
+        gap = (pd.Timestamp(out[-1]) - pd.Timestamp(d)).days
+        if not 300 <= gap <= 430:
+            break
+        out.append(d)
+    return out
+
+
+def _fetch_statements(sym: str) -> dict | None:
+    """Up to three consecutive fiscal years of the annual statement lines the
+    Piotroski F-score needs, on the fiscal-year dates the income statement and
+    balance sheet share (yfinance can return a different number of years per
+    statement)."""
+    try:
+        t = yf.Ticker(sym)
+        inc, bs, cf = t.income_stmt, t.balance_sheet, t.cashflow
+    except Exception as exc:
+        log.warning("value_statements_fetch_failed", symbol=sym, error=str(exc))
+        return None
+    if not isinstance(inc, pd.DataFrame) or not isinstance(bs, pd.DataFrame) or inc.empty or bs.empty:
+        return None
+    dates = _consecutive_fiscal_years(list(set(inc.columns) & set(bs.columns)))
+    if len(dates) < 2:
+        return None
+    return {
+        "fiscal_year_end": pd.Timestamp(dates[0]).date().isoformat(),
+        "net_income": _stmt_values(inc, dates, "Net Income", "Net Income Common Stockholders"),
+        "revenue": _stmt_values(inc, dates, "Total Revenue", "Operating Revenue"),
+        "gross_profit": _stmt_values(inc, dates, "Gross Profit"),
+        "total_assets": _stmt_values(bs, dates, "Total Assets"),
+        # yfinance doesn't break out the current portion of long-term debt ("Current
+        # Debt" also holds commercial paper and other short-term borrowings), so the
+        # leverage test uses the long-term line only.
+        "long_term_debt": _stmt_values(
+            bs, dates, "Long Term Debt", "Long Term Debt And Capital Lease Obligation"
+        ),
+        "current_assets": _stmt_values(bs, dates, "Current Assets"),
+        "current_liabilities": _stmt_values(bs, dates, "Current Liabilities"),
+        "operating_cash_flow": _stmt_values(cf, dates, "Operating Cash Flow"),
+        # Cash raised by selling new common stock; Yahoo omits the row in years with
+        # none, so the net line (issuance minus buybacks) is kept to tell "no
+        # issuance" apart from "no financing data".
+        "stock_issuance": _stmt_values(cf, dates, "Common Stock Issuance", "Issuance Of Capital Stock"),
+        "net_stock_issuance": _stmt_values(cf, dates, "Net Common Stock Issuance"),
+    }
+
+
+async def _gather_statements(symbols: list[str], max_concurrency: int = 5) -> list[dict | None]:
+    """Bounded-concurrency, day-cached annual-statement fetch for the F-score."""
+    sem = asyncio.Semaphore(max_concurrency)
+    loop = asyncio.get_event_loop()
+
+    async def _one(sym: str) -> dict | None:
+        key, miss_key = f"value_statements:{sym}", f"value_statements_miss:{sym}"
+        cached = _cache_get(key, ttl=_STATEMENT_TTL_SECS)
+        if cached is not None:
+            return cached
+        if _cache_get(miss_key, ttl=_STATEMENT_MISS_TTL_SECS) is not None:
+            return None
+        async with sem:
+            st = await loop.run_in_executor(None, _fetch_statements, sym)
+        if st is not None:
+            _cache_set(key, st)
+        else:
+            _cache_set(miss_key, True)
+        return st
+
+    return list(await asyncio.gather(*(_one(s) for s in symbols)))
+
+
+def _fmt_money(v: float) -> str:
+    a = abs(v)
+    if a >= 1e9:
+        return f"${v / 1e9:.1f}B"
+    if a >= 1e6:
+        return f"${v / 1e6:.0f}M"
+    return f"${v:,.0f}"
+
+
+def _vs(a: float, b: float, render: Any, digits: int = 1) -> str:
+    """"this year vs last year", adding decimals (up to 3 more) until the two
+    values differ, so a pass/fail never sits next to two identical numbers."""
+    x, y = render(a, digits), render(b, digits)
+    for d in range(digits + 1, digits + 4):
+        if x != y:
+            break
+        x, y = render(a, d), render(b, d)
+    return f"{x} vs {y}"
+
+
+_PIOTROSKI_MIN_TESTS = 4  # fewer evaluable tests than this -> no score shown
+_BANK_NOTE = "Not meaningful for banks/insurers"
+# Yahoo industry names for deposit-taking, lending, broking and insurance
+# businesses. Payment networks (Visa, Mastercard: "Credit Services") and asset
+# managers report a normal balance sheet, which the structure check below catches.
+_BANK_STYLE_INDUSTRY_WORDS = ("bank", "insurance", "capital markets", "credit services", "mortgage")
+
+
+def _piotroski_fscore(
+    st: dict | None, financial_sector: bool = False, industry: str | None = None
+) -> dict | None:
+    """Joseph Piotroski's (2000) F-score: nine pass/fail tests on the last two
+    fiscal years' statements, one point each — profitability (net income > 0,
+    operating cash flow > 0, ROA up, cash flow > net income), leverage/liquidity/
+    funding (long-term debt ratio not up, current ratio up, no new common stock
+    issued) and efficiency (gross margin up, asset turnover up). 8-9 = strong and
+    improving, 0-2 = weak and deteriorating (a likely value trap).
+
+    As in the paper, ROA and asset turnover use beginning-of-year assets and the
+    leverage ratio uses average assets, so those tests need a third balance sheet;
+    without one they're not evaluated rather than computed on a different base.
+
+    A test whose inputs are missing isn't evaluated (passed=None) and doesn't count
+    toward the max, so a gap in Yahoo's data never reads as a fail. Banks, insurers
+    and brokers also skip the cash-flow, leverage, current-ratio and gross-margin
+    tests: deposits are debt, lending runs through operating cash flow, and their
+    balance sheets have no current assets or cost of goods sold, so those tests
+    would mark a healthy, growing bank as failing. A company counts as bank-style
+    only when it's in the Financials sector, its Yahoo industry is one of
+    _BANK_STYLE_INDUSTRY_WORDS, and neither year reports current assets.
+
+    Returns {"score", "max", "bank_style", "fiscal_year", "tests"} — score is None
+    when fewer than _PIOTROSKI_MIN_TESTS tests could be evaluated — or None when
+    there are no statements at all."""
+    if not st:
+        return None
+
+    def val(key: str, i: int) -> float | None:
+        vals = st.get(key) or []
+        return vals[i] if i < len(vals) else None
+
+    def ratio(a: float | None, b: float | None) -> float | None:
+        return a / b if a is not None and b is not None and b > 0 else None
+
+    def avg(a: float | None, b: float | None) -> float | None:
+        return (a + b) / 2 if a is not None and b is not None else None
+
+    ni0 = val("net_income", 0)
+    ta0, ta1, ta2 = val("total_assets", 0), val("total_assets", 1), val("total_assets", 2)
+    cfo0 = val("operating_cash_flow", 0)
+    rev0, rev1 = val("revenue", 0), val("revenue", 1)
+    roa0, roa1 = ratio(ni0, ta1), ratio(val("net_income", 1), ta2)
+    lev0 = ratio(val("long_term_debt", 0), avg(ta0, ta1))
+    lev1 = ratio(val("long_term_debt", 1), avg(ta1, ta2))
+    cr0 = ratio(val("current_assets", 0), val("current_liabilities", 0))
+    cr1 = ratio(val("current_assets", 1), val("current_liabilities", 1))
+    gm0, gm1 = ratio(val("gross_profit", 0), rev0), ratio(val("gross_profit", 1), rev1)
+    turn0, turn1 = ratio(rev0, ta1), ratio(rev1, ta2)
+    issued0, net_issued0 = val("stock_issuance", 0), val("net_stock_issuance", 0)
+    bank_industry = any(w in (industry or "").lower() for w in _BANK_STYLE_INDUSTRY_WORDS)
+    bank_style = (
+        financial_sector and bank_industry
+        and val("current_assets", 0) is None and val("current_assets", 1) is None
+    )
+    missing = "Data not reported"
+    no_prior = "Needs three years of balance sheets"
+
+    def pct(v: float, d: int) -> str:
+        return f"{v * 100:.{d}f}%"
+
+    def num(v: float, d: int) -> str:
+        return f"{v:.{d}f}"
+
+    def times(v: float, d: int) -> str:
+        return f"{v:.{d}f}x"
+
+    tests: list[dict] = []
+
+    def add(test_id: str, label: str, passed: bool | None, detail: str) -> None:
+        tests.append({"id": test_id, "label": label, "passed": passed, "detail": detail})
+
+    def gap_reason(needs_prior_assets: bool) -> str:
+        return no_prior if needs_prior_assets and ta2 is None and ta1 is not None else missing
+
+    add("net_income", "Profitable (net income > 0)",
+        None if ni0 is None else ni0 > 0,
+        missing if ni0 is None else f"Net income {_fmt_money(ni0)}")
+
+    def add_roa_test() -> None:
+        add("roa_up", "Return on assets improved",
+            None if roa0 is None or roa1 is None else roa0 > roa1,
+            gap_reason(True) if roa0 is None or roa1 is None else f"ROA {_vs(roa0, roa1, pct)}")
+
+    if bank_style:
+        note = f"{_BANK_NOTE}: lending flows swing operating cash flow"
+        add("cfo", "Operating cash flow > 0", None, note)
+        add_roa_test()
+        add("accruals", "Cash flow exceeds net income", None, note)
+        add("leverage_down", "Long-term debt ratio did not rise", None,
+            f"{_BANK_NOTE}: deposits and funding count as debt")
+    else:
+        add("cfo", "Operating cash flow > 0",
+            None if cfo0 is None else cfo0 > 0,
+            missing if cfo0 is None else f"Operating cash flow {_fmt_money(cfo0)}")
+        add_roa_test()
+        add("accruals", "Cash flow exceeds net income",
+            None if cfo0 is None or ni0 is None else cfo0 > ni0,
+            missing if cfo0 is None or ni0 is None
+            else f"{_fmt_money(cfo0)} cash flow vs {_fmt_money(ni0)} net income")
+        add("leverage_down", "Long-term debt ratio did not rise",
+            None if lev0 is None or lev1 is None else lev0 <= lev1,
+            gap_reason(True) if lev0 is None or lev1 is None
+            else f"Long-term debt (share of average assets) {_vs(lev0, lev1, pct)}")
+
+    if cr0 is None or cr1 is None:
+        cr_detail = f"{_BANK_NOTE}: no current assets on a bank balance sheet" if bank_style else missing
+    else:
+        cr_detail = _vs(cr0, cr1, num, 2)
+    add("current_ratio_up", "Current ratio improved",
+        None if cr0 is None or cr1 is None else cr0 > cr1, cr_detail)
+
+    # Cash actually raised from new common stock, so a year with both issuance and
+    # bigger buybacks still fails, and a stock split (no cash) doesn't.
+    if issued0 is not None:
+        passed, detail = issued0 <= 0, (
+            f"Issued {_fmt_money(issued0)} of new common stock" if issued0 > 0
+            else "No new common stock issued"
+        )
+    elif net_issued0 is not None:
+        passed, detail = net_issued0 <= 0, (
+            f"No issuance reported (net buybacks {_fmt_money(-net_issued0)})" if net_issued0 < 0
+            else "No issuance reported" if net_issued0 == 0
+            else f"Net {_fmt_money(net_issued0)} of new common stock issued"
+        )
+    else:
+        passed, detail = None, missing
+    add("no_dilution", "No new shares issued", passed, detail)
+
+    if bank_style:
+        add("gross_margin_up", "Gross margin improved", None, f"{_BANK_NOTE}: no cost of goods sold")
+    else:
+        add("gross_margin_up", "Gross margin improved",
+            None if gm0 is None or gm1 is None else gm0 > gm1,
+            missing if gm0 is None or gm1 is None else _vs(gm0, gm1, pct))
+
+    add("asset_turnover_up", "Asset turnover improved",
+        None if turn0 is None or turn1 is None else turn0 > turn1,
+        gap_reason(True) if turn0 is None or turn1 is None else _vs(turn0, turn1, times, 2))
+
+    evaluated = [t for t in tests if t["passed"] is not None]
+    max_tests = len(evaluated)
+    score = sum(1 for t in evaluated if t["passed"]) if max_tests >= _PIOTROSKI_MIN_TESTS else None
+    return {
+        "score": score,
+        "max": max_tests,
+        "bank_style": bank_style,
+        "fiscal_year": st.get("fiscal_year_end"),
+        "tests": tests,
+    }
+
+
 @app.get("/v1/value/sectors", response_model=ValueSectorsResponse)
 @limiter.limit("30/minute")
 async def get_value_sectors(
@@ -1618,6 +1908,8 @@ async def get_value_sectors(
         Debt/Equity, so a high score isn't a value trap or an accounting mirage
       - Graham Number margin-of-safety: a separate, absolute (non-relative) intrinsic-
         value estimate shown alongside the score, not blended into it
+      - Piotroski F-score (0-9): a year-over-year financial-strength check from the
+        annual statements, also shown alongside the score, not blended into it
     Not investment advice.
     """
     cache_key = "value_sectors_all"
@@ -1647,6 +1939,9 @@ async def get_value_sectors(
                 # batch of symbols (yfinance session/crumb contention) ──
                 results = await _gather_stock_raw(all_syms + etf_syms)
                 close_df = await asyncio.get_event_loop().run_in_executor(None, _fetch_universe_history)
+                # Annual statements for the Piotroski F-score: day-cached per symbol,
+                # fetched last for the same contention reason.
+                statements = await _gather_statements(all_syms)
                 return_6m_map: dict[str, float | None] = {}
                 if close_df is not None:
                     for sym in all_syms:
@@ -1716,6 +2011,11 @@ async def get_value_sectors(
                     graham_number, margin_of_safety_pct = _graham_number_and_margin(
                         d.get("trailing_eps"), d.get("book_value_per_share"), d.get("close_price"),
                     )
+                    fscore = _piotroski_fscore(
+                        statements[i],
+                        financial_sector=sector_labels[i] == "Financials",
+                        industry=d.get("industry"),
+                    ) or {}
                     fetched.append(ValueStockRow(
                         symbol=d["symbol"],
                         company_name=d.get("company_name"),
@@ -1747,6 +2047,11 @@ async def get_value_sectors(
                         debt_to_equity_pct=d.get("debt_to_equity_pct"),
                         graham_number=graham_number,
                         margin_of_safety_pct=margin_of_safety_pct,
+                        piotroski_score=fscore.get("score"),
+                        piotroski_max=fscore.get("max"),
+                        piotroski_bank_style=fscore.get("bank_style", False),
+                        piotroski_fiscal_year=fscore.get("fiscal_year"),
+                        piotroski_tests=fscore.get("tests", []),
                     ))
 
                 # ── Phase 4: group by sector, sort by score, cache ─────────────

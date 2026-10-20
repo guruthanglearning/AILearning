@@ -400,6 +400,13 @@ class MomentumSectorsResponse(BaseModel):
     fetched_at_utc: datetime
 
 
+class PiotroskiTest(BaseModel):
+    id: str
+    label: str
+    passed: bool | None = None   # None = not evaluated (data missing or not meaningful)
+    detail: str | None = None
+
+
 class ValueStockRow(BaseModel):
     symbol: str
     company_name: str | None = None
@@ -427,7 +434,7 @@ class ValueStockRow(BaseModel):
     price_to_sales: float | None = None
     ev_to_ebitda: float | None = None          # None where EBITDA isn't meaningful (e.g. banks)
     peg_ratio: float | None = None
-    fcf_yield_pct: float | None = None         # free cash flow / enterprise value, %
+    fcf_yield_pct: float | None = None         # free cash flow / market cap, %
     dividend_yield_pct: float | None = None
     # Quality overlay
     return_on_assets_pct: float | None = None
@@ -437,6 +444,14 @@ class ValueStockRow(BaseModel):
     # Absolute valuation anchor — NOT part of value_score (see _graham_number_and_margin)
     graham_number: float | None = None
     margin_of_safety_pct: float | None = None
+    # Piotroski F-score — financial-strength check, NOT part of value_score
+    # (see _piotroski_fscore). piotroski_max is how many of the 9 tests could be
+    # evaluated; bank-style balance sheets are scored on fewer tests.
+    piotroski_score: int | None = None
+    piotroski_max: int | None = None
+    piotroski_bank_style: bool = False
+    piotroski_fiscal_year: str | None = None
+    piotroski_tests: list[PiotroskiTest] = Field(default_factory=list)
 
 
 class SectorValue(BaseModel):

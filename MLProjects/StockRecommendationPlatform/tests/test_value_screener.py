@@ -538,19 +538,21 @@ def test_value_sectors_fcf_yield_none_without_positive_market_cap(monkeypatch, m
 
 
 def _acme_statements(**overrides) -> dict:
-    """Two fiscal years, most recent first: profitable, cash-backed, de-levering,
-    more liquid, better margins and turnover, but issued new shares -> 8/9."""
+    """Most recent year first (three balance sheets, as the ROA, turnover and
+    leverage tests need): profitable, cash-backed, de-levering, more liquid,
+    better margins and turnover, but sold new stock -> 8/9."""
     st = {
         "fiscal_year_end": "2025-12-31",
-        "net_income": [100e6, 80e6],
-        "revenue": [900e6, 800e6],
-        "gross_profit": [360e6, 304e6],
-        "total_assets": [1000e6, 1000e6],
-        "long_term_debt": [250e6, 300e6],
-        "current_assets": [160e6, 140e6],
-        "current_liabilities": [100e6, 100e6],
-        "shares": [52e6, 50e6],
-        "operating_cash_flow": [130e6, 90e6],
+        "net_income": [100e6, 80e6, 70e6],
+        "revenue": [900e6, 800e6, 750e6],
+        "gross_profit": [360e6, 304e6, 280e6],
+        "total_assets": [1000e6, 1000e6, 1000e6],
+        "long_term_debt": [250e6, 300e6, 320e6],
+        "current_assets": [160e6, 140e6, 130e6],
+        "current_liabilities": [100e6, 100e6, 100e6],
+        "operating_cash_flow": [130e6, 90e6, 80e6],
+        "stock_issuance": [5e6, None, None],
+        "net_stock_issuance": [5e6, -10e6, -10e6],
     }
     st.update(overrides)
     return st
@@ -564,7 +566,8 @@ def _bank_statements() -> dict:
         current_assets=[None, None],
         current_liabilities=[None, None],
         operating_cash_flow=[-150e9, -40e9],
-        shares=[48e6, 50e6],
+        stock_issuance=[None, None],
+        net_stock_issuance=[-2e9, -1e9],
     )
 
 
@@ -577,7 +580,8 @@ def test_piotroski_acme_example_scores_8_of_9():
     assert [t["id"] for t in f["tests"] if t["passed"] is False] == ["no_dilution"]
     details = {t["id"]: t["detail"] for t in f["tests"]}
     assert details["roa_up"] == "ROA 10.0% vs 8.0%"
-    assert details["no_dilution"] == "52M vs 50M shares"
+    assert details["leverage_down"] == "Long-term debt (share of average assets) 25.0% vs 30.0%"
+    assert details["no_dilution"] == "Issued $5M of new common stock"
     assert details["gross_margin_up"] == "40.0% vs 38.0%"
 
 
@@ -596,7 +600,7 @@ def test_piotroski_missing_data_is_not_evaluated_rather_than_failed():
 
 
 def test_piotroski_bank_style_skips_tests_that_dont_apply():
-    f = _piotroski_fscore(_bank_statements(), financial_sector=True)
+    f = _piotroski_fscore(_bank_statements(), financial_sector=True, industry="Banks - Diversified")
     assert f["bank_style"] is True
     skipped = {t["id"] for t in f["tests"] if t["passed"] is None}
     assert skipped == {"cfo", "accruals", "leverage_down", "current_ratio_up", "gross_margin_up"}
@@ -608,10 +612,20 @@ def test_piotroski_bank_style_skips_tests_that_dont_apply():
     assert f["score"] == 4
 
 
+def test_piotroski_bank_style_skips_gross_margin_even_when_reported():
+    st = _bank_statements()
+    st["gross_profit"] = [50e9, 40e9]
+    f = _piotroski_fscore(st, financial_sector=True, industry="Insurance - Diversified")
+    gm = next(t for t in f["tests"] if t["id"] == "gross_margin_up")
+    assert gm["passed"] is None
+    assert gm["detail"] == "Not meaningful for banks/insurers: no cost of goods sold"
+    assert f["max"] == 4
+
+
 def test_piotroski_unclassified_balance_sheet_outside_financials_is_not_bank_style():
     # Same statements, but not a Financials-sector company: the cash-flow tests
     # still apply, and the negative cash flow fails them.
-    f = _piotroski_fscore(_bank_statements(), financial_sector=False)
+    f = _piotroski_fscore(_bank_statements(), financial_sector=False, industry="Banks - Diversified")
     assert f["bank_style"] is False
     cfo = next(t for t in f["tests"] if t["id"] == "cfo")
     assert cfo["passed"] is False
@@ -619,13 +633,31 @@ def test_piotroski_unclassified_balance_sheet_outside_financials_is_not_bank_sty
 
 def test_piotroski_financial_with_classified_balance_sheet_gets_all_nine_tests():
     # e.g. an asset manager: Financials sector, but a normal balance sheet.
-    f = _piotroski_fscore(_acme_statements(), financial_sector=True)
+    f = _piotroski_fscore(_acme_statements(), financial_sector=True, industry="Credit Services")
     assert f["bank_style"] is False
     assert f["max"] == 9
 
 
+def test_piotroski_non_bank_financial_with_missing_current_assets_is_not_bank_style():
+    # An asset manager with a gap in Yahoo's current-assets data: the gap is just
+    # missing data, so the cash-flow tests still run (and negative cash flow fails).
+    st = _acme_statements(current_assets=[None, None, None], operating_cash_flow=[-5e6, 90e6, 80e6])
+    f = _piotroski_fscore(st, financial_sector=True, industry="Asset Management")
+    assert f["bank_style"] is False
+    tests = {t["id"]: t for t in f["tests"]}
+    assert tests["cfo"]["passed"] is False
+    assert tests["current_ratio_up"]["detail"] == "Data not reported"
+
+
+def test_piotroski_bank_style_needs_both_years_without_current_assets():
+    st = _bank_statements()
+    st["current_assets"] = [None, 140e6]
+    f = _piotroski_fscore(st, financial_sector=True, industry="Banks - Regional")
+    assert f["bank_style"] is False
+
+
 def test_piotroski_no_score_when_too_few_tests_evaluable():
-    sparse = {"fiscal_year_end": "2025-12-31", "net_income": [5e6, 4e6], "shares": [10e6, 10e6]}
+    sparse = {"fiscal_year_end": "2025-12-31", "net_income": [5e6, 4e6], "net_stock_issuance": [-1e6, 0.0]}
     f = _piotroski_fscore(sparse)
     assert f["max"] == 2
     assert f["score"] is None
@@ -637,6 +669,42 @@ def test_piotroski_roa_uses_beginning_of_year_assets_when_available():
     roa = next(t for t in f["tests"] if t["id"] == "roa_up")
     assert roa["detail"] == "ROA 20.0% vs 8.0%"
     assert roa["passed"] is True
+
+
+def test_piotroski_asset_based_tests_not_evaluated_without_third_balance_sheet():
+    # Income 80 -> 100 while assets double: year-end ROA would read 5.0% vs 8.0% (a
+    # fail) although beginning-of-year ROA rose to 10.0%, so without the third
+    # balance sheet these tests are skipped rather than computed on another base.
+    st = _acme_statements(total_assets=[2000e6, 1000e6])
+    f = _piotroski_fscore(st)
+    tests = {t["id"]: t for t in f["tests"]}
+    for test_id in ("roa_up", "leverage_down", "asset_turnover_up"):
+        assert tests[test_id]["passed"] is None
+        assert tests[test_id]["detail"] == "Needs three years of balance sheets"
+    assert f["max"] == 6
+
+
+def test_piotroski_issuance_with_larger_buybacks_still_fails():
+    # Sold $50M of new stock but bought back $200M: share count fell, yet equity
+    # was issued, so the test fails.
+    f = _piotroski_fscore(_acme_statements(stock_issuance=[50e6, None], net_stock_issuance=[-150e6, 0.0]))
+    test = next(t for t in f["tests"] if t["id"] == "no_dilution")
+    assert test["passed"] is False
+    assert test["detail"] == "Issued $50M of new common stock"
+
+
+def test_piotroski_no_issuance_row_with_buybacks_passes():
+    f = _piotroski_fscore(_acme_statements(stock_issuance=[None], net_stock_issuance=[-90e9]))
+    test = next(t for t in f["tests"] if t["id"] == "no_dilution")
+    assert test["passed"] is True
+    assert test["detail"] == "No issuance reported (net buybacks $90.0B)"
+
+
+def test_piotroski_issuance_not_evaluated_without_financing_data():
+    f = _piotroski_fscore(_acme_statements(stock_issuance=[None], net_stock_issuance=[None]))
+    test = next(t for t in f["tests"] if t["id"] == "no_dilution")
+    assert test["passed"] is None
+    assert f["max"] == 8
 
 
 def test_vs_adds_decimals_until_values_differ():
@@ -659,9 +727,12 @@ def test_fetch_statements_aligns_years_most_recent_first(monkeypatch):
     )
     bs = pd.DataFrame(
         {y23: [900.0, float("nan")], y24: [950.0, 40.0], y25: [1000.0, 45.0]},
-        index=["Total Assets", "Ordinary Shares Number"],
+        index=["Total Assets", "Long Term Debt"],
     )
-    cf = pd.DataFrame({y25: [130.0], y24: [90.0]}, index=["Operating Cash Flow"])
+    cf = pd.DataFrame(
+        {y25: [130.0, -20.0], y24: [90.0, float("nan")]},
+        index=["Operating Cash Flow", "Net Common Stock Issuance"],
+    )
     ticker = MagicMock()
     ticker.income_stmt, ticker.balance_sheet, ticker.cashflow = inc, bs, cf
     monkeypatch.setattr("app.main.yf.Ticker", lambda sym: ticker)
@@ -670,9 +741,34 @@ def test_fetch_statements_aligns_years_most_recent_first(monkeypatch):
     assert st["fiscal_year_end"] == "2025-12-31"
     assert st["net_income"] == [100.0, 80.0, 70.0]
     assert st["total_assets"] == [1000.0, 950.0, 900.0]
-    assert st["shares"] == [45.0, 40.0, None]
+    assert st["long_term_debt"] == [45.0, 40.0, None]
     assert st["operating_cash_flow"] == [130.0, 90.0, None]
+    assert st["net_stock_issuance"] == [-20.0, None, None]
+    assert st["stock_issuance"] == [None, None, None]
     assert st["gross_profit"] == [None, None, None]
+
+
+def test_fetch_statements_stops_at_a_missing_fiscal_year(monkeypatch):
+    import pandas as pd
+
+    y25, y24, y22 = (pd.Timestamp(f"{y}-12-31") for y in (2025, 2024, 2022))
+    # 2023 is missing: only 2025 and 2024 are consecutive, so 2022 must not be
+    # used as 2024's prior year.
+    inc = pd.DataFrame({y25: [100.0], y24: [80.0], y22: [60.0]}, index=["Net Income"])
+    bs = pd.DataFrame({y25: [1000.0], y24: [950.0], y22: [900.0]}, index=["Total Assets"])
+    ticker = MagicMock()
+    ticker.income_stmt, ticker.balance_sheet, ticker.cashflow = inc, bs, pd.DataFrame()
+    monkeypatch.setattr("app.main.yf.Ticker", lambda sym: ticker)
+
+    st = _fetch_statements("AAA")
+    assert st["net_income"] == [100.0, 80.0]
+    assert st["total_assets"] == [1000.0, 950.0]
+
+    # A gap right after the latest year leaves no consecutive pair at all.
+    inc2 = pd.DataFrame({y25: [100.0], y22: [60.0]}, index=["Net Income"])
+    bs2 = pd.DataFrame({y25: [1000.0], y22: [900.0]}, index=["Total Assets"])
+    ticker.income_stmt, ticker.balance_sheet = inc2, bs2
+    assert _fetch_statements("AAA") is None
 
 
 def test_fetch_statements_none_without_two_shared_years(monkeypatch):
@@ -690,7 +786,7 @@ def test_fetch_statements_none_without_two_shared_years(monkeypatch):
     assert _fetch_statements("AAA") is None
 
 
-def test_gather_statements_caches_hits_but_not_misses(monkeypatch):
+def test_gather_statements_caches_hits_and_misses(monkeypatch):
     import asyncio
 
     calls: list[str] = []
@@ -702,14 +798,35 @@ def test_gather_statements_caches_hits_but_not_misses(monkeypatch):
     monkeypatch.setattr("app.main._fetch_statements", _fake)
     asyncio.run(_gather_statements(["AAA", "BBB"]))
     second = asyncio.run(_gather_statements(["AAA", "BBB"]))
-    assert sorted(calls) == ["AAA", "BBB", "BBB"]
-    assert second[0]["net_income"] == [100e6, 80e6]
+    # The miss is cached too (retried after an hour), so neither symbol re-fetches.
+    assert sorted(calls) == ["AAA", "BBB"]
+    assert second[0]["net_income"] == [100e6, 80e6, 70e6]
     assert second[1] is None
 
 
+def test_gather_statements_retries_a_miss_after_its_ttl(monkeypatch):
+    import asyncio
+
+    from app import main as main_module
+
+    calls: list[str] = []
+    monkeypatch.setattr("app.main._fetch_statements", lambda sym: calls.append(sym))
+    asyncio.run(_gather_statements(["BBB"]))
+    stamp, value = main_module._TTL_CACHE["value_statements_miss:BBB"]
+    main_module._TTL_CACHE["value_statements_miss:BBB"] = (
+        stamp - main_module._STATEMENT_MISS_TTL_SECS - 1, value,
+    )
+    asyncio.run(_gather_statements(["BBB"]))
+    assert calls == ["BBB", "BBB"]
+
+
 def test_value_sectors_includes_piotroski_fscore(monkeypatch):
-    monkeypatch.setattr("app.main.yf.Ticker", lambda sym: _mock_value_ticker())
     financials = set(_MOMENTUM_UNIVERSE["Financials"])
+    monkeypatch.setattr(
+        "app.main.yf.Ticker",
+        lambda sym: _mock_value_ticker(industry="Banks - Diversified")
+        if sym in financials else _mock_value_ticker(),
+    )
     monkeypatch.setattr(
         "app.main._fetch_statements",
         lambda sym: _bank_statements() if sym in financials else _acme_statements(),

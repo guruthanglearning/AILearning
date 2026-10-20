@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 
 import { useMarketGridWs, type LivePriceUpdate } from "@/hooks/useMarketGridWs";
 import { useValueSectors } from "@/hooks/useValueSectors";
@@ -234,6 +234,7 @@ function FScoreCell({ row }: { row: ValueStockRow }) {
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const [top, setTop] = useState<number | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const tooltipId = useId();
   // Place the panel once its real height is known: beside the cell, shifted up
   // just enough to stay inside the viewport.
   useLayoutEffect(() => {
@@ -266,7 +267,9 @@ function FScoreCell({ row }: { row: ValueStockRow }) {
         onMouseLeave={hide}
         onFocus={(e) => show(e.currentTarget)}
         onBlur={hide}
+        onKeyDown={(e) => { if (e.key === "Escape") hide(); }}
         aria-label={`Piotroski F-score ${row.piotroski_score} of ${row.piotroski_max}`}
+        aria-describedby={anchor ? tooltipId : undefined}
         className="flex items-center gap-1 cursor-help"
       >
         <span className={`text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded border ${cls}`}>
@@ -277,8 +280,9 @@ function FScoreCell({ row }: { row: ValueStockRow }) {
       {anchor && (
         <div
           ref={panelRef}
+          id={tooltipId}
           role="tooltip"
-          className="pointer-events-none fixed z-50 w-80 rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-[11px] shadow-xl"
+          className="pointer-events-none fixed z-50 w-80 whitespace-normal rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-[11px] shadow-xl"
           style={{
             left: Math.min(anchor.right + 8, window.innerWidth - 328),
             top: top ?? anchor.top,

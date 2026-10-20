@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 
 import { useMarketGridWs, type LivePriceUpdate } from "@/hooks/useMarketGridWs";
 import { useValueSectors } from "@/hooks/useValueSectors";
@@ -212,6 +212,110 @@ function TrendBadge({ row }: { row: ValueStockRow }) {
   );
 }
 
+// ── Piotroski F-score (financial strength, year over year) ──────────────────
+
+// "Strong" = 7+ of 9 tests, or the same share of the tests that could be
+// evaluated (e.g. 4/4 for a bank, which skips the 5 tests that don't apply).
+const F_STRONG_RATIO = 7 / 9;
+const F_WEAK_RATIO = 2 / 9;
+
+function fScoreRatio(r: ValueStockRow): number | null {
+  return r.piotroski_score != null && r.piotroski_max ? r.piotroski_score / r.piotroski_max : null;
+}
+
+function passesFScore(r: ValueStockRow): boolean {
+  const ratio = fScoreRatio(r);
+  return ratio != null && ratio >= F_STRONG_RATIO - 1e-9;
+}
+
+function FScoreCell({ row }: { row: ValueStockRow }) {
+  // Fixed-position panel: the table sits in an overflow-x-auto container that
+  // would otherwise clip a 9-line tooltip on the top and bottom rows.
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const [top, setTop] = useState<number | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  // Place the panel once its real height is known: beside the cell, shifted up
+  // just enough to stay inside the viewport.
+  useLayoutEffect(() => {
+    if (!anchor || !panelRef.current) {
+      setTop(null);
+      return;
+    }
+    const h = panelRef.current.offsetHeight;
+    setTop(Math.max(8, Math.min(anchor.top - 120, window.innerHeight - h - 8)));
+  }, [anchor]);
+  const ratio = fScoreRatio(row);
+  if (ratio == null) {
+    const why = row.piotroski_tests.length
+      ? "Too few of the 9 tests could be evaluated from the reported statements"
+      : "Annual statements unavailable from the data feed";
+    return <span className="text-gray-600 text-xs" title={why}>--</span>;
+  }
+  const cls = ratio >= F_STRONG_RATIO - 1e-9
+    ? "bg-green-900/60 text-green-300 border-green-700/50"
+    : ratio <= F_WEAK_RATIO + 1e-9
+      ? "bg-red-900/60 text-red-300 border-red-700/50"
+      : "bg-amber-900/60 text-amber-300 border-amber-700/50";
+  const show = (el: HTMLElement) => setAnchor(el.getBoundingClientRect());
+  const hide = () => setAnchor(null);
+  return (
+    <>
+      <button
+        type="button"
+        onMouseEnter={(e) => show(e.currentTarget)}
+        onMouseLeave={hide}
+        onFocus={(e) => show(e.currentTarget)}
+        onBlur={hide}
+        aria-label={`Piotroski F-score ${row.piotroski_score} of ${row.piotroski_max}`}
+        className="flex items-center gap-1 cursor-help"
+      >
+        <span className={`text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded border ${cls}`}>
+          {row.piotroski_score}/{row.piotroski_max}
+        </span>
+        {row.piotroski_bank_style && <span className="text-[9px] text-gray-500 uppercase">bank</span>}
+      </button>
+      {anchor && (
+        <div
+          ref={panelRef}
+          role="tooltip"
+          className="pointer-events-none fixed z-50 w-80 rounded-md border border-gray-700 bg-gray-900 px-3 py-2 text-[11px] shadow-xl"
+          style={{
+            left: Math.min(anchor.right + 8, window.innerWidth - 328),
+            top: top ?? anchor.top,
+            visibility: top == null ? "hidden" : "visible",
+          }}
+        >
+          <div className="flex justify-between text-gray-100 font-semibold">
+            <span>Piotroski F-score</span>
+            <span className="font-mono">{row.piotroski_score} / {row.piotroski_max}</span>
+          </div>
+          <div className="text-gray-500 mb-1.5">
+            Fiscal year ending {row.piotroski_fiscal_year ?? "?"} vs the year before
+          </div>
+          <ul className="space-y-1">
+            {row.piotroski_tests.map((t) => (
+              <li key={t.id} className="flex gap-1.5">
+                <span className={t.passed == null ? "text-gray-600" : t.passed ? "text-green-400" : "text-red-400"}>
+                  {t.passed == null ? "–" : t.passed ? "✓" : "✗"}
+                </span>
+                <span className={t.passed == null ? "text-gray-500" : "text-gray-300"}>
+                  {t.label}
+                  {t.detail && <span className="block text-gray-500">{t.detail}</span>}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {row.piotroski_bank_style && (
+            <div className="text-gray-500 border-t border-gray-700 mt-1.5 pt-1.5">
+              Bank-style balance sheet: scored only on the {row.piotroski_max} tests that apply.
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 // ── Quality badges (ROA / liquidity / earnings-quality / Debt-Equity) ───────
 
 function RoaBadge({ roa }: { roa: number | null }) {
@@ -297,7 +401,7 @@ const NUMERIC_STOCK_COLS: (keyof ValueStockRow)[] = [
   "pe_ratio", "forward_pe", "price_to_book", "price_to_sales", "ev_to_ebitda", "peg_ratio",
   "fcf_yield_pct", "dividend_yield_pct",
   "return_on_assets_pct", "current_ratio", "fcf_to_net_income", "debt_to_equity_pct",
-  "graham_number", "margin_of_safety_pct",
+  "graham_number", "margin_of_safety_pct", "piotroski_score",
 ];
 
 // "Lower is cheaper" ratios — ascending sort reads better-to-worse by default.
@@ -310,6 +414,12 @@ const TREND_ORDER = { down: 0, mixed: 1, up: 2 } as const;
 function getValue(row: ValueStockRow, key: keyof ValueStockRow): string | number {
   if (key === "trend_signal") {
     return row.trend_signal == null ? -Infinity : TREND_ORDER[row.trend_signal];
+  }
+  // Sort by share of evaluated tests passed, so a bank's 4/4 and an 8/9 compare
+  // fairly; on a tie, the score backed by more tests (9/9 over 4/4) ranks first.
+  if (key === "piotroski_score") {
+    const ratio = fScoreRatio(row);
+    return ratio == null ? -Infinity : ratio * 100 + (row.piotroski_max ?? 0) / 100;
   }
   const v = row[key];
   if (v == null) return NUMERIC_STOCK_COLS.includes(key) ? -Infinity : "";
@@ -340,6 +450,8 @@ const BASE_COLS: ColDef[] = [
     title: "Relative composite 0–100 = cheapness (indigo, out of 85: EV/EBITDA, book, FCF, sales, PEG and dividend yields ranked against SECTOR peers only) + quality (green, out of 15: ROA, liquidity, earnings quality, Debt-Equity). * = Debt/Equity penalty applied. Hover a score for its breakdown. Not an intrinsic valuation — see Graham # and Margin for that." },
   { key: "trend_signal", label: "Trend",   w: 76,
     title: "Value + momentum guard. Up = 6-month return positive AND price above its 200-day average; Down = both negative (a cheap stock still falling — possible value trap); Mixed = signals disagree." },
+  { key: "piotroski_score", label: "F-Score", numeric: true, w: 84,
+    title: "Piotroski F-score: 9 pass/fail financial-strength tests comparing the latest fiscal year with the one before (profit, cash flow, rising ROA, cash-backed earnings, falling debt, better liquidity, no new shares, better margin and asset turnover). 7–9 = strong, 0–2 = weak (a likely value trap). Banks are scored only on the tests that apply (e.g. 4/4). Hover for each test. Not part of the Score." },
   { key: "company_name", label: "Company", w: 140, title: "Company name" },
 ];
 
@@ -463,6 +575,10 @@ function StockRow({ row, rank, showSector, onAnalyze, liveInfo }: {
       <td className={TD}>
         <TrendBadge row={row} />
       </td>
+      {/* F-score */}
+      <td className={TD}>
+        <FScoreCell row={row} />
+      </td>
       {/* Company */}
       <td className={TD} title={row.company_name ?? ""}>
         <div className="text-gray-300 truncate" style={{ maxWidth: 140 }}>{row.company_name ?? "--"}</div>
@@ -576,6 +692,7 @@ function InfoPanel({ isAllSectors }: { isAllSectors: boolean }) {
               <div><span className="text-indigo-300 font-mono">#</span> — Rank by value score (1 = cheapest relative to quality, within sector)</div>
               <div><span className="text-indigo-300 font-mono">Score</span> — Relative composite 0–100: <span className="text-indigo-300">cheapness</span> (indigo bar, out of 85) + <span className="text-emerald-300">quality</span> (green bar, out of 15); <span className="text-red-400">*</span> = Debt/Equity penalty. Hover for the breakdown</div>
               <div><span className="text-indigo-300 font-mono">Trend</span> — value + momentum guard: <span className="text-green-400">▲ Up</span> = 6-month return positive and price above its 200-day average; <span className="text-red-400">▼ Down</span> = both negative (cheap but still falling — a possible value trap); ◆ Mixed = signals disagree</div>
+              <div><span className="text-indigo-300 font-mono">F-Score</span> — Piotroski&apos;s 9 pass/fail financial-strength tests, latest fiscal year vs the year before: profitable, positive cash flow, rising ROA, cash flow above profit, debt not rising, better liquidity, no new shares, better gross margin and asset turnover. <span className="text-green-400">7–9 strong</span>, <span className="text-red-400">0–2 weak (likely value trap)</span>. Tests with missing data aren&apos;t counted; banks are scored only on the tests that apply (e.g. 4/4). Hover for each test</div>
               <div><span className="text-gray-500 italic">n/m</span> — not meaningful: a negative ratio (losses, negative equity) or an extreme one (e.g. P/E above 100, PEG above 5). Hover for why; these sort last</div>
               <div><span className="text-indigo-300 font-mono">P/E</span> &amp; <span className="text-indigo-300 font-mono">Fwd P/E</span> — price vs. current/expected earnings; lower is cheaper, but ignores debt</div>
               <div><span className="text-indigo-300 font-mono">P/B</span> / <span className="text-indigo-300 font-mono">P/S</span> — price vs. book value / revenue; lower is cheaper</div>
@@ -605,7 +722,10 @@ function InfoPanel({ isAllSectors }: { isAllSectors: boolean }) {
             Graham Number margin of safety is shown separately and is not part of this score. Neither is the
             Trend signal (6-month return + price vs. 200-day average) — it&apos;s a separate falling-knife check;
             the <span className="text-gray-400 not-italic">Value + Momentum</span> filter keeps only stocks scoring{" "}
-            {VALUE_MOMENTUM_MIN_SCORE}+ whose trend isn&apos;t Down. Ratios shown as n/m (negative, or extreme
+            {VALUE_MOMENTUM_MIN_SCORE}+ whose trend isn&apos;t Down. The Piotroski F-score (from the last two
+            annual reports) isn&apos;t part of the score either; the{" "}
+            <span className="text-gray-400 not-italic">F-Score ≥ 7</span> filter keeps stocks passing at least
+            7 of 9 tests, or the same share of the tests that apply. Ratios shown as n/m (negative, or extreme
             such as P/E above 100 or PEG above 5) are excluded from sorting. This still isn&apos;t
             a full DCF or a substitute for reading the business — treat it as a screen for candidates, not a verdict.
             Not investment advice.
@@ -656,6 +776,7 @@ export function ValueGrid({ onAnalyze }: ValueGridProps) {
   const [filterSector, setFilterSector] = useState<string>("");
   const [filterIndustry, setFilterIndustry] = useState<string>("");
   const [valueMomentumOnly, setValueMomentumOnly] = useState(false);
+  const [fStrongOnly, setFStrongOnly] = useState(false);
 
   const sectors = data?.sectors ?? [];
   const isAllSectors = activeSector === ALL_SECTORS_KEY;
@@ -669,12 +790,13 @@ export function ValueGrid({ onAnalyze }: ValueGridProps) {
   const { livePrices, connected: wsConnected } = useMarketGridWs(allSymbols);
 
   // All-sectors: top 5 per sector+industry combination, then sorted by score globally.
-  // Value + Momentum filters BEFORE the top-5 cut so a qualifying stock ranked
-  // 6th in its industry is not discarded.
+  // Value + Momentum and F-score filters run BEFORE the top-5 cut so a qualifying
+  // stock ranked 6th in its industry is not discarded.
   const allSectorsByIndustry = (() => {
     const groups = new Map<string, ValueStockRow[]>();
     for (const stock of allStocksFlat) {
       if (valueMomentumOnly && !passesValueMomentum(stock)) continue;
+      if (fStrongOnly && !passesFScore(stock)) continue;
       const key = `${stock.sector ?? ""}||${stock.industry ?? ""}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(stock);
@@ -705,6 +827,7 @@ export function ValueGrid({ onAnalyze }: ValueGridProps) {
     if (filterSector && r.sector !== filterSector) return false;
     if (filterIndustry && r.industry !== filterIndustry) return false;
     if (valueMomentumOnly && !passesValueMomentum(r)) return false;
+    if (fStrongOnly && !passesFScore(r)) return false;
     return true;
   });
 
@@ -770,7 +893,9 @@ export function ValueGrid({ onAnalyze }: ValueGridProps) {
             universe), then an ROA / liquidity / earnings-quality / Debt-Equity check adds or subtracts points
             so a cheap score isn&apos;t a value trap — plus a separate Graham Number margin-of-safety estimate.
             Hover a score to see its cheapness / quality split. The Trend column flags cheap stocks that are
-            still falling; turn on <span className="text-gray-400">Value + Momentum</span> to hide them.
+            still falling; turn on <span className="text-gray-400">Value + Momentum</span> to hide them. The
+            F-Score column checks whether the business is getting financially stronger or weaker year over
+            year; turn on <span className="text-gray-400">F-Score ≥ 7</span> to keep only the strong ones.
             Ratios shown as <span className="italic">n/m</span> are negative or extreme and not comparable.
             See <span className="text-gray-400">&ldquo;What am I looking at?&rdquo;</span> below for the full
             breakdown. Not investment advice.
@@ -922,11 +1047,26 @@ export function ValueGrid({ onAnalyze }: ValueGridProps) {
               (score ≥ {VALUE_MOMENTUM_MIN_SCORE}, trend not ▼)
             </span>
           </button>
-          {(filterSector || filterIndustry || valueMomentumOnly) && (
+          <button
+            type="button"
+            onClick={() => setFStrongOnly((v) => !v)}
+            aria-pressed={fStrongOnly}
+            title="Show only financially strong stocks: Piotroski F-score of 7+ out of 9, or the same share of the tests that apply (4/4 for banks)"
+            className={[
+              "text-xs px-2.5 py-1.5 rounded border transition-colors",
+              fStrongOnly
+                ? "bg-indigo-600 border-indigo-500 text-white"
+                : "bg-gray-800 border-gray-700 text-gray-300 hover:border-gray-500",
+            ].join(" ")}
+          >
+            {fStrongOnly ? "✓ " : ""}F-Score ≥ 7
+            <span className="ml-1.5 opacity-70">(financially strong)</span>
+          </button>
+          {(filterSector || filterIndustry || valueMomentumOnly || fStrongOnly) && (
             <>
               <button
                 type="button"
-                onClick={() => { setFilterSector(""); setFilterIndustry(""); setValueMomentumOnly(false); }}
+                onClick={() => { setFilterSector(""); setFilterIndustry(""); setValueMomentumOnly(false); setFStrongOnly(false); }}
                 className="text-xs text-gray-500 hover:text-gray-200 px-2 py-1 rounded border border-gray-700 hover:border-gray-500 transition-colors"
               >
                 ✕ Clear
@@ -953,7 +1093,7 @@ export function ValueGrid({ onAnalyze }: ValueGridProps) {
           </div>
         )}
         <div className="overflow-x-auto">
-          <table className="text-left min-w-[1730px] w-max">
+          <table className="text-left min-w-[1814px] w-max">
             <thead className="bg-gray-900 border-b border-gray-700">
               <tr>
                 {columns.map((col) => (
@@ -969,7 +1109,7 @@ export function ValueGrid({ onAnalyze }: ValueGridProps) {
               ) : sortedPairs.length === 0 && !error ? (
                 <tr>
                   <td colSpan={columns.length} className="px-3 py-10 text-center text-xs text-gray-600">
-                    {valueMomentumOnly || filterSector || filterIndustry ? "No stocks match the current filters." : "No data for this sector."}
+                    {valueMomentumOnly || fStrongOnly || filterSector || filterIndustry ? "No stocks match the current filters." : "No data for this sector."}
                   </td>
                 </tr>
               ) : (

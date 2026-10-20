@@ -441,6 +441,20 @@ export interface ValueStockRow {
   // Absolute valuation anchor — not part of value_score
   graham_number: number | null;
   margin_of_safety_pct: number | null;
+  // Piotroski F-score — financial-strength check, not part of value_score.
+  // piotroski_max = how many of the 9 tests could be evaluated.
+  piotroski_score: number | null;
+  piotroski_max: number | null;
+  piotroski_bank_style: boolean;
+  piotroski_fiscal_year: string | null;
+  piotroski_tests: PiotroskiTest[];
+}
+
+export interface PiotroskiTest {
+  id: string;
+  label: string;
+  passed: boolean | null; // null = not evaluated (data missing or not meaningful)
+  detail: string | null;
 }
 
 export interface SectorValue {

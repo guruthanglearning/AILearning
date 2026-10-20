@@ -13,12 +13,16 @@ from app.main import (
     _MOMENTUM_UNIVERSE,
     _SECTOR_ETFS,
     _compute_value_score_pro,
+    _fetch_statements,
     _fetch_stock_raw,
+    _gather_statements,
     _graham_number_and_margin,
     _percentile_ranks,
     _percentile_ranks_by_group,
+    _piotroski_fscore,
     _value_score_breakdown,
     _value_trend_signal,
+    _vs,
     app,
 )
 
@@ -526,3 +530,216 @@ def test_value_sectors_fcf_yield_none_without_positive_market_cap(monkeypatch, m
     assert resp.status_code == 200
     row = next(s for s in resp.json()["sectors"] if s["sector"] == "Technology")["stocks"][0]
     assert row["fcf_yield_pct"] is None
+
+
+# ---------------------------------------------------------------------------
+# Piotroski F-score
+# ---------------------------------------------------------------------------
+
+
+def _acme_statements(**overrides) -> dict:
+    """Two fiscal years, most recent first: profitable, cash-backed, de-levering,
+    more liquid, better margins and turnover, but issued new shares -> 8/9."""
+    st = {
+        "fiscal_year_end": "2025-12-31",
+        "net_income": [100e6, 80e6],
+        "revenue": [900e6, 800e6],
+        "gross_profit": [360e6, 304e6],
+        "total_assets": [1000e6, 1000e6],
+        "long_term_debt": [250e6, 300e6],
+        "current_assets": [160e6, 140e6],
+        "current_liabilities": [100e6, 100e6],
+        "shares": [52e6, 50e6],
+        "operating_cash_flow": [130e6, 90e6],
+    }
+    st.update(overrides)
+    return st
+
+
+def _bank_statements() -> dict:
+    # Unclassified balance sheet (no current assets/liabilities), no gross profit,
+    # negative operating cash flow from lending, as in real JPM-style data.
+    return _acme_statements(
+        gross_profit=[None, None],
+        current_assets=[None, None],
+        current_liabilities=[None, None],
+        operating_cash_flow=[-150e9, -40e9],
+        shares=[48e6, 50e6],
+    )
+
+
+def test_piotroski_acme_example_scores_8_of_9():
+    f = _piotroski_fscore(_acme_statements())
+    assert f["score"] == 8
+    assert f["max"] == 9
+    assert f["bank_style"] is False
+    assert f["fiscal_year"] == "2025-12-31"
+    assert [t["id"] for t in f["tests"] if t["passed"] is False] == ["no_dilution"]
+    details = {t["id"]: t["detail"] for t in f["tests"]}
+    assert details["roa_up"] == "ROA 10.0% vs 8.0%"
+    assert details["no_dilution"] == "52M vs 50M shares"
+    assert details["gross_margin_up"] == "40.0% vs 38.0%"
+
+
+def test_piotroski_none_without_statements():
+    assert _piotroski_fscore(None) is None
+    assert _piotroski_fscore({}) is None
+
+
+def test_piotroski_missing_data_is_not_evaluated_rather_than_failed():
+    f = _piotroski_fscore(_acme_statements(current_assets=[None, None]))
+    current = next(t for t in f["tests"] if t["id"] == "current_ratio_up")
+    assert current["passed"] is None
+    assert current["detail"] == "Data not reported"
+    assert f["max"] == 8
+    assert f["score"] == 7
+
+
+def test_piotroski_bank_style_skips_tests_that_dont_apply():
+    f = _piotroski_fscore(_bank_statements(), financial_sector=True)
+    assert f["bank_style"] is True
+    skipped = {t["id"] for t in f["tests"] if t["passed"] is None}
+    assert skipped == {"cfo", "accruals", "leverage_down", "current_ratio_up", "gross_margin_up"}
+    assert all(
+        t["detail"].startswith("Not meaningful for banks")
+        for t in f["tests"] if t["passed"] is None
+    )
+    assert f["max"] == 4
+    assert f["score"] == 4
+
+
+def test_piotroski_unclassified_balance_sheet_outside_financials_is_not_bank_style():
+    # Same statements, but not a Financials-sector company: the cash-flow tests
+    # still apply, and the negative cash flow fails them.
+    f = _piotroski_fscore(_bank_statements(), financial_sector=False)
+    assert f["bank_style"] is False
+    cfo = next(t for t in f["tests"] if t["id"] == "cfo")
+    assert cfo["passed"] is False
+
+
+def test_piotroski_financial_with_classified_balance_sheet_gets_all_nine_tests():
+    # e.g. an asset manager: Financials sector, but a normal balance sheet.
+    f = _piotroski_fscore(_acme_statements(), financial_sector=True)
+    assert f["bank_style"] is False
+    assert f["max"] == 9
+
+
+def test_piotroski_no_score_when_too_few_tests_evaluable():
+    sparse = {"fiscal_year_end": "2025-12-31", "net_income": [5e6, 4e6], "shares": [10e6, 10e6]}
+    f = _piotroski_fscore(sparse)
+    assert f["max"] == 2
+    assert f["score"] is None
+
+
+def test_piotroski_roa_uses_beginning_of_year_assets_when_available():
+    # Three balance sheets: ROA for year t = net income t / assets at the end of year t-1.
+    f = _piotroski_fscore(_acme_statements(total_assets=[1000e6, 500e6, 1000e6]))
+    roa = next(t for t in f["tests"] if t["id"] == "roa_up")
+    assert roa["detail"] == "ROA 20.0% vs 8.0%"
+    assert roa["passed"] is True
+
+
+def test_vs_adds_decimals_until_values_differ():
+    def pct(v, d):
+        return f"{v * 100:.{d}f}%"
+
+    assert _vs(0.0154, 0.0149, pct) == "1.54% vs 1.49%"
+    assert _vs(0.10, 0.08, pct) == "10.0% vs 8.0%"
+    assert _vs(0.5, 0.5, pct) == "50.0000% vs 50.0000%"
+
+
+def test_fetch_statements_aligns_years_most_recent_first(monkeypatch):
+    import pandas as pd
+
+    y25, y24, y23, y22 = (pd.Timestamp(f"{y}-12-31") for y in (2025, 2024, 2023, 2022))
+    # Income statement has an extra older year; balance sheet columns come oldest-first.
+    inc = pd.DataFrame(
+        {y25: [100.0, 900.0], y24: [80.0, 800.0], y23: [70.0, 700.0], y22: [60.0, 600.0]},
+        index=["Net Income", "Total Revenue"],
+    )
+    bs = pd.DataFrame(
+        {y23: [900.0, float("nan")], y24: [950.0, 40.0], y25: [1000.0, 45.0]},
+        index=["Total Assets", "Ordinary Shares Number"],
+    )
+    cf = pd.DataFrame({y25: [130.0], y24: [90.0]}, index=["Operating Cash Flow"])
+    ticker = MagicMock()
+    ticker.income_stmt, ticker.balance_sheet, ticker.cashflow = inc, bs, cf
+    monkeypatch.setattr("app.main.yf.Ticker", lambda sym: ticker)
+
+    st = _fetch_statements("AAA")
+    assert st["fiscal_year_end"] == "2025-12-31"
+    assert st["net_income"] == [100.0, 80.0, 70.0]
+    assert st["total_assets"] == [1000.0, 950.0, 900.0]
+    assert st["shares"] == [45.0, 40.0, None]
+    assert st["operating_cash_flow"] == [130.0, 90.0, None]
+    assert st["gross_profit"] == [None, None, None]
+
+
+def test_fetch_statements_none_without_two_shared_years(monkeypatch):
+    import pandas as pd
+
+    ticker = MagicMock()
+    ticker.income_stmt = pd.DataFrame({pd.Timestamp("2025-12-31"): [1.0]}, index=["Net Income"])
+    ticker.balance_sheet = pd.DataFrame({pd.Timestamp("2025-12-31"): [1.0]}, index=["Total Assets"])
+    ticker.cashflow = pd.DataFrame()
+    monkeypatch.setattr("app.main.yf.Ticker", lambda sym: ticker)
+    assert _fetch_statements("AAA") is None
+
+    # A ticker whose statements are not DataFrames at all, like the .info-only mocks.
+    monkeypatch.setattr("app.main.yf.Ticker", lambda sym: MagicMock())
+    assert _fetch_statements("AAA") is None
+
+
+def test_gather_statements_caches_hits_but_not_misses(monkeypatch):
+    import asyncio
+
+    calls: list[str] = []
+
+    def _fake(sym):
+        calls.append(sym)
+        return _acme_statements() if sym == "AAA" else None
+
+    monkeypatch.setattr("app.main._fetch_statements", _fake)
+    asyncio.run(_gather_statements(["AAA", "BBB"]))
+    second = asyncio.run(_gather_statements(["AAA", "BBB"]))
+    assert sorted(calls) == ["AAA", "BBB", "BBB"]
+    assert second[0]["net_income"] == [100e6, 80e6]
+    assert second[1] is None
+
+
+def test_value_sectors_includes_piotroski_fscore(monkeypatch):
+    monkeypatch.setattr("app.main.yf.Ticker", lambda sym: _mock_value_ticker())
+    financials = set(_MOMENTUM_UNIVERSE["Financials"])
+    monkeypatch.setattr(
+        "app.main._fetch_statements",
+        lambda sym: _bank_statements() if sym in financials else _acme_statements(),
+    )
+
+    with TestClient(app) as client:
+        resp = client.get("/v1/value/sectors?limit=5")
+
+    assert resp.status_code == 200
+    sectors = {s["sector"]: s for s in resp.json()["sectors"]}
+    tech = sectors["Technology"]["stocks"][0]
+    assert tech["piotroski_score"] == 8
+    assert tech["piotroski_max"] == 9
+    assert tech["piotroski_bank_style"] is False
+    assert tech["piotroski_fiscal_year"] == "2025-12-31"
+    assert len(tech["piotroski_tests"]) == 9
+    bank = sectors["Financials"]["stocks"][0]
+    assert bank["piotroski_bank_style"] is True
+    assert bank["piotroski_max"] == 4
+
+
+def test_value_sectors_piotroski_none_without_statements(monkeypatch):
+    # The .info-only ticker mock has no statement DataFrames.
+    monkeypatch.setattr("app.main.yf.Ticker", lambda sym: _mock_value_ticker())
+
+    with TestClient(app) as client:
+        resp = client.get("/v1/value/sectors?limit=5")
+
+    row = next(s for s in resp.json()["sectors"] if s["sector"] == "Technology")["stocks"][0]
+    assert row["piotroski_score"] is None
+    assert row["piotroski_tests"] == []
+    # The value score itself is unaffected.
+    assert row["value_score"] is not None

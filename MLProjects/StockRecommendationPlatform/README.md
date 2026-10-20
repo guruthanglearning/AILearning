@@ -378,6 +378,7 @@ The Analysis page also opens a **WebSocket** connection (`/v1/ws/quote/{symbol}`
 | `/` | **Analysis** — symbol input, SSE-streamed agent grid, verdict card, technicals, trade guidance, price forecast, options panels, decision aids, history |
 | `/market-grid` | **Market Grid** — live auto-refreshing table of 40 symbols with 14 columns; prices sourced from Polygon batch snapshot, supplementary fields from yfinance |
 | `/momentum` | **Momentum** — cross-sectional momentum scores per GICS sector; sortable by 1M/3M/6M return, RSI, vs SPY; configurable top-N per sector |
+| `/value` | **Value** — sector-relative value scores for the same 110-stock universe, with a trend check, Graham Number margin of safety and Piotroski F-score; Value + Momentum and F-Score ≥ 7 filters |
 | `/compare` | **Compare** — side-by-side analysis comparison for two symbols |
 | `/correlation` | **Correlation** — price correlation matrix across a configurable symbol set |
 | `/history` | **History** — full analysis run history across all symbols with filtering and verdict timeline |
@@ -399,6 +400,7 @@ src/
 │   ├── page.tsx                  ← Analysis home (SSE streaming)
 │   ├── market-grid/page.tsx      ← Live market grid
 │   ├── momentum/page.tsx         ← Sector momentum scoring
+│   ├── value/page.tsx            ← Sector value screener
 │   ├── compare/page.tsx          ← Side-by-side symbol comparison
 │   ├── correlation/page.tsx      ← Correlation matrix
 │   ├── history/page.tsx          ← Full analysis run history
@@ -651,6 +653,31 @@ Shows cross-sectional momentum scores for top stocks grouped by GICS sector.
 
 ---
 
+### 3b. Value Page (`/value`)
+
+Screens the same 110-stock universe for cheap stocks, comparing each stock with its own sector peers.
+
+#### How to use it
+
+- **All Sectors** shows the top 5 per sector+industry; click a sector tab for its top 10.
+- **Score** (0–100) = cheapness (out of 85: EV/EBITDA, book, FCF, sales, PEG and dividend yields ranked against sector peers) + quality (out of 15: ROA, current ratio, cash-backed earnings, Debt/Equity). Hover it for the split; `*` marks a Debt/Equity penalty.
+- **Trend** flags cheap stocks that are still falling (6-month return and price vs its 200-day average).
+- **F-Score** is the Piotroski F-score: 9 pass/fail tests comparing the latest fiscal year with the year before. Hover it to see each test with its numbers. Tests with missing data aren't counted; banks and insurers are scored only on the tests that apply (e.g. `4/4`).
+- **Value + Momentum** keeps stocks scoring 70+ whose trend isn't down; **F-Score ≥ 7** keeps stocks passing at least 7 of 9 tests (or the same share of the tests that apply). Both can be combined.
+- `n/m` marks a ratio that is negative or extreme and not comparable.
+
+#### How to read the F-score
+
+| F-score | Meaning |
+|---------|---------|
+| 7–9 | Financially strong and improving; a cheap price is more likely a real bargain |
+| 3–6 | Mixed |
+| 0–2 | Weak and deteriorating; a likely value trap |
+
+The F-score, Trend and Graham Number are shown alongside the Score, not blended into it.
+
+---
+
 ### 4. Watchlists (`/watchlists`)
 
 Organise symbols into named lists for faster tracking.
@@ -843,6 +870,7 @@ A degraded agent does **not** stop the analysis — the Supervisor proceeds with
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/v1/momentum/sectors?top_n=5` | Top-N momentum stocks per GICS sector (cross-sectional scoring) |
+| `GET` | `/v1/value/sectors?limit=10` | Top-N value stocks per GICS sector: sector-relative value score with its breakdown, trend signal, Graham Number and Piotroski F-score |
 
 ### WebSocket
 

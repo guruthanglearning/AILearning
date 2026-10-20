@@ -1597,6 +1597,232 @@ def _graham_number_and_margin(
     return round(graham_number, 2), (round(margin_pct, 1) if margin_pct is not None else None)
 
 
+# Annual statements only change once a year, so they're cached per symbol for a
+# day rather than re-fetched on every 5-minute value-screener refresh.
+_STATEMENT_TTL_SECS = 24 * 3600
+
+
+def _stmt_values(df: Any, dates: list, *names: str) -> list[float | None]:
+    """Values of the first row in `names` present in `df`, one per fiscal-year
+    column in `dates` (most recent first); None where a year is missing or NaN."""
+    if not isinstance(df, pd.DataFrame) or df.empty:
+        return [None] * len(dates)
+    for name in names:
+        if name in df.index:
+            out: list[float | None] = []
+            for d in dates:
+                v = df.at[name, d] if d in df.columns else None
+                try:
+                    out.append(None if v is None or pd.isna(v) else float(v))
+                except (TypeError, ValueError):
+                    out.append(None)
+            return out
+    return [None] * len(dates)
+
+
+def _fetch_statements(sym: str) -> dict | None:
+    """Last three fiscal years of the annual statement lines the Piotroski F-score
+    needs, aligned on the fiscal-year dates the income statement and balance sheet
+    share (yfinance can return a different number of years per statement)."""
+    try:
+        t = yf.Ticker(sym)
+        inc, bs, cf = t.income_stmt, t.balance_sheet, t.cashflow
+    except Exception as exc:
+        log.warning("value_statements_fetch_failed", symbol=sym, error=str(exc))
+        return None
+    if not isinstance(inc, pd.DataFrame) or not isinstance(bs, pd.DataFrame) or inc.empty or bs.empty:
+        return None
+    dates = sorted(set(inc.columns) & set(bs.columns), reverse=True)[:3]
+    if len(dates) < 2:
+        return None
+    return {
+        "fiscal_year_end": pd.Timestamp(dates[0]).date().isoformat(),
+        "net_income": _stmt_values(inc, dates, "Net Income", "Net Income Common Stockholders"),
+        "revenue": _stmt_values(inc, dates, "Total Revenue", "Operating Revenue"),
+        "gross_profit": _stmt_values(inc, dates, "Gross Profit"),
+        "total_assets": _stmt_values(bs, dates, "Total Assets"),
+        "long_term_debt": _stmt_values(
+            bs, dates, "Long Term Debt", "Long Term Debt And Capital Lease Obligation"
+        ),
+        "current_assets": _stmt_values(bs, dates, "Current Assets"),
+        "current_liabilities": _stmt_values(bs, dates, "Current Liabilities"),
+        # Shares outstanding (net of treasury stock), so buybacks count as a decrease.
+        "shares": _stmt_values(bs, dates, "Ordinary Shares Number"),
+        "operating_cash_flow": _stmt_values(cf, dates, "Operating Cash Flow"),
+    }
+
+
+async def _gather_statements(symbols: list[str], max_concurrency: int = 5) -> list[dict | None]:
+    """Bounded-concurrency, day-cached annual-statement fetch for the F-score."""
+    sem = asyncio.Semaphore(max_concurrency)
+    loop = asyncio.get_event_loop()
+
+    async def _one(sym: str) -> dict | None:
+        key = f"value_statements:{sym}"
+        cached = _cache_get(key, ttl=_STATEMENT_TTL_SECS)
+        if cached is not None:
+            return cached
+        async with sem:
+            st = await loop.run_in_executor(None, _fetch_statements, sym)
+        if st is not None:
+            _cache_set(key, st)
+        return st
+
+    return list(await asyncio.gather(*(_one(s) for s in symbols)))
+
+
+def _fmt_money(v: float) -> str:
+    a = abs(v)
+    if a >= 1e9:
+        return f"${v / 1e9:.1f}B"
+    if a >= 1e6:
+        return f"${v / 1e6:.0f}M"
+    return f"${v:,.0f}"
+
+
+def _vs(a: float, b: float, render: Any, digits: int = 1) -> str:
+    """"this year vs last year", adding decimals (up to 3 more) until the two
+    values differ, so a pass/fail never sits next to two identical numbers."""
+    x, y = render(a, digits), render(b, digits)
+    for d in range(digits + 1, digits + 4):
+        if x != y:
+            break
+        x, y = render(a, d), render(b, d)
+    return f"{x} vs {y}"
+
+
+_PIOTROSKI_MIN_TESTS = 4  # fewer evaluable tests than this -> no score shown
+_BANK_NOTE = "Not meaningful for banks/insurers"
+
+
+def _piotroski_fscore(st: dict | None, financial_sector: bool = False) -> dict | None:
+    """Joseph Piotroski's (2000) F-score: nine pass/fail tests on the last two
+    fiscal years' statements, one point each — profitability (net income > 0,
+    operating cash flow > 0, ROA up, cash flow > net income), leverage/liquidity/
+    funding (long-term debt ratio not up, current ratio up, no new shares) and
+    efficiency (gross margin up, asset turnover up). 8-9 = strong and improving,
+    0-2 = weak and deteriorating (a likely value trap).
+
+    ROA and asset turnover use beginning-of-year assets, as in the paper, when
+    three balance sheets are available; otherwise year-end assets for both years
+    so the comparison stays like-for-like.
+
+    A test whose inputs are missing isn't evaluated (passed=None) and doesn't count
+    toward the max, so a gap in Yahoo's data never reads as a fail. Banks, insurers
+    and brokers (a Financials-sector company with no current assets, i.e. an
+    unclassified balance sheet) also skip the cash-flow and leverage tests:
+    deposits are debt and lending runs through operating cash flow, so those tests
+    would mark a healthy, growing bank as failing.
+
+    Returns {"score", "max", "bank_style", "fiscal_year", "tests"} — score is None
+    when fewer than _PIOTROSKI_MIN_TESTS tests could be evaluated — or None when
+    there are no statements at all."""
+    if not st:
+        return None
+
+    def val(key: str, i: int) -> float | None:
+        vals = st.get(key) or []
+        return vals[i] if i < len(vals) else None
+
+    def ratio(a: float | None, b: float | None) -> float | None:
+        return a / b if a is not None and b is not None and b > 0 else None
+
+    ni0 = val("net_income", 0)
+    ta0, ta1, ta2 = val("total_assets", 0), val("total_assets", 1), val("total_assets", 2)
+    base0, base1 = (ta1, ta2) if ta1 and ta2 else (ta0, ta1)
+    cfo0 = val("operating_cash_flow", 0)
+    rev0, rev1 = val("revenue", 0), val("revenue", 1)
+    roa0, roa1 = ratio(ni0, base0), ratio(val("net_income", 1), base1)
+    lev0, lev1 = ratio(val("long_term_debt", 0), ta0), ratio(val("long_term_debt", 1), ta1)
+    cr0 = ratio(val("current_assets", 0), val("current_liabilities", 0))
+    cr1 = ratio(val("current_assets", 1), val("current_liabilities", 1))
+    gm0, gm1 = ratio(val("gross_profit", 0), rev0), ratio(val("gross_profit", 1), rev1)
+    turn0, turn1 = ratio(rev0, base0), ratio(rev1, base1)
+    sh0, sh1 = val("shares", 0), val("shares", 1)
+    bank_style = financial_sector and val("current_assets", 0) is None
+    missing = "Data not reported"
+
+    def pct(v: float, d: int) -> str:
+        return f"{v * 100:.{d}f}%"
+
+    def num(v: float, d: int) -> str:
+        return f"{v:.{d}f}"
+
+    def times(v: float, d: int) -> str:
+        return f"{v:.{d}f}x"
+
+    def millions(v: float, d: int) -> str:
+        return f"{v / 1e6:,.{d}f}M"
+
+    tests: list[dict] = []
+
+    def add(test_id: str, label: str, passed: bool | None, detail: str) -> None:
+        tests.append({"id": test_id, "label": label, "passed": passed, "detail": detail})
+
+    add("net_income", "Profitable (net income > 0)",
+        None if ni0 is None else ni0 > 0,
+        missing if ni0 is None else f"Net income {_fmt_money(ni0)}")
+
+    def add_roa_test() -> None:
+        add("roa_up", "Return on assets improved",
+            None if roa0 is None or roa1 is None else roa0 > roa1,
+            missing if roa0 is None or roa1 is None else f"ROA {_vs(roa0, roa1, pct)}")
+
+    if bank_style:
+        note = f"{_BANK_NOTE}: lending flows swing operating cash flow"
+        add("cfo", "Operating cash flow > 0", None, note)
+        add_roa_test()
+        add("accruals", "Cash flow exceeds net income", None, note)
+        add("leverage_down", "Long-term debt ratio did not rise", None,
+            f"{_BANK_NOTE}: deposits and funding count as debt")
+    else:
+        add("cfo", "Operating cash flow > 0",
+            None if cfo0 is None else cfo0 > 0,
+            missing if cfo0 is None else f"Operating cash flow {_fmt_money(cfo0)}")
+        add_roa_test()
+        add("accruals", "Cash flow exceeds net income",
+            None if cfo0 is None or ni0 is None else cfo0 > ni0,
+            missing if cfo0 is None or ni0 is None
+            else f"{_fmt_money(cfo0)} cash flow vs {_fmt_money(ni0)} net income")
+        add("leverage_down", "Long-term debt ratio did not rise",
+            None if lev0 is None or lev1 is None else lev0 <= lev1,
+            missing if lev0 is None or lev1 is None
+            else f"Long-term debt (share of assets) {_vs(lev0, lev1, pct)}")
+
+    if cr0 is None or cr1 is None:
+        cr_detail = f"{_BANK_NOTE}: no current assets on a bank balance sheet" if bank_style else missing
+    else:
+        cr_detail = _vs(cr0, cr1, num, 2)
+    add("current_ratio_up", "Current ratio improved",
+        None if cr0 is None or cr1 is None else cr0 > cr1, cr_detail)
+
+    add("no_dilution", "No new shares issued",
+        None if sh0 is None or sh1 is None else sh0 <= sh1,
+        missing if sh0 is None or sh1 is None else f"{_vs(sh0, sh1, millions, 0)} shares")
+
+    if gm0 is None or gm1 is None:
+        gm_detail = f"{_BANK_NOTE}: no cost of goods sold" if bank_style else missing
+    else:
+        gm_detail = _vs(gm0, gm1, pct)
+    add("gross_margin_up", "Gross margin improved",
+        None if gm0 is None or gm1 is None else gm0 > gm1, gm_detail)
+
+    add("asset_turnover_up", "Asset turnover improved",
+        None if turn0 is None or turn1 is None else turn0 > turn1,
+        missing if turn0 is None or turn1 is None else _vs(turn0, turn1, times, 2))
+
+    evaluated = [t for t in tests if t["passed"] is not None]
+    max_tests = len(evaluated)
+    score = sum(1 for t in evaluated if t["passed"]) if max_tests >= _PIOTROSKI_MIN_TESTS else None
+    return {
+        "score": score,
+        "max": max_tests,
+        "bank_style": bank_style,
+        "fiscal_year": st.get("fiscal_year_end"),
+        "tests": tests,
+    }
+
+
 @app.get("/v1/value/sectors", response_model=ValueSectorsResponse)
 @limiter.limit("30/minute")
 async def get_value_sectors(
@@ -1618,6 +1844,8 @@ async def get_value_sectors(
         Debt/Equity, so a high score isn't a value trap or an accounting mirage
       - Graham Number margin-of-safety: a separate, absolute (non-relative) intrinsic-
         value estimate shown alongside the score, not blended into it
+      - Piotroski F-score (0-9): a year-over-year financial-strength check from the
+        annual statements, also shown alongside the score, not blended into it
     Not investment advice.
     """
     cache_key = "value_sectors_all"
@@ -1647,6 +1875,9 @@ async def get_value_sectors(
                 # batch of symbols (yfinance session/crumb contention) ──
                 results = await _gather_stock_raw(all_syms + etf_syms)
                 close_df = await asyncio.get_event_loop().run_in_executor(None, _fetch_universe_history)
+                # Annual statements for the Piotroski F-score: day-cached per symbol,
+                # fetched last for the same contention reason.
+                statements = await _gather_statements(all_syms)
                 return_6m_map: dict[str, float | None] = {}
                 if close_df is not None:
                     for sym in all_syms:
@@ -1716,6 +1947,9 @@ async def get_value_sectors(
                     graham_number, margin_of_safety_pct = _graham_number_and_margin(
                         d.get("trailing_eps"), d.get("book_value_per_share"), d.get("close_price"),
                     )
+                    fscore = _piotroski_fscore(
+                        statements[i], financial_sector=sector_labels[i] == "Financials",
+                    ) or {}
                     fetched.append(ValueStockRow(
                         symbol=d["symbol"],
                         company_name=d.get("company_name"),
@@ -1747,6 +1981,11 @@ async def get_value_sectors(
                         debt_to_equity_pct=d.get("debt_to_equity_pct"),
                         graham_number=graham_number,
                         margin_of_safety_pct=margin_of_safety_pct,
+                        piotroski_score=fscore.get("score"),
+                        piotroski_max=fscore.get("max"),
+                        piotroski_bank_style=fscore.get("bank_style", False),
+                        piotroski_fiscal_year=fscore.get("fiscal_year"),
+                        piotroski_tests=fscore.get("tests", []),
                     ))
 
                 # ── Phase 4: group by sector, sort by score, cache ─────────────

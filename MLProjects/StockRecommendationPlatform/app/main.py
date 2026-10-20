@@ -1605,21 +1605,27 @@ _STATEMENT_MISS_TTL_SECS = 3600
 
 
 def _stmt_values(df: Any, dates: list, *names: str) -> list[float | None]:
-    """Values of the first row in `names` present in `df`, one per fiscal-year
-    column in `dates` (most recent first); None where a year is missing or NaN."""
+    """One value per fiscal-year column in `dates` (most recent first): for each
+    year, the first of the alias rows in `names` with a real number that year, so
+    an alias that's blank in one year falls back to the next alias for that year
+    only. None where no alias has a value."""
     if not isinstance(df, pd.DataFrame) or df.empty:
         return [None] * len(dates)
-    for name in names:
-        if name in df.index:
-            out: list[float | None] = []
-            for d in dates:
-                v = df.at[name, d] if d in df.columns else None
+    rows = [n for n in names if n in df.index]
+    out: list[float | None] = []
+    for d in dates:
+        value: float | None = None
+        if d in df.columns:
+            for name in rows:
+                v = df.at[name, d]
                 try:
-                    out.append(None if v is None or pd.isna(v) else float(v))
+                    if v is not None and not pd.isna(v):
+                        value = float(v)
+                        break
                 except (TypeError, ValueError):
-                    out.append(None)
-            return out
-    return [None] * len(dates)
+                    continue
+        out.append(value)
+    return out
 
 
 def _consecutive_fiscal_years(dates: list, limit: int = 3) -> list:

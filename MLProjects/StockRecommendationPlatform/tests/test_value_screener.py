@@ -20,6 +20,7 @@ from app.main import (
     _percentile_ranks,
     _percentile_ranks_by_group,
     _piotroski_fscore,
+    _stmt_values,
     _value_score_breakdown,
     _value_trend_signal,
     _vs,
@@ -746,6 +747,40 @@ def test_fetch_statements_aligns_years_most_recent_first(monkeypatch):
     assert st["net_stock_issuance"] == [-20.0, None, None]
     assert st["stock_issuance"] == [None, None, None]
     assert st["gross_profit"] == [None, None, None]
+
+
+def test_stmt_values_falls_back_to_the_next_alias_per_year():
+    import pandas as pd
+
+    y25, y24 = pd.Timestamp("2025-12-31"), pd.Timestamp("2024-12-31")
+    # "Common Stock Issuance" exists but is blank for the latest year, while the
+    # alias row has the real figure: that year must use the alias.
+    cf = pd.DataFrame(
+        {y25: [float("nan"), 50.0, -150.0], y24: [10.0, 10.0, -5.0]},
+        index=["Common Stock Issuance", "Issuance Of Capital Stock", "Net Common Stock Issuance"],
+    )
+    assert _stmt_values(cf, [y25, y24], "Common Stock Issuance", "Issuance Of Capital Stock") == [50.0, 10.0]
+    assert _stmt_values(cf, [y25, y24], "Missing Row") == [None, None]
+
+
+def test_fetch_statements_partial_issuance_alias_still_fails_the_test(monkeypatch):
+    import pandas as pd
+
+    y25, y24, y23 = (pd.Timestamp(f"{y}-12-31") for y in (2025, 2024, 2023))
+    inc = pd.DataFrame({y25: [100.0], y24: [80.0], y23: [70.0]}, index=["Net Income"])
+    bs = pd.DataFrame({y25: [1000.0], y24: [1000.0], y23: [1000.0]}, index=["Total Assets"])
+    cf = pd.DataFrame(
+        {y25: [float("nan"), 50.0, -150.0], y24: [10.0, 10.0, -5.0], y23: [0.0, 0.0, 0.0]},
+        index=["Common Stock Issuance", "Issuance Of Capital Stock", "Net Common Stock Issuance"],
+    )
+    ticker = MagicMock()
+    ticker.income_stmt, ticker.balance_sheet, ticker.cashflow = inc, bs, cf
+    monkeypatch.setattr("app.main.yf.Ticker", lambda sym: ticker)
+
+    f = _piotroski_fscore(_fetch_statements("AAA"))
+    test = next(t for t in f["tests"] if t["id"] == "no_dilution")
+    assert test["passed"] is False
+    assert test["detail"] == "Issued $50 of new common stock"
 
 
 def test_fetch_statements_stops_at_a_missing_fiscal_year(monkeypatch):

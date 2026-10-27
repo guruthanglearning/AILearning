@@ -33,7 +33,12 @@ var apiKey = (string.IsNullOrWhiteSpace(configApiKey) ? null : configApiKey)
     ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY")
     ?? throw new InvalidOperationException("ANTHROPIC_API_KEY is required.");
 
-builder.Services.AddSingleton(new AnthropicClient(apiKey));
+// The SDK's default HttpClient times out after 100s, too short for long agent responses
+var timeoutSeconds = builder.Configuration.GetValue("AgentConfiguration:TimeoutSeconds", 300);
+builder.Services.AddSingleton(new AnthropicClient(apiKey)
+{
+    HttpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(timeoutSeconds) }
+});
 
 // ── Register all agents as IAgent ─────────────────────────────────────────────
 builder.Services.AddTransient<IAgent, PMAgent>();

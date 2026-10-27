@@ -123,7 +123,7 @@ app.MapPost("/api/run", async (OrchestratorRequest request, IOrchestratorService
         return Results.BadRequest(new { error = "Requirement cannot be empty." });
 
     var result = await orchestrator.RunAsync(request, ct);
-    return result.Success ? Results.Ok(result) : Results.Problem(result.ErrorMessage);
+    return result.Success ? Results.Ok(result) : PipelineFailure.ToProblem(result);
 })
 .WithName("RunPipeline")
 .WithSummary("Submit a software requirement — returns all artifacts when pipeline completes")
@@ -131,6 +131,9 @@ app.MapPost("/api/run", async (OrchestratorRequest request, IOrchestratorService
 .Produces<OrchestratorResponse>(200)
 .ProducesProblem(400)
 .ProducesProblem(500)
+.ProducesProblem(502)
+.ProducesProblem(503)
+.ProducesProblem(504)
 .RequireRateLimiting("pipeline");
 
 // Submit a requirement — real-time streaming via Server-Sent Events
@@ -166,7 +169,7 @@ app.MapPost("/api/run/partial", async (OrchestratorRequest request, IOrchestrato
         return Results.BadRequest(new { error = "Requirement cannot be empty." });
 
     var result = await orchestrator.RunAsync(request, ct);
-    return result.Success ? Results.Ok(result) : Results.Problem(result.ErrorMessage);
+    return result.Success ? Results.Ok(result) : PipelineFailure.ToProblem(result);
 })
 .WithName("RunPartialPipeline")
 .WithSummary("Run pipeline with specific agents skipped")

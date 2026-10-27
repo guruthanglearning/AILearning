@@ -4,6 +4,9 @@ using Microsoft.Extensions.Logging;
 using MultiAgentDevTeam.Shared.Interfaces;
 using MultiAgentDevTeam.Shared.Models;
 using System.Diagnostics;
+using System.Net;
+using System.Security.Authentication;
+using System.Text.RegularExpressions;
 
 namespace MultiAgentDevTeam.Shared.Agents;
 
@@ -56,8 +59,44 @@ public abstract class BaseAgent : IAgent
         {
             stopwatch.Stop();
             Logger.LogError(ex, "[{Agent}] Failed after {Duration}ms", Name, stopwatch.ElapsedMilliseconds);
-            return AgentResponse.Fail(ex.Message, Name);
+            return AgentResponse.Fail(ex.Message, Name, ClassifyFailure(ex, cancellationToken));
         }
+    }
+
+    /// <summary>
+    /// Maps an exception from the Anthropic SDK / HttpClient to a failure category.
+    /// The SDK throws AuthenticationException for a rejected key and HttpRequestException
+    /// for other non-success responses.
+    /// </summary>
+    public static AgentFailureKind ClassifyFailure(Exception ex, CancellationToken cancellationToken = default) =>
+        ex switch
+        {
+            AuthenticationException => AgentFailureKind.Authentication,
+            HttpRequestException httpEx => GetStatusCode(httpEx) switch
+            {
+                HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => AgentFailureKind.Authentication,
+                HttpStatusCode.TooManyRequests => AgentFailureKind.RateLimited,
+                _ => AgentFailureKind.Upstream
+            },
+            // HttpClient.Timeout surfaces as TaskCanceledException without the caller having cancelled
+            OperationCanceledException when !cancellationToken.IsCancellationRequested => AgentFailureKind.Timeout,
+            TimeoutException => AgentFailureKind.Timeout,
+            _ => AgentFailureKind.Internal
+        };
+
+    // Anthropic.SDK 3.x leaves HttpRequestException.StatusCode null and only reports the
+    // status in the message ("... with HTTP status code: TooManyRequests. Content: ...")
+    private static readonly Regex StatusInMessage = new(@"HTTP status code: (\w+)", RegexOptions.Compiled);
+
+    private static HttpStatusCode? GetStatusCode(HttpRequestException ex)
+    {
+        if (ex.StatusCode is not null)
+            return ex.StatusCode;
+
+        var match = StatusInMessage.Match(ex.Message);
+        return match.Success && Enum.TryParse<HttpStatusCode>(match.Groups[1].Value, out var status)
+            ? status
+            : null;
     }
 
     private string BuildUserContent(AgentRequest request)

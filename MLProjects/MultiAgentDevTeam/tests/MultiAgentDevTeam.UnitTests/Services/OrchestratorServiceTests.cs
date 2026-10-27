@@ -355,4 +355,71 @@ public class OrchestratorServiceTests
         // Assert — persist failure must not affect pipeline result
         result.Success.Should().BeTrue();
     }
+
+    private List<IAgent> BuildAgentsWithFailingPm(AgentFailureKind kind)
+    {
+        var failingPmMock = new Mock<IAgent>();
+        failingPmMock.Setup(a => a.Name).Returns("PM");
+        failingPmMock.Setup(a => a.OutputType).Returns(ArtifactType.Requirements);
+        failingPmMock.Setup(a => a.RunAsync(It.IsAny<AgentRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AgentResponse.Fail("invalid x-api-key", "PM", kind));
+
+        var agents = BuildAllAgents();
+        agents[0] = failingPmMock.Object;
+        return agents;
+    }
+
+    [Theory]
+    [InlineData(AgentFailureKind.Authentication)]
+    [InlineData(AgentFailureKind.RateLimited)]
+    [InlineData(AgentFailureKind.Timeout)]
+    [InlineData(AgentFailureKind.Internal)]
+    public async Task RunAsync_AgentFails_PropagatesFailureKind(AgentFailureKind kind)
+    {
+        var orchestrator = BuildOrchestrator(BuildAgentsWithFailingPm(kind));
+
+        var result = await orchestrator.RunAsync(new OrchestratorRequest { Requirement = "Build a TODO API" });
+
+        result.Success.Should().BeFalse();
+        result.FailureKind.Should().Be(kind);
+        result.ErrorMessage.Should().Be("Agent 'PM' failed: invalid x-api-key");
+    }
+
+    [Fact]
+    public async Task RunAsync_AgentFails_LogsReadableFailureReason()
+    {
+        var orchestrator = BuildOrchestrator(BuildAgentsWithFailingPm(AgentFailureKind.Authentication));
+
+        var result = await orchestrator.RunAsync(new OrchestratorRequest { Requirement = "Build a TODO API" });
+
+        result.AgentLog.Last().Should().StartWith("🛑 Pipeline failed:")
+            .And.Contain("rejected the configured API key");
+    }
+
+    [Fact]
+    public async Task StreamAsync_AgentFails_EmitsFinalFailureMessage()
+    {
+        var orchestrator = BuildOrchestrator(BuildAgentsWithFailingPm(AgentFailureKind.Authentication));
+
+        var messages = new List<string>();
+        await foreach (var message in orchestrator.StreamAsync(new OrchestratorRequest { Requirement = "Build a TODO API" }))
+            messages.Add(message);
+
+        messages.Should().Contain(m => m.StartsWith("❌ PM failed"));
+        messages.Last().Should().Contain("rejected the configured API key");
+    }
+
+    [Fact]
+    public async Task RunAsync_AgentFails_PersistsFailureMessageInSession()
+    {
+        SessionRecord? saved = null;
+        _sessions.Setup(s => s.SaveAsync(It.IsAny<SessionRecord>(), It.IsAny<CancellationToken>()))
+            .Callback<SessionRecord, CancellationToken>((r, _) => saved = r)
+            .Returns(Task.CompletedTask);
+        var orchestrator = BuildOrchestrator(BuildAgentsWithFailingPm(AgentFailureKind.Authentication));
+
+        await orchestrator.RunAsync(new OrchestratorRequest { Requirement = "Build a TODO API" });
+
+        saved!.AgentLog.Should().Contain(m => m.StartsWith("🛑 Pipeline failed:"));
+    }
 }

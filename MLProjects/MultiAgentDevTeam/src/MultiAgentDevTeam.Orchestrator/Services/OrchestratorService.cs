@@ -240,11 +240,19 @@ public class OrchestratorService : IOrchestratorService
         {
             stopwatch.Stop();
             _logger.LogError(ex, "Orchestrator failed for session {SessionId}", store.SessionId);
+            var kind = ex is AgentFailedException agentEx ? agentEx.Kind : AgentFailureKind.Internal;
+
+            // SSE has already sent 200 by now, so the reason has to travel as a final message
+            var failedMsg = $"🛑 Pipeline failed: {PipelineFailure.Describe(kind)}";
+            log.Add(failedMsg);
+            progress.TryWrite(failedMsg);
+
             response = new OrchestratorResponse
             {
                 Success = false,
                 SessionId = store.SessionId,
                 ErrorMessage = ex.Message,
+                FailureKind = kind,
                 AgentLog = log,
                 TotalDuration = stopwatch.Elapsed
             };
@@ -282,7 +290,7 @@ public class OrchestratorService : IOrchestratorService
             var failMsg = $"❌ {agent.Name} failed: {agentResponse.ErrorMessage}";
             log.Add(failMsg);
             await progress.WriteAsync(failMsg, ct);
-            throw new InvalidOperationException($"Agent '{agent.Name}' failed: {agentResponse.ErrorMessage}");
+            throw new AgentFailedException(agent.Name, agentResponse.ErrorMessage ?? "unknown error", agentResponse.FailureKind);
         }
 
         store.Set(new Artifact

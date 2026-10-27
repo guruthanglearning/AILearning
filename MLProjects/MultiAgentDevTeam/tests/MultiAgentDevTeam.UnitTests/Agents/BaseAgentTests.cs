@@ -1,6 +1,7 @@
 using Anthropic.SDK;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using MultiAgentDevTeam.Shared.Agents;
 using MultiAgentDevTeam.Shared.Interfaces;
 using MultiAgentDevTeam.Shared.Models;
 using MultiAgentDevTeam.UnitTests.Helpers;
@@ -254,4 +255,73 @@ public class BaseAgentTests
         response.Success.Should().BeFalse();
         response.ErrorMessage.Should().NotBeNullOrEmpty();
     }
+
+    // ── Failure classification ────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(System.Net.HttpStatusCode.Unauthorized, AgentFailureKind.Authentication)]
+    [InlineData(System.Net.HttpStatusCode.TooManyRequests, AgentFailureKind.RateLimited)]
+    [InlineData(System.Net.HttpStatusCode.InternalServerError, AgentFailureKind.Upstream)]
+    [InlineData(System.Net.HttpStatusCode.ServiceUnavailable, AgentFailureKind.Upstream)]
+    public async Task RunAsync_WhenApiReturnsErrorStatus_ClassifiesFailure(System.Net.HttpStatusCode status, AgentFailureKind expected)
+    {
+        // Arrange
+        var handler = new MockHttpMessageHandler("error", status);
+        var client = new AnthropicClient("test-key") { HttpClient = new HttpClient(handler) };
+        var agent = (IAgent)Activator.CreateInstance(
+            typeof(MultiAgentDevTeam.PMAgent.PMAgent),
+            client,
+            NullLogger<MultiAgentDevTeam.PMAgent.PMAgent>.Instance)!;
+
+        // Act
+        var response = await agent.RunAsync(new AgentRequest { Task = "Do something" });
+
+        // Assert
+        response.Success.Should().BeFalse();
+        response.FailureKind.Should().Be(expected);
+    }
+
+    [Fact]
+    public void ClassifyFailure_AuthenticationException_IsAuthentication() =>
+        BaseAgent.ClassifyFailure(new System.Security.Authentication.AuthenticationException("invalid x-api-key"))
+            .Should().Be(AgentFailureKind.Authentication);
+
+    [Fact]
+    public void ClassifyFailure_Http403_IsAuthentication() =>
+        BaseAgent.ClassifyFailure(new HttpRequestException("forbidden", null, System.Net.HttpStatusCode.Forbidden))
+            .Should().Be(AgentFailureKind.Authentication);
+
+    [Theory]
+    [InlineData("Error at https://api.anthropic.com/v1/messages with HTTP status code: TooManyRequests. Content: {}", AgentFailureKind.RateLimited)]
+    [InlineData("Error at https://api.anthropic.com/v1/messages with HTTP status code: Forbidden. Content: {}", AgentFailureKind.Authentication)]
+    [InlineData("Error at https://api.anthropic.com/v1/messages with HTTP status code: BadGateway. Content: {}", AgentFailureKind.Upstream)]
+    [InlineData("with HTTP status code: NotARealStatus. Content: {}", AgentFailureKind.Upstream)]
+    [InlineData("connection reset", AgentFailureKind.Upstream)]
+    public void ClassifyFailure_SdkHttpError_ReadsStatusFromMessage(string message, AgentFailureKind expected) =>
+        // Anthropic.SDK leaves StatusCode null and only reports the status in the message
+        BaseAgent.ClassifyFailure(new HttpRequestException(message)).Should().Be(expected);
+
+    [Fact]
+    public void ClassifyFailure_HttpClientTimeout_IsTimeout() =>
+        // HttpClient.Timeout elapsing throws TaskCanceledException while the caller's token is not cancelled
+        BaseAgent.ClassifyFailure(new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout"))
+            .Should().Be(AgentFailureKind.Timeout);
+
+    [Fact]
+    public void ClassifyFailure_TimeoutException_IsTimeout() =>
+        BaseAgent.ClassifyFailure(new TimeoutException()).Should().Be(AgentFailureKind.Timeout);
+
+    [Fact]
+    public void ClassifyFailure_CallerCancelled_IsNotTimeout()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        BaseAgent.ClassifyFailure(new OperationCanceledException(cts.Token), cts.Token)
+            .Should().Be(AgentFailureKind.Internal);
+    }
+
+    [Fact]
+    public void ClassifyFailure_UnknownException_IsInternal() =>
+        BaseAgent.ClassifyFailure(new InvalidOperationException("bug")).Should().Be(AgentFailureKind.Internal);
 }

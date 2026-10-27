@@ -150,7 +150,8 @@ public class OrchestratorService : IOrchestratorService
                         }, ct);
 
                     var reviewContent = store.GetContent(ArtifactType.ReviewNotes);
-                    if (reviewContent.StartsWith("APPROVED", StringComparison.OrdinalIgnoreCase))
+                    // The reviewer often prefixes its verdict with blank lines
+                    if (reviewContent.TrimStart().StartsWith("APPROVED", StringComparison.OrdinalIgnoreCase))
                     {
                         var msg = $"✅ Code approved on attempt {attempt}";
                         log.Add(msg);
@@ -304,6 +305,13 @@ public class OrchestratorService : IOrchestratorService
         var doneMsg = $"✅ {agent.Name} completed in {agentResponse.Duration.TotalSeconds:F1}s";
         log.Add(doneMsg);
         await progress.WriteAsync(doneMsg, ct);
+
+        if (agentResponse.Truncated)
+        {
+            var truncatedMsg = $"⚠️ {agent.Name} output hit the token limit and is incomplete";
+            log.Add(truncatedMsg);
+            await progress.WriteAsync(truncatedMsg, ct);
+        }
     }
 
     private async Task PersistSessionAsync(ArtifactStore store, OrchestratorResponse response)

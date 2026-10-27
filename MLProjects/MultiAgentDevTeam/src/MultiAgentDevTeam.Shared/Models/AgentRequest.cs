@@ -33,8 +33,11 @@ public class AgentResponse
     public AgentFailureKind FailureKind { get; init; }
     public TimeSpan Duration { get; init; }
 
-    public static AgentResponse Ok(string content, string agentName, TimeSpan duration) =>
-        new() { Success = true, Content = content, AgentName = agentName, Duration = duration };
+    /// <summary>True when the model stopped because it hit the token limit, so Content is incomplete.</summary>
+    public bool Truncated { get; init; }
+
+    public static AgentResponse Ok(string content, string agentName, TimeSpan duration, bool truncated = false) =>
+        new() { Success = true, Content = content, AgentName = agentName, Duration = duration, Truncated = truncated };
 
     public static AgentResponse Fail(string error, string agentName, AgentFailureKind kind = AgentFailureKind.Internal) =>
         new() { Success = false, ErrorMessage = error, AgentName = agentName, FailureKind = kind };

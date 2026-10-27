@@ -181,8 +181,8 @@ All configuration is via environment variables or `appsettings.json`.
 | `AgentConfiguration__DefaultModel` | No | Claude model for agents (default: `claude-opus-4-6`) |
 | `AgentConfiguration__FastModel` | No | Fast model for light tasks (default: `claude-haiku-4-5-20251001`) |
 | `AgentConfiguration__MaxReviewLoops` | No | Max Developer→Reviewer cycles (default: `3`) |
-| `AgentConfiguration__MaxTokens` | No | Max tokens per agent response (default: `8192`) |
-| `AgentConfiguration__TimeoutSeconds` | No | Agent timeout in seconds (default: `300`) |
+| `AgentConfiguration__MaxTokens` | No | Max tokens per agent response (default: `16384`). Note: not yet wired through — agents currently use the `BaseAgent` value |
+| `AgentConfiguration__TimeoutSeconds` | No | Timeout for each Anthropic API call, in seconds (default: `600`) |
 
 ---
 

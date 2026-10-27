@@ -119,4 +119,12 @@ public class AgentRequestResponseTests
 
         json.Should().Contain("\"FailureKind\":\"RateLimited\"");
     }
+
+    [Fact]
+    public void AgentResponse_Ok_DefaultsToNotTruncated() =>
+        AgentResponse.Ok("content", "TestAgent", TimeSpan.FromSeconds(1)).Truncated.Should().BeFalse();
+
+    [Fact]
+    public void AgentResponse_Ok_WithTruncated_SetsFlag() =>
+        AgentResponse.Ok("content", "TestAgent", TimeSpan.FromSeconds(1), truncated: true).Truncated.Should().BeTrue();
 }

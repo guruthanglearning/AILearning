@@ -324,4 +324,24 @@ public class BaseAgentTests
     [Fact]
     public void ClassifyFailure_UnknownException_IsInternal() =>
         BaseAgent.ClassifyFailure(new InvalidOperationException("bug")).Should().Be(AgentFailureKind.Internal);
+
+    // ── Truncation detection ──────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("max_tokens", true)]
+    [InlineData("end_turn", false)]
+    public async Task RunAsync_ReportsWhetherOutputWasTruncated(string stopReason, bool expected)
+    {
+        var handler = MockHttpMessageHandler.WithStopReason("partial output", stopReason);
+        var client = new AnthropicClient("test-key") { HttpClient = new HttpClient(handler) };
+        var agent = (IAgent)Activator.CreateInstance(
+            typeof(MultiAgentDevTeam.DeveloperAgent.DeveloperAgent),
+            client,
+            NullLogger<MultiAgentDevTeam.DeveloperAgent.DeveloperAgent>.Instance)!;
+
+        var response = await agent.RunAsync(new AgentRequest { Task = "Write a lot of code" });
+
+        response.Success.Should().BeTrue();
+        response.Truncated.Should().Be(expected);
+    }
 }

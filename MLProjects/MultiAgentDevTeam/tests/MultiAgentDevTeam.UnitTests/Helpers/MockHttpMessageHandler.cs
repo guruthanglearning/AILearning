@@ -28,6 +28,9 @@ public class MockHttpMessageHandler : HttpMessageHandler
         _responseJson = rawJson;
     }
 
+    public static MockHttpMessageHandler WithStopReason(string text, string stopReason) =>
+        new(HttpStatusCode.OK, BuildAnthropicResponse(text).Replace("\"end_turn\"", $"\"{stopReason}\""));
+
     public static MockHttpMessageHandler WithNoTextContent() =>
         new(HttpStatusCode.OK, BuildNoTextContentResponse());
 

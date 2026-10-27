@@ -25,7 +25,8 @@ public abstract class BaseAgent : IAgent
     public abstract ArtifactType OutputType { get; }
     protected abstract string SystemPrompt { get; }
     protected virtual string Model => "claude-opus-4-6";
-    protected virtual int MaxTokens => 8192;
+    // 8192 truncated the Developer/QA/DevOps/Docs output mid-file
+    protected virtual int MaxTokens => 16384;
 
     public async Task<AgentResponse> RunAsync(AgentRequest request, CancellationToken cancellationToken = default)
     {
@@ -52,8 +53,12 @@ public abstract class BaseAgent : IAgent
             var content = response.Content.OfType<TextContent>().FirstOrDefault()?.Text ?? string.Empty;
             stopwatch.Stop();
 
+            var truncated = response.StopReason == "max_tokens";
+            if (truncated)
+                Logger.LogWarning("[{Agent}] Output hit the {MaxTokens}-token limit and is incomplete", Name, MaxTokens);
+
             Logger.LogInformation("[{Agent}] Completed in {Duration}ms", Name, stopwatch.ElapsedMilliseconds);
-            return AgentResponse.Ok(content, Name, stopwatch.Elapsed);
+            return AgentResponse.Ok(content, Name, stopwatch.Elapsed, truncated);
         }
         catch (Exception ex)
         {

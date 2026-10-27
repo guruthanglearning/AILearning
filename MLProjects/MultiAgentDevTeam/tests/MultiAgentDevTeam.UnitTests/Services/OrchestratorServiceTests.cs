@@ -422,4 +422,46 @@ public class OrchestratorServiceTests
 
         saved!.AgentLog.Should().Contain(m => m.StartsWith("🛑 Pipeline failed:"));
     }
+
+    [Theory]
+    [InlineData("\n\nAPPROVED\n\n## Summary")]
+    [InlineData("   APPROVED")]
+    public async Task RunAsync_ApprovalWithLeadingWhitespace_DoesNotRetry(string reviewContent)
+    {
+        var developerMock = CreateAgentMock(ArtifactType.SourceCode, "Developer");
+        var agents = BuildAllAgents(reviewContent);
+        agents[2] = developerMock.Object;
+        var orchestrator = BuildOrchestrator(agents);
+
+        var result = await orchestrator.RunAsync(new OrchestratorRequest { Requirement = "Build a TODO API" });
+
+        developerMock.Verify(a => a.RunAsync(It.IsAny<AgentRequest>(), It.IsAny<CancellationToken>()), Times.Once);
+        result.AgentLog.Should().Contain("✅ Code approved on attempt 1");
+    }
+
+    [Fact]
+    public async Task RunAsync_TruncatedAgentOutput_LogsWarning()
+    {
+        var developerMock = new Mock<IAgent>();
+        developerMock.Setup(a => a.Name).Returns("Developer");
+        developerMock.Setup(a => a.OutputType).Returns(ArtifactType.SourceCode);
+        developerMock.Setup(a => a.RunAsync(It.IsAny<AgentRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(AgentResponse.Ok("partial code", "Developer", TimeSpan.FromSeconds(1), truncated: true));
+        var agents = BuildAllAgents();
+        agents[2] = developerMock.Object;
+        var orchestrator = BuildOrchestrator(agents);
+
+        var result = await orchestrator.RunAsync(new OrchestratorRequest { Requirement = "Build a TODO API" });
+
+        result.Success.Should().BeTrue();
+        result.AgentLog.Should().Contain("⚠️ Developer output hit the token limit and is incomplete");
+    }
+
+    [Fact]
+    public async Task RunAsync_UntruncatedOutput_LogsNoTokenLimitWarning()
+    {
+        var result = await BuildOrchestrator(BuildAllAgents()).RunAsync(new OrchestratorRequest { Requirement = "Build a TODO API" });
+
+        result.AgentLog.Should().NotContain(m => m.Contains("token limit"));
+    }
 }

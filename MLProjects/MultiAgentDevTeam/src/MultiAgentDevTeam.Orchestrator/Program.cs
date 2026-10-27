@@ -27,7 +27,9 @@ builder.Services.Configure<AgentConfiguration>(
     builder.Configuration.GetSection(AgentConfiguration.SectionName));
 
 // ── Anthropic Client ───────────────────────────────────────────────────────────
-var apiKey = builder.Configuration["AgentConfiguration:AnthropicApiKey"]
+// appsettings.json ships an empty AnthropicApiKey, so treat blank as unset and fall back to the env var
+var configApiKey = builder.Configuration["AgentConfiguration:AnthropicApiKey"];
+var apiKey = (string.IsNullOrWhiteSpace(configApiKey) ? null : configApiKey)
     ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY")
     ?? throw new InvalidOperationException("ANTHROPIC_API_KEY is required.");
 

@@ -15,6 +15,10 @@ server {
         proxy_buffering off;
         proxy_cache off;
         chunked_transfer_encoding on;
+        # A single agent can run for minutes without emitting an SSE event;
+        # nginx's 60s default would drop the stream mid-pipeline
+        proxy_read_timeout 1800s;
+        proxy_send_timeout 1800s;
     }
 
     # SPA fallback — all non-asset routes serve index.html

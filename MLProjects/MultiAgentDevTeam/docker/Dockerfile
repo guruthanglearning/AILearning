@@ -32,7 +32,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 
 # Run as non-root user for security (Debian-based image uses groupadd/useradd)
-RUN groupadd --system appgroup && useradd --system --gid appgroup --no-create-home appuser
+RUN groupadd --system appgroup && useradd --system --gid appgroup --no-create-home appuser \
+    && mkdir -p /app/sessions && chown appuser:appgroup /app/sessions
 USER appuser
 
 COPY --from=build /app/publish .

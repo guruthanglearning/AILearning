@@ -5,6 +5,7 @@
 .env.local
 
 # Build outputs
+**/node_modules/
 **/bin/
 **/obj/
 

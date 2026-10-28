@@ -215,14 +215,44 @@ Each agent runs on the cheapest model that does its job well. Opus is kept for t
 
 ## How to Run
 
+### API key setup
+
+The Anthropic API key is never committed. Each person uses their own key, and runs are billed to their own Anthropic account. The deploy scripts find it automatically, in this order:
+
+| # | Source | Typical use |
+|---|---|---|
+| 1 | `-ApiKey` parameter | One-off override (the script warns that it ends up in your shell history) |
+| 2 | `$env:ANTHROPIC_API_KEY` | CI pipelines, or a key set for the current shell |
+| 3 | `src/MultiAgentDevTeam.Orchestrator/appsettings.secrets.json` | Your local key, set up once (gitignored) |
+| 4 | A masked prompt | Interactive terminals when nothing above is set; offers to save the key to the file in step 3 |
+
+The key is never printed: the script only reports where it came from, e.g. `API key: from appsettings.secrets.json (sk-ant-... (108 chars))`.
+
+**First time after cloning**, pick one:
+```powershell
+# Option A: a local secrets file (recommended; the scripts then find it every time)
+Copy-Item src/MultiAgentDevTeam.Orchestrator/appsettings.secrets.example.json `
+          src/MultiAgentDevTeam.Orchestrator/appsettings.secrets.json
+# ...then replace REPLACE_WITH_YOUR_ANTHROPIC_API_KEY in the copy with your key
+
+# Option B: just run a deploy script and paste the key when prompted
+.\scripts\deploy-docker.ps1
+```
+
+**GitHub Actions / CI:** store the key as a repository secret and expose it as `ANTHROPIC_API_KEY` in the job's `env`. The scripts never prompt in a non-interactive run; they fail with a message listing the options above.
+
+**Kubernetes:** `deploy-k8s.ps1` creates the `agent-secrets` Secret from your key (piped to `kubectl` on stdin, so the key never appears on a command line) and restarts the pods so a changed key takes effect. If no key is found but the Secret already exists in the cluster, it is reused.
+
+**React UI packages:** `node_modules` isn't committed. `deploy-local.ps1` runs `npm ci` on first use, and the UI Docker image installs its own packages.
+
 ### Option 1 — Local (dotnet run)
 
 ```powershell
 # From the project root
-.\scripts\deploy-local.ps1 -ApiKey "sk-ant-xxxx"
+.\scripts\deploy-local.ps1
 
 # Skip tests for faster startup
-.\scripts\deploy-local.ps1 -ApiKey "sk-ant-xxxx" -SkipTests
+.\scripts\deploy-local.ps1 -SkipTests
 ```
 
 Access:
@@ -235,15 +265,14 @@ Access:
 
 ```powershell
 # Build images and start containers
-.\scripts\deploy-docker.ps1 -ApiKey "sk-ant-xxxx"
+.\scripts\deploy-docker.ps1
 
 # Stop and remove containers
 .\scripts\deploy-docker.ps1 -Down
 ```
 
-Or using docker compose directly:
+Or using docker compose directly: copy `docker/.env.example` to `docker/.env` (gitignored), add your key, then:
 ```powershell
-$env:ANTHROPIC_API_KEY = "sk-ant-xxxx"
 docker compose -f docker/docker-compose.yml up -d
 ```
 
@@ -258,10 +287,10 @@ Access:
 
 ```powershell
 # Full deploy (builds image + deploys to K8s)
-.\scripts\deploy-k8s.ps1 -ApiKey "sk-ant-xxxx"
+.\scripts\deploy-k8s.ps1
 
 # Skip image rebuild (use existing image)
-.\scripts\deploy-k8s.ps1 -ApiKey "sk-ant-xxxx" -SkipBuild
+.\scripts\deploy-k8s.ps1 -SkipBuild
 
 # Tear everything down
 .\scripts\deploy-k8s.ps1 -Down
@@ -297,7 +326,7 @@ The application must be running (via Docker or locally) before attaching a debug
 
 1. Start the application in Docker:
    ```powershell
-   .\scripts\deploy-docker.ps1 -ApiKey "sk-ant-xxxx"
+   .\scripts\deploy-docker.ps1
    ```
 
 2. In Visual Studio, open the solution (`MultiAgentDevTeam.slnx`).
@@ -326,7 +355,7 @@ Visual Studio automatically installs `vsdbg` (the .NET debugger) into the contai
 
 1. Start the application in Docker:
    ```powershell
-   .\scripts\deploy-docker.ps1 -ApiKey "sk-ant-xxxx"
+   .\scripts\deploy-docker.ps1
    ```
 
 2. Open the **Docker** panel in the VS Code sidebar (whale icon).
@@ -376,9 +405,8 @@ services:
       - "4024:4024"   # vsdbg remote debugger port
 ```
 
-Start with the override:
+Start with the override (the key comes from `docker/.env` or `$env:ANTHROPIC_API_KEY`):
 ```powershell
-$env:ANTHROPIC_API_KEY = "sk-ant-xxxx"
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.debug.yml up -d
 ```
 
@@ -516,7 +544,7 @@ MultiAgentDevTeam/
 │
 ├── k8s/
 │   ├── namespace.yaml
-│   ├── secret.yaml                        # K8s secret template
+│   ├── secret.example.yaml                # Example only; deploy-k8s.ps1 creates the real Secret
 │   ├── configmap.yaml
 │   ├── deployment.yaml                    # Orchestrator deployment
 │   └── service.yaml                       # NodePort (localhost:30080)
@@ -529,7 +557,8 @@ MultiAgentDevTeam/
 ├── scripts/
 │   ├── deploy-local.ps1                   # dotnet run locally
 │   ├── deploy-docker.ps1                  # Docker Compose
-│   └── deploy-k8s.ps1                     # Kubernetes (Docker Desktop)
+│   ├── deploy-k8s.ps1                     # Kubernetes (Docker Desktop)
+│   └── Resolve-AnthropicApiKey.ps1        # Finds the API key for all three scripts
 │
 ├── NuGet.Config                           # Packages stored in shared_Environment
 ├── MultiAgentDevTeam.slnx

@@ -11,7 +11,8 @@ public enum ArtifactType
     TestResults,
     SecurityReport,
     DeploymentConfig,
-    Documentation
+    Documentation,
+    VerificationReport
 }
 
 public class Artifact

@@ -70,7 +70,9 @@ USER (HTTP POST /api/run)
 │                │                                               │
 │  Phase 6: Docs Agent ────────────────► README + API docs       │
 │                │                                               │
-│           RESPONSE → all artifacts returned to user            │
+│  Phase 7: Verifier Agent ────────────► per-requirement verdict │
+│                │                                               │
+│           RESPONSE → artifacts + requirement checklist         │
 └────────────────────────────────────────────────────────────────┘
 ```
 
@@ -92,6 +94,7 @@ Shared Artifact Store (in-memory per request session):
   security_report← written by Security Agent
   deployment     ← written by DevOps Agent
   documentation  ← written by Docs Agent
+  verification   ← written by Verifier Agent
 ```
 
 ---
@@ -108,6 +111,32 @@ Shared Artifact Store (in-memory per request session):
 | **Security Engineer** | 4 (parallel) | Security report | OWASP Top 10 audit, CVE scan, secrets detection |
 | **DevOps Engineer** | 5 | Deployment config | Dockerfile, docker-compose, K8s manifests, GitHub Actions |
 | **Technical Writer** | 6 | Documentation | README, API reference, architecture doc |
+| **Acceptance Verifier** | 7 | Verification report | Checks every requirement against the original request and the artifacts |
+
+---
+
+## Requirement Tracking
+
+Every run checks that each instruction in the request was actually carried out, instead of trusting a single approve/reject verdict.
+
+1. **Checklist.** The PM ends the requirements with a `requirements-checklist` JSON block: one entry per requirement with an id (`FR-1`, `NFR-1`), text, acceptance criterion and kind:
+   - `code`: built into the source or config files
+   - `test`: needs a test
+   - `action`: done outside the generated files, such as writing to a folder, running the app or deploying
+   If the request names no platform, the PM adds the team default (C# on .NET 10) as a requirement.
+2. **Coverage claims.** Developer, QA and DevOps end their output with a `## Requirement Coverage` section that maps each id to the file or test that satisfies it, or `N/A` with a reason.
+3. **Coverage gate.** If the Developer leaves a `code` requirement unclaimed, the orchestrator sends it straight back with the missing items, before paying for a review. This uses the same retry budget as review rejections.
+4. **Verifier.** The Acceptance Verifier (Sonnet) reads the original request word for word, the checklist, the claims and the artifacts. It marks each requirement `passed`, `failed` or `manual`, and adds a `MISSED-n` entry for any instruction the checklist dropped.
+5. **Result.** The run log ends with one line per requirement, and the response and saved session carry `requirements` plus `requirementsMet`. Both UIs show the results as a table.
+
+| Status | Meaning |
+|---|---|
+| ✅ Passed | Claimed by an agent and confirmed by the Verifier |
+| ❌ Failed | No agent claimed it, or the Verifier found it missing or wrong |
+| 🖐️ Manual | An `action`: generated files can't prove it happened, so you perform and confirm it |
+| ❔ Unverified | Claimed, but the Verifier was skipped |
+
+A run with failed requirements still returns `success: true`, because the artifacts were produced; check `requirementsMet` (`false` if any requirement failed, `null` if none were tracked).
 
 ---
 
@@ -133,7 +162,7 @@ Developer ──► Reviewer ──► [APPROVED]
                     ┌───────────┴───────────┐
                  QA Agent           Security Agent   ← run in parallel
                     └───────────┬───────────┘
-                            DevOps + Docs
+                       DevOps → Docs → Verifier
 ```
 
 Best for: large tasks where time efficiency matters.
@@ -186,7 +215,7 @@ All configuration is via environment variables or `appsettings.json`.
 | `AgentConfiguration__Agents__{Agent}__MaxTokens` | No | Override one agent's output budget (thinking included) |
 | `AgentConfiguration__Agents__{Agent}__CacheContext` | No | Mark the agent's context for prompt caching (`true`/`false`) |
 
-`{Agent}` is one of `PM`, `Architect`, `Developer`, `Reviewer`, `QA`, `Security`, `DevOps`, `Docs`.
+`{Agent}` is one of `PM`, `Architect`, `Developer`, `Reviewer`, `QA`, `Security`, `DevOps`, `Docs`, `Verifier`.
 
 ### Models per agent
 
@@ -202,6 +231,7 @@ Each agent runs on the cheapest model that does its job well. Opus is kept for t
 | Security | `claude-sonnet-5-5` | medium | 32,000 | Checklist-driven audit of reviewed code |
 | DevOps | `claude-sonnet-5-5` | low | 32,000 | Dockerfiles and CI workflows are well-trodden templates |
 | Docs | `claude-haiku-5-5` | medium | 32,000 | Summarising finished artifacts needs little reasoning |
+| Verifier | `claude-sonnet-5-5` | medium | 16,000 | Careful reading against a checklist, not design work; a separate agent so nobody grades their own work |
 
 ### Cost controls
 
@@ -448,7 +478,7 @@ Request body:
 | Field | Type | Description |
 |---|---|---|
 | `requirement` | string (required) | Plain English description of what to build |
-| `skipAgents` | string[] | Agents to skip: `pm`, `architect`, `developer`, `reviewer`, `qa`, `security`, `devops`, `docs` |
+| `skipAgents` | string[] | Agents to skip: `pm`, `architect`, `developer`, `reviewer`, `qa`, `security`, `devops`, `docs`, `verifier` |
 | `maxReviewLoops` | int | Max Developer→Reviewer retry cycles (default: 3) |
 
 Response:
@@ -464,14 +494,27 @@ Response:
     "TestResults": "### File: tests/...",
     "SecurityReport": "# Security Report\n...",
     "DeploymentConfig": "### File: Dockerfile\n...",
-    "Documentation": "# README\n..."
+    "Documentation": "# README\n...",
+    "VerificationReport": "| id | status |\n..."
   },
   "agentLog": [
     "🤖 Product Manager started",
     "✅ Product Manager completed in 8.2s",
     "..."
   ],
-  "totalDuration": "00:03:42"
+  "totalDuration": "00:03:42",
+  "requirements": [
+    {
+      "id": "FR-1",
+      "text": "Print Hello, World! to the console",
+      "kind": "Code",
+      "status": "Passed",
+      "coveredBy": ["Software Developer"],
+      "evidence": "src/HelloWorld/Program.cs writes the greeting",
+      "source": "Product Manager"
+    }
+  ],
+  "requirementsMet": true
 }
 ```
 
@@ -536,7 +579,8 @@ MultiAgentDevTeam/
 │       ├── MultiAgentDevTeam.QAAgent/
 │       ├── MultiAgentDevTeam.SecurityAgent/
 │       ├── MultiAgentDevTeam.DevOpsAgent/
-│       └── MultiAgentDevTeam.DocsAgent/
+│       ├── MultiAgentDevTeam.DocsAgent/
+│       └── MultiAgentDevTeam.VerifierAgent/ # Acceptance Verifier
 │
 ├── tests/
 │   ├── MultiAgentDevTeam.UnitTests/       # Artifact, Agent metadata, Orchestrator logic

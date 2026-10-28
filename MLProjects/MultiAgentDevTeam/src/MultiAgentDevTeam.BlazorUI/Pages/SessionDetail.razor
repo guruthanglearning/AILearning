@@ -26,6 +26,30 @@ else
         <div class="alert alert-danger">@_session.ErrorMessage</div>
     }
 
+    @if (_session.Requirements.Count > 0)
+    {
+        <div class="requirements" id="requirements-section">
+            <h2>Requirement Checklist</h2>
+            <table class="table">
+                <thead>
+                    <tr><th>Status</th><th>ID</th><th>Requirement</th><th>Kind</th><th>Evidence</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in _session.Requirements)
+                    {
+                        <tr class="requirement-row">
+                            <td>@r.StatusIcon @r.Status</td>
+                            <td>@r.Id</td>
+                            <td>@r.Text</td>
+                            <td>@r.Kind.ToLowerInvariant()</td>
+                            <td>@r.Evidence</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
     <h2>Agent Log</h2>
     <div class="progress-log" id="agent-log">
         @foreach (var entry in _session.AgentLog)

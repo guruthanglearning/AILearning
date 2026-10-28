@@ -303,6 +303,39 @@ public class BaseAgentTests
         response.Truncated.Should().Be(expected);
     }
 
+    // ── Requirement coverage ──────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(typeof(MultiAgentDevTeam.DeveloperAgent.DeveloperAgent), true)]
+    [InlineData(typeof(MultiAgentDevTeam.QAAgent.QAAgent), true)]
+    [InlineData(typeof(MultiAgentDevTeam.DevOpsAgent.DevOpsAgent), true)]
+    [InlineData(typeof(MultiAgentDevTeam.PMAgent.PMAgent), false)]
+    [InlineData(typeof(MultiAgentDevTeam.ReviewerAgent.ReviewerAgent), false)]
+    [InlineData(typeof(MultiAgentDevTeam.VerifierAgent.VerifierAgent), false)]
+    public async Task RunAsync_CoverageGuidance_OnlyForAgentsThatReportCoverage(Type agentType, bool expected)
+    {
+        var (agent, handler) = CreateAgent(agentType);
+
+        await agent.RunAsync(new AgentRequest { Task = "Do something" });
+
+        using var body = JsonDocument.Parse(handler.LastRequestBody!);
+        var system = body.RootElement.GetProperty("system")[0].GetProperty("text").GetString()!;
+        system.Contains("## Requirement Coverage").Should().Be(expected);
+    }
+
+    [Fact]
+    public async Task RunAsync_PMAgent_AsksForMachineReadableChecklist()
+    {
+        var (agent, handler) = CreateAgent(typeof(MultiAgentDevTeam.PMAgent.PMAgent));
+
+        await agent.RunAsync(new AgentRequest { Task = "Extract requirements" });
+
+        using var body = JsonDocument.Parse(handler.LastRequestBody!);
+        var system = body.RootElement.GetProperty("system")[0].GetProperty("text").GetString()!;
+        system.Should().Contain("```" + RequirementTracking.ChecklistFence);
+        system.Should().Contain("\"action\"");
+    }
+
     // ── Model settings ────────────────────────────────────────────────────────
 
     [Theory]
@@ -314,6 +347,7 @@ public class BaseAgentTests
     [InlineData(typeof(MultiAgentDevTeam.SecurityAgent.SecurityAgent), "Security", "claude-sonnet-5-5", "medium")]
     [InlineData(typeof(MultiAgentDevTeam.DevOpsAgent.DevOpsAgent), "DevOps", "claude-sonnet-5-5", "low")]
     [InlineData(typeof(MultiAgentDevTeam.DocsAgent.DocsAgent), "Docs", "claude-haiku-5-5", "medium")]
+    [InlineData(typeof(MultiAgentDevTeam.VerifierAgent.VerifierAgent), "Verifier", "claude-sonnet-5-5", "medium")]
     public async Task RunAsync_SendsAgentsModelAndEffort(Type agentType, string configKey, string model, string effort)
     {
         var (agent, handler) = CreateAgent(agentType);

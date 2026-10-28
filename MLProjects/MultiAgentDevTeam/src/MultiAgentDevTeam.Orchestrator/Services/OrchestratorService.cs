@@ -26,6 +26,7 @@ public class OrchestratorService : IOrchestratorService
     private readonly IAgent _securityAgent;
     private readonly IAgent _devOpsAgent;
     private readonly IAgent _docsAgent;
+    private readonly IAgent? _verifierAgent;
     private readonly AgentConfiguration _config;
     private readonly ISessionRepository _sessions;
     private readonly ILogger<OrchestratorService> _logger;
@@ -45,6 +46,8 @@ public class OrchestratorService : IOrchestratorService
         _securityAgent  = GetAgent(agentList, ArtifactType.SecurityReport);
         _devOpsAgent    = GetAgent(agentList, ArtifactType.DeploymentConfig);
         _docsAgent      = GetAgent(agentList, ArtifactType.Documentation);
+        // Optional, so a host can run the pipeline without the final acceptance check
+        _verifierAgent  = agentList.FirstOrDefault(a => a.OutputType == ArtifactType.VerificationReport);
         _config         = config.Value;
         _sessions       = sessions;
         _logger         = logger;
@@ -98,6 +101,9 @@ public class OrchestratorService : IOrchestratorService
         var store = new ArtifactStore { OriginalRequirement = request.Requirement };
         var log = new List<string>();
         var usage = new List<TokenUsage>();
+        var claims = new List<CoverageClaim>();
+        List<RequirementItem>? checklist = null;
+        var requirements = new List<RequirementResult>();
         var maxLoops = request.MaxReviewLoops > 0 ? request.MaxReviewLoops : _config.MaxReviewLoops;
 
         _logger.LogInformation("=== Orchestrator starting session {SessionId} ===", store.SessionId);
@@ -106,12 +112,20 @@ public class OrchestratorService : IOrchestratorService
 
         try
         {
+            // Lets a UI fetch the saved session (artifacts, requirement results) once the stream ends
+            await progress.WriteAsync($"🆔 Session {store.SessionId}", ct);
+
             // ── Phase 1: Requirements ──────────────────────────────────────────
             if (!ShouldSkip(request, "pm"))
             {
                 await RunAgent(usage, _pmAgent, store, log, progress,
                     new AgentRequest { Task = $"Extract complete requirements from this request:\n\n{request.Requirement}" },
                     ct);
+
+                checklist = RequirementTracking.ParseChecklist(store.GetContent(ArtifactType.Requirements));
+                await Report(log, progress, checklist is null
+                    ? "⚠️ No requirement checklist in the requirements; per-requirement coverage won't be checked"
+                    : $"📋 {checklist.Count} requirements to track ({CountByKind(checklist)})", ct);
             }
 
             // ── Phase 2: Architecture ──────────────────────────────────────────
@@ -141,6 +155,24 @@ public class OrchestratorService : IOrchestratorService
                             Context = BuildContext(store, ArtifactType.Requirements, ArtifactType.Architecture),
                             PreviousFeedback = feedback
                         }, ct);
+
+                    var developerClaims = RequirementTracking.ParseCoverage(
+                        store.GetContent(ArtifactType.SourceCode), _developerAgent.Name);
+                    var missing = checklist is null
+                        ? []
+                        : RequirementTracking.Uncovered(checklist, developerClaims, RequirementKind.Code);
+
+                    // Missing requirements are cheaper to catch here than after an Opus review
+                    if (missing.Count > 0 && attempt < maxLoops)
+                    {
+                        feedback = CoverageFeedback(missing);
+                        await Report(log, progress,
+                            $"⚠️ Attempt {attempt} doesn't cover {string.Join(", ", missing.Select(m => m.Id))} — sending back to developer", ct);
+                        continue;
+                    }
+                    if (missing.Count > 0)
+                        await Report(log, progress,
+                            $"⚠️ Still not covered after {attempt} attempts: {string.Join(", ", missing.Select(m => m.Id))}", ct);
 
                     if (ShouldSkip(request, "reviewer")) break;
 
@@ -210,7 +242,8 @@ public class OrchestratorService : IOrchestratorService
                     {
                         Task = "Create the deployment configuration this project needs.",
                         // CI only needs to know where the tests live, not their full source
-                        Context = WithTestFileIndex(store, BuildContext(store, ArtifactType.Architecture, ArtifactType.SourceCode))
+                        Context = WithChecklist(checklist,
+                            WithTestFileIndex(store, BuildContext(store, ArtifactType.Architecture, ArtifactType.SourceCode)))
                     }, ct);
             }
 
@@ -227,6 +260,44 @@ public class OrchestratorService : IOrchestratorService
                     }, ct);
             }
 
+            // Coverage is taken from the final version of each artifact
+            foreach (var (type, agent) in new[]
+                     {
+                         (ArtifactType.SourceCode, _developerAgent),
+                         (ArtifactType.TestResults, _qaAgent),
+                         (ArtifactType.DeploymentConfig, _devOpsAgent)
+                     })
+                claims.AddRange(RequirementTracking.ParseCoverage(store.GetContent(type), agent.Name));
+
+            // ── Phase 7: Acceptance check ──────────────────────────────────────
+            List<VerificationEntry>? verification = null;
+            if (_verifierAgent is not null && !ShouldSkip(request, "verifier"))
+            {
+                var context = BuildContext(store,
+                    ArtifactType.Requirements, ArtifactType.SourceCode,
+                    ArtifactType.TestResults, ArtifactType.DeploymentConfig);
+                // The original wording, so a requirement the PM dropped can still be caught
+                context["OriginalRequest"] = request.Requirement;
+                if (claims.Count > 0)
+                    context["CoverageClaims"] = string.Join("\n",
+                        claims.Select(c => $"- {c.AgentName} / {c.RequirementId}: {c.Evidence}"));
+
+                await RunAgent(usage, _verifierAgent, store, log, progress,
+                    new AgentRequest
+                    {
+                        Task = "Check every requirement against the original request and the produced artifacts.",
+                        Context = context
+                    }, ct);
+
+                verification = RequirementTracking.ParseVerification(store.GetContent(ArtifactType.VerificationReport));
+                if (verification is null)
+                    await Report(log, progress, "⚠️ The verifier's report had no machine-readable results", ct);
+            }
+
+            requirements = RequirementTracking.Evaluate(
+                checklist ?? [], claims, verification, _pmAgent.Name, _verifierAgent?.Name ?? "Verifier");
+            await ReportRequirementsAsync(requirements, log, progress, ct);
+
             stopwatch.Stop();
             _logger.LogInformation("=== Orchestrator completed session {SessionId} in {Duration}s ===",
                 store.SessionId, stopwatch.Elapsed.TotalSeconds);
@@ -239,7 +310,8 @@ public class OrchestratorService : IOrchestratorService
                 Artifacts = store.All.ToDictionary(kvp => kvp.Key.ToString(), kvp => kvp.Value.Content),
                 AgentLog = log,
                 TotalDuration = stopwatch.Elapsed,
-                Usage = usage
+                Usage = usage,
+                Requirements = requirements
             };
         }
         catch (Exception ex)
@@ -349,7 +421,8 @@ public class OrchestratorService : IOrchestratorService
                 TotalDuration = response.TotalDuration.ToString(),
                 ErrorMessage = response.ErrorMessage,
                 Usage = response.Usage,
-                EstimatedCostUsd = response.EstimatedCostUsd
+                EstimatedCostUsd = response.EstimatedCostUsd,
+                Requirements = response.Requirements
             };
 
             await _sessions.SaveAsync(record);
@@ -384,6 +457,58 @@ public class OrchestratorService : IOrchestratorService
                $"({usage.Sum(u => u.InputTokens):N0} input, {usage.Sum(u => u.OutputTokens):N0} output, " +
                $"{usage.Sum(u => u.CacheReadInputTokens):N0} cache-read, " +
                $"{usage.Sum(u => u.CacheCreationInputTokens):N0} cache-write tokens)";
+    }
+
+    private static async Task ReportRequirementsAsync(
+        List<RequirementResult> results, List<string> log, ChannelWriter<string> progress, CancellationToken ct)
+    {
+        if (results.Count == 0) return;
+
+        var counts = Enum.GetValues<RequirementStatus>()
+            .Select(s => (Status: s, Count: results.Count(r => r.Status == s)))
+            .Where(x => x.Count > 0)
+            .Select(x => $"{x.Count} {x.Status.ToString().ToLowerInvariant()}");
+        await Report(log, progress, $"📋 Requirement check: {string.Join(", ", counts)}", ct);
+
+        foreach (var r in results)
+        {
+            var evidence = string.IsNullOrWhiteSpace(r.Evidence) ? string.Empty : $" — {r.Evidence}";
+            await Report(log, progress,
+                $"{RequirementTracking.StatusIcon(r.Status)} {r.Id} [{r.Kind.ToString().ToLowerInvariant()}] {r.Text}{evidence}", ct);
+        }
+
+        var failed = results.Count(r => r.Status == RequirementStatus.Failed);
+        var manual = results.Where(r => r.Status == RequirementStatus.Manual).Select(r => r.Id).ToList();
+        if (failed > 0)
+            await Report(log, progress, $"⚠️ Finished with {failed} requirement(s) not met", ct);
+        if (manual.Count > 0)
+            await Report(log, progress, $"🖐️ Needs a manual step: {string.Join(", ", manual)}", ct);
+        if (results.All(r => r.Status == RequirementStatus.Passed))
+            await Report(log, progress, "✅ All requirements met", ct);
+    }
+
+    private static async Task Report(List<string> log, ChannelWriter<string> progress, string message, CancellationToken ct)
+    {
+        log.Add(message);
+        await progress.WriteAsync(message, ct);
+    }
+
+    private static string CountByKind(IEnumerable<RequirementItem> checklist) =>
+        string.Join(", ", checklist.GroupBy(i => i.Kind)
+            .OrderBy(g => g.Key)
+            .Select(g => $"{g.Count()} {g.Key.ToString().ToLowerInvariant()}"));
+
+    public static string CoverageFeedback(IEnumerable<RequirementItem> missing) =>
+        "Your output doesn't cover these requirements. Implement each one and list it in your " +
+        "Requirement Coverage section; keep everything else as it is:\n" +
+        string.Join("\n", missing.Select(m =>
+            $"- {m.Id}: {m.Text}" + (string.IsNullOrWhiteSpace(m.Criterion) ? string.Empty : $" (acceptance: {m.Criterion})")));
+
+    private static Dictionary<string, string> WithChecklist(List<RequirementItem>? checklist, Dictionary<string, string> context)
+    {
+        if (checklist is { Count: > 0 })
+            context["RequirementChecklist"] = RequirementTracking.ToJson(checklist);
+        return context;
     }
 
     private static readonly Regex FileHeader = new(@"^### File:\s*(.+)$", RegexOptions.Multiline | RegexOptions.Compiled);

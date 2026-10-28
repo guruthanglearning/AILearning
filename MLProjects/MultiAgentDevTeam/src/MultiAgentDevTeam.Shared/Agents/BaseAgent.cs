@@ -46,6 +46,12 @@ public abstract class BaseAgent : IAgent
     /// <summary>The model, effort and token budget this agent runs with unless configuration overrides them.</summary>
     protected abstract AgentModelSettings DefaultSettings { get; }
 
+    /// <summary>
+    /// When true, the agent must end its output with a "Requirement Coverage" section the
+    /// orchestrator checks against the PM's checklist.
+    /// </summary>
+    protected virtual bool ReportsRequirementCoverage => false;
+
     /// <summary>Key under <c>AgentConfiguration:Agents</c>, e.g. "QA" for QAAgent.</summary>
     public string ConfigKey
     {
@@ -71,7 +77,7 @@ public abstract class BaseAgent : IAgent
             {
                 Model = settings.Model,
                 MaxTokens = settings.MaxTokens,
-                System = new List<BetaTextBlockParam> { new() { Text = SystemPrompt + OutputSizeGuidance } },
+                System = new List<BetaTextBlockParam> { new() { Text = FullSystemPrompt } },
                 Messages = [new BetaUserMessageParam { Content = BuildUserContent(request, settings.CacheContext) }],
                 OutputConfig = new BetaOutputConfig { Effort = ParseEffort(settings.Effort) },
                 Betas = [ServerSideFallbackBeta],
@@ -113,6 +119,9 @@ public abstract class BaseAgent : IAgent
             return AgentResponse.Fail(ex.Message, Name, ClassifyFailure(ex, cancellationToken));
         }
     }
+
+    internal string FullSystemPrompt =>
+        SystemPrompt + (ReportsRequirementCoverage ? RequirementTracking.CoverageGuidance : string.Empty) + OutputSizeGuidance;
 
     /// <summary>Maps an exception from the Anthropic SDK / HttpClient to a failure category.</summary>
     public static AgentFailureKind ClassifyFailure(Exception ex, CancellationToken cancellationToken = default) =>

@@ -15,6 +15,7 @@ COPY src/Agents/MultiAgentDevTeam.QAAgent/ src/Agents/MultiAgentDevTeam.QAAgent/
 COPY src/Agents/MultiAgentDevTeam.SecurityAgent/ src/Agents/MultiAgentDevTeam.SecurityAgent/
 COPY src/Agents/MultiAgentDevTeam.DevOpsAgent/ src/Agents/MultiAgentDevTeam.DevOpsAgent/
 COPY src/Agents/MultiAgentDevTeam.DocsAgent/ src/Agents/MultiAgentDevTeam.DocsAgent/
+COPY src/Agents/MultiAgentDevTeam.VerifierAgent/ src/Agents/MultiAgentDevTeam.VerifierAgent/
 
 # Override the Windows-specific globalPackagesFolder from NuGet.Config — that path is invalid inside Linux containers.
 ENV NUGET_PACKAGES=/tmp/nuget-packages

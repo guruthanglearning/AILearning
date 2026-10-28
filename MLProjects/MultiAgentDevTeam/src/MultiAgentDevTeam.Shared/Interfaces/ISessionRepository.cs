@@ -22,6 +22,7 @@ public class SessionRecord
     public string? ErrorMessage { get; init; }
     public List<TokenUsage> Usage { get; init; } = new();
     public decimal EstimatedCostUsd { get; init; }
+    public List<RequirementResult> Requirements { get; init; } = new();
 }
 
 public class SessionSummary

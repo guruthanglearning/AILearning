@@ -19,6 +19,7 @@ public class AgentMetadataTests
     [InlineData(typeof(MultiAgentDevTeam.SecurityAgent.SecurityAgent),    "Security Engineer",  ArtifactType.SecurityReport)]
     [InlineData(typeof(MultiAgentDevTeam.DevOpsAgent.DevOpsAgent),        "DevOps Engineer",    ArtifactType.DeploymentConfig)]
     [InlineData(typeof(MultiAgentDevTeam.DocsAgent.DocsAgent),            "Technical Writer",   ArtifactType.Documentation)]
+    [InlineData(typeof(MultiAgentDevTeam.VerifierAgent.VerifierAgent),    "Acceptance Verifier", ArtifactType.VerificationReport)]
     public void Agent_HasCorrectNameAndOutputType(Type agentType, string expectedName, ArtifactType expectedOutput)
     {
         // Arrange — create agent with null client (testing metadata only)
@@ -43,6 +44,7 @@ public class AgentMetadataTests
             typeof(MultiAgentDevTeam.SecurityAgent.SecurityAgent),
             typeof(MultiAgentDevTeam.DevOpsAgent.DevOpsAgent),
             typeof(MultiAgentDevTeam.DocsAgent.DocsAgent),
+            typeof(MultiAgentDevTeam.VerifierAgent.VerifierAgent),
         };
 
         // Act
@@ -66,6 +68,7 @@ public class AgentMetadataTests
             typeof(MultiAgentDevTeam.SecurityAgent.SecurityAgent),
             typeof(MultiAgentDevTeam.DevOpsAgent.DevOpsAgent),
             typeof(MultiAgentDevTeam.DocsAgent.DocsAgent),
+            typeof(MultiAgentDevTeam.VerifierAgent.VerifierAgent),
         };
 
         // Act

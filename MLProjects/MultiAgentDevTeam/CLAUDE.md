@@ -37,7 +37,7 @@ Follows the workspace-wide policy in the root `D:\Study\AILearning\CLAUDE.md` (P
 
 ## Project Overview
 
-**MultiAgentDevTeam** is a C# .NET 10 multi-agent AI system that takes plain-English software requirements and produces a complete software package using 8 specialized AI agents powered by the Anthropic Claude API.
+**MultiAgentDevTeam** is a C# .NET 10 multi-agent AI system that takes plain-English software requirements and produces a complete software package using 9 specialized AI agents powered by the Anthropic Claude API.
 
 **Solution file:** `MultiAgentDevTeam.slnx`
 
@@ -52,7 +52,10 @@ Phase 4: QA Agent           → Test suite         } parallel
          Security Agent     → Security report    }
 Phase 5: DevOps Agent       → Deployment config
 Phase 6: Docs Agent         → Documentation
+Phase 7: Verifier Agent     → Per-requirement verdicts (passed / failed / manual)
 ```
+
+Requirement tracking (`Shared/Models/RequirementTracking.cs`): the PM ends its output with a `requirements-checklist` JSON block; Developer/QA/DevOps end theirs with a `## Requirement Coverage` section (`ReportsRequirementCoverage` in `BaseAgent`); the orchestrator sends unclaimed `code` requirements back to the Developer before review, then combines claims with the Verifier's `verification-results` block into `OrchestratorResponse.Requirements`.
 
 ### Key Directories
 
@@ -71,6 +74,7 @@ src/
     MultiAgentDevTeam.SecurityAgent/
     MultiAgentDevTeam.DevOpsAgent/
     MultiAgentDevTeam.DocsAgent/
+    MultiAgentDevTeam.VerifierAgent/
 tests/
   MultiAgentDevTeam.UnitTests/
   MultiAgentDevTeam.IntegrationTests/
@@ -95,7 +99,7 @@ The Orchestrator also exposes two endpoints that support these UIs but aren't in
 
 - **Language/Framework:** C# .NET 10 (ASP.NET Core minimal APIs)
 - **LLM Provider:** Anthropic Claude API via the official `Anthropic` C# SDK (streaming, beta Messages endpoint for server-side fallback)
-- **Models:** set per agent in each agent's `DefaultSettings` (Opus 5.5 for Architect/Developer/Reviewer, Sonnet 5.5 for PM/QA/Security/DevOps, Haiku 5.5 for Docs); override with `AgentConfiguration:Agents:{Agent}:Model|Effort|MaxTokens|CacheContext`
+- **Models:** set per agent in each agent's `DefaultSettings` (Opus 5.5 for Architect/Developer/Reviewer, Sonnet 5.5 for PM/QA/Security/DevOps, Haiku 5.5 for Docs, Sonnet 5.5 for Verifier); override with `AgentConfiguration:Agents:{Agent}:Model|Effort|MaxTokens|CacheContext`
 - **Test Framework:** xUnit + Moq + FluentAssertions (.NET); Vitest + Playwright (React UI)
 - **Frontends:** Blazor Server (`MultiAgentDevTeam.BlazorUI`, in the `.slnx`) and React 18 + Vite + TypeScript (`MultiAgentDevTeam.UI`, separate npm project) — see "Frontends" above
 - **Containerization:** Docker + Docker Compose

@@ -3,18 +3,24 @@ import { PipelineForm } from './components/PipelineForm'
 import { ProgressLog } from './components/ProgressLog'
 import { ArtifactViewer } from './components/ArtifactViewer'
 import { SessionsList } from './components/SessionsList'
+import { RequirementsChecklist } from './components/RequirementsChecklist'
 import { streamPipeline } from './services/pipelineApi'
-import type { PipelineRequest } from './types/api'
+import { getSession } from './services/sessionApi'
+import type { PipelineRequest, RequirementResult } from './types/api'
 import './App.css'
 
 type Page = 'home' | 'sessions'
 type State = 'idle' | 'streaming' | 'completed' | 'error'
+
+// The orchestrator's first progress message names the session, so the saved results can be loaded
+const SESSION_MESSAGE = /^🆔 Session ([0-9a-f-]{36})$/i
 
 export function App() {
   const [page, setPage] = useState<Page>('home')
   const [state, setState] = useState<State>('idle')
   const [messages, setMessages] = useState<string[]>([])
   const [artifacts, setArtifacts] = useState<Record<string, string>>({})
+  const [requirements, setRequirements] = useState<RequirementResult[]>([])
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [abortController, setAbortController] = useState<AbortController | null>(null)
 
@@ -24,13 +30,18 @@ export function App() {
     setState('streaming')
     setMessages([])
     setArtifacts({})
+    setRequirements([])
     setErrorMessage(null)
 
     try {
+      let sessionId: string | null = null
       for await (const msg of streamPipeline(request, controller.signal)) {
+        const match = SESSION_MESSAGE.exec(msg)
+        if (match) sessionId = match[1]
         setMessages(prev => [...prev, msg])
       }
       setState('completed')
+      if (sessionId) await loadResults(sessionId)
     } catch (e) {
       if (e instanceof Error && e.name === 'AbortError') {
         setState('idle')
@@ -41,11 +52,23 @@ export function App() {
     }
   }
 
+  async function loadResults(sessionId: string) {
+    try {
+      const session = await getSession(sessionId)
+      if (!session) return
+      setArtifacts(session.artifacts ?? {})
+      setRequirements(session.requirements ?? [])
+    } catch {
+      // The progress log already shows the outcome; the results panel is a convenience
+    }
+  }
+
   function handleReset() {
     abortController?.abort()
     setState('idle')
     setMessages([])
     setArtifacts({})
+    setRequirements([])
     setErrorMessage(null)
     setAbortController(null)
   }
@@ -81,6 +104,7 @@ export function App() {
 
             {state === 'completed' && (
               <>
+                <RequirementsChecklist requirements={requirements} />
                 <ArtifactViewer artifacts={artifacts} />
                 <button className="btn btn-secondary" onClick={handleReset} data-testid="new-pipeline-btn">
                   Start New Pipeline

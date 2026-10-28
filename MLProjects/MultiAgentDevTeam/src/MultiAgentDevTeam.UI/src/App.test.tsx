@@ -41,6 +41,41 @@ describe('App', () => {
     await waitFor(() => expect(screen.getByTestId('new-pipeline-btn')).toBeInTheDocument())
   })
 
+  it('loads the session after the stream and shows requirements and artifacts', async () => {
+    const sessionId = '706c6714-cb17-45f6-abe1-3f87b4257220'
+    vi.spyOn(pipelineApi, 'streamPipeline').mockReturnValue(fakeStream(`🆔 Session ${sessionId}`, '✅ done'))
+    const getSession = vi.spyOn(sessionApi, 'getSession').mockResolvedValue({
+      sessionId,
+      requirement: 'Hello World',
+      startedAt: '2026-10-28T00:00:00Z',
+      success: true,
+      artifacts: { SourceCode: 'class Program {}' },
+      agentLog: [],
+      totalDuration: '00:03:00',
+      requirements: [
+        { id: 'FR-1', text: 'Print it', kind: 'Code', status: 'Passed', coveredBy: ['Developer'], source: 'Product Manager' }
+      ]
+    })
+    render(<App />)
+    await userEvent.type(screen.getByTestId('requirement-input'), 'Build a TODO REST API with authentication')
+    fireEvent.submit(screen.getByTestId('pipeline-form'))
+    await waitFor(() => expect(screen.getByTestId('requirements-section')).toBeInTheDocument())
+    expect(getSession).toHaveBeenCalledWith(sessionId)
+    expect(screen.getAllByTestId('requirement-row')).toHaveLength(1)
+    expect(screen.getAllByTestId('artifact-item')).toHaveLength(1)
+  })
+
+  it('still completes when loading the session fails', async () => {
+    vi.spyOn(pipelineApi, 'streamPipeline').mockReturnValue(
+      fakeStream('🆔 Session 706c6714-cb17-45f6-abe1-3f87b4257220', '✅ done'))
+    vi.spyOn(sessionApi, 'getSession').mockRejectedValue(new Error('500'))
+    render(<App />)
+    await userEvent.type(screen.getByTestId('requirement-input'), 'Build a TODO REST API with authentication')
+    fireEvent.submit(screen.getByTestId('pipeline-form'))
+    await waitFor(() => expect(screen.getByTestId('new-pipeline-btn')).toBeInTheDocument())
+    expect(screen.queryByTestId('requirements-section')).not.toBeInTheDocument()
+  })
+
   it('shows error message when stream fails', async () => {
     vi.spyOn(pipelineApi, 'streamPipeline').mockReturnValue(failingStream())
     render(<App />)

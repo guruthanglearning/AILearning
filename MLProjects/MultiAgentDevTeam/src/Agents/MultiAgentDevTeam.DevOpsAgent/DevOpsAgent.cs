@@ -23,6 +23,8 @@ public class DevOpsAgent : BaseAgent
         MaxTokens = 32000
     };
 
+    protected override bool ReportsRequirementCoverage => true;
+
     protected override string SystemPrompt => """
         You are a senior DevOps engineer specialising in .NET containerisation and Kubernetes.
         Given source code, architecture, and the list of test files, produce the deployment configuration

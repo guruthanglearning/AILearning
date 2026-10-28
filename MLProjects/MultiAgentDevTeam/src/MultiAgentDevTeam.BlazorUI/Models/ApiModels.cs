@@ -39,4 +39,25 @@ public class SessionRecord
     public List<string> AgentLog { get; set; } = new();
     public string TotalDuration { get; set; } = string.Empty;
     public string? ErrorMessage { get; set; }
+    public List<RequirementResult> Requirements { get; set; } = new();
+}
+
+/// <summary>One tracked requirement and whether it was met; Kind and Status arrive as strings.</summary>
+public class RequirementResult
+{
+    public string Id { get; set; } = string.Empty;
+    public string Text { get; set; } = string.Empty;
+    public string Kind { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public List<string> CoveredBy { get; set; } = new();
+    public string? Evidence { get; set; }
+    public string Source { get; set; } = string.Empty;
+
+    public string StatusIcon => Status switch
+    {
+        "Passed" => "✅",
+        "Failed" => "❌",
+        "Manual" => "🖐️",
+        _ => "❔"
+    };
 }

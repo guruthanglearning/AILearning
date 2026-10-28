@@ -70,6 +70,14 @@ public class OrchestratorResponse
 
     /// <summary>Sum of the per-call estimates; calls on unpriced models are left out.</summary>
     public decimal EstimatedCostUsd => Usage.Sum(u => u.EstimatedCostUsd ?? 0m);
+
+    /// <summary>One result per tracked requirement; empty when nothing could be tracked.</summary>
+    public List<RequirementResult> Requirements { get; init; } = new();
+
+    /// <summary>Null when no requirements were tracked; otherwise false if any was not met.</summary>
+    public bool? RequirementsMet => Requirements.Count == 0
+        ? null
+        : Requirements.All(r => r.Status != RequirementStatus.Failed);
 }
 
 /// <summary>

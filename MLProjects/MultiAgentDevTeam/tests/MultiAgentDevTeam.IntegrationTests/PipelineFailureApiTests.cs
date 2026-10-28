@@ -60,6 +60,7 @@ public class PipelineFailureApiTests : IClassFixture<WebApplicationFactory<Progr
     [InlineData(AgentFailureKind.Upstream, HttpStatusCode.BadGateway)]
     [InlineData(AgentFailureKind.RateLimited, HttpStatusCode.ServiceUnavailable)]
     [InlineData(AgentFailureKind.Timeout, HttpStatusCode.GatewayTimeout)]
+    [InlineData(AgentFailureKind.Refused, HttpStatusCode.UnprocessableEntity)]
     [InlineData(AgentFailureKind.Internal, HttpStatusCode.InternalServerError)]
     public async Task POST_ApiRun_AgentFailure_ReturnsMappedStatus(AgentFailureKind kind, HttpStatusCode expected)
     {

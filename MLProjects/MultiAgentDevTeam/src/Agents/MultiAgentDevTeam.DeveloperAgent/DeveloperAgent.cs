@@ -1,16 +1,28 @@
-using Anthropic.SDK;
+using Anthropic;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using MultiAgentDevTeam.Shared.Agents;
+using MultiAgentDevTeam.Shared.Configuration;
 using MultiAgentDevTeam.Shared.Models;
 
 namespace MultiAgentDevTeam.DeveloperAgent;
 
 public class DeveloperAgent : BaseAgent
 {
-    public DeveloperAgent(AnthropicClient client, ILogger<DeveloperAgent> logger) : base(client, logger) { }
+    public DeveloperAgent(AnthropicClient client, ILogger<DeveloperAgent> logger, IOptions<AgentConfiguration> options)
+        : base(client, logger, options) { }
 
     public override string Name => "Software Developer";
     public override ArtifactType OutputType => ArtifactType.SourceCode;
+
+    // Code correctness decides how many review loops a run pays for; re-runs reuse cached context
+    protected override AgentModelSettings DefaultSettings => new()
+    {
+        Model = "claude-opus-5-5",
+        Effort = "high",
+        MaxTokens = 64000,
+        CacheContext = true
+    };
 
     protected override string SystemPrompt => """
         You are a senior software engineer who writes clean, production-quality C# .NET 10 code.
@@ -30,6 +42,8 @@ public class DeveloperAgent : BaseAgent
         - Handle all exceptions explicitly — never swallow exceptions silently
         - Never hardcode secrets — always use configuration/environment variables
         - Validate all inputs at system boundaries
+        - Give each project its own folder (e.g. src/App/, tests/App.Tests/) and never put one project's
+          folder inside another's, or the outer project's default globbing compiles the inner one's files
 
         If given feedback/rejection notes, fix ONLY the reported issues. Do not refactor unrelated code.
 

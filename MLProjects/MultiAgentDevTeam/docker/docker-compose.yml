@@ -10,7 +10,6 @@ services:
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - AgentConfiguration__MaxReviewLoops=3
-      - AgentConfiguration__DefaultModel=claude-opus-4-6
       - ASPNETCORE_ENVIRONMENT=Development
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:5000/health || exit 1"]

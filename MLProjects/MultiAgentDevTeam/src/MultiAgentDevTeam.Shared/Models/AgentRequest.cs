@@ -21,7 +21,8 @@ public enum AgentFailureKind
     Authentication,
     RateLimited,
     Timeout,
-    Upstream
+    Upstream,
+    Refused
 }
 
 public class AgentResponse
@@ -36,11 +37,14 @@ public class AgentResponse
     /// <summary>True when the model stopped because it hit the token limit, so Content is incomplete.</summary>
     public bool Truncated { get; init; }
 
-    public static AgentResponse Ok(string content, string agentName, TimeSpan duration, bool truncated = false) =>
-        new() { Success = true, Content = content, AgentName = agentName, Duration = duration, Truncated = truncated };
+    /// <summary>Tokens billed for the call; null when the API was never reached.</summary>
+    public TokenUsage? Usage { get; init; }
 
-    public static AgentResponse Fail(string error, string agentName, AgentFailureKind kind = AgentFailureKind.Internal) =>
-        new() { Success = false, ErrorMessage = error, AgentName = agentName, FailureKind = kind };
+    public static AgentResponse Ok(string content, string agentName, TimeSpan duration, bool truncated = false, TokenUsage? usage = null) =>
+        new() { Success = true, Content = content, AgentName = agentName, Duration = duration, Truncated = truncated, Usage = usage };
+
+    public static AgentResponse Fail(string error, string agentName, AgentFailureKind kind = AgentFailureKind.Internal, TokenUsage? usage = null) =>
+        new() { Success = false, ErrorMessage = error, AgentName = agentName, FailureKind = kind, Usage = usage };
 }
 
 public class OrchestratorRequest
@@ -60,6 +64,12 @@ public class OrchestratorResponse
     public string? ErrorMessage { get; init; }
     public AgentFailureKind FailureKind { get; init; }
     public TimeSpan TotalDuration { get; init; }
+
+    /// <summary>One entry per agent call, in the order the calls were made.</summary>
+    public List<TokenUsage> Usage { get; init; } = new();
+
+    /// <summary>Sum of the per-call estimates; calls on unpriced models are left out.</summary>
+    public decimal EstimatedCostUsd => Usage.Sum(u => u.EstimatedCostUsd ?? 0m);
 }
 
 /// <summary>

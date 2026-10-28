@@ -1,4 +1,4 @@
-using Anthropic.SDK;
+using Anthropic;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
@@ -33,11 +33,15 @@ var apiKey = (string.IsNullOrWhiteSpace(configApiKey) ? null : configApiKey)
     ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY")
     ?? throw new InvalidOperationException("ANTHROPIC_API_KEY is required.");
 
-// The SDK's default HttpClient times out after 100s, too short for long agent responses
-var timeoutSeconds = builder.Configuration.GetValue("AgentConfiguration:TimeoutSeconds", 600);
-builder.Services.AddSingleton(new AnthropicClient(apiKey)
+// Streamed agent responses with large output budgets can run well past the SDK's 10-minute default.
+// The SDK retries 429/5xx itself, honouring retry-after, so rate limits rarely fail a run.
+var timeoutSeconds = builder.Configuration.GetValue("AgentConfiguration:TimeoutSeconds", 1800);
+var maxRetries = builder.Configuration.GetValue("AgentConfiguration:MaxRetries", 4);
+builder.Services.AddSingleton(new AnthropicClient
 {
-    HttpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(timeoutSeconds) }
+    ApiKey = apiKey,
+    Timeout = TimeSpan.FromSeconds(timeoutSeconds),
+    MaxRetries = maxRetries
 });
 
 // ── Register all agents as IAgent ─────────────────────────────────────────────

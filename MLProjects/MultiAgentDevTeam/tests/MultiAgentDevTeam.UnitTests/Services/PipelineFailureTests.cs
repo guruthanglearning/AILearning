@@ -13,6 +13,7 @@ public class PipelineFailureTests
     [InlineData(AgentFailureKind.Upstream, StatusCodes.Status502BadGateway)]
     [InlineData(AgentFailureKind.RateLimited, StatusCodes.Status503ServiceUnavailable)]
     [InlineData(AgentFailureKind.Timeout, StatusCodes.Status504GatewayTimeout)]
+    [InlineData(AgentFailureKind.Refused, StatusCodes.Status422UnprocessableEntity)]
     [InlineData(AgentFailureKind.Internal, StatusCodes.Status500InternalServerError)]
     [InlineData(AgentFailureKind.None, StatusCodes.Status500InternalServerError)]
     public void StatusCode_MapsEachKind(AgentFailureKind kind, int expected) =>
@@ -30,6 +31,7 @@ public class PipelineFailureTests
     [InlineData(AgentFailureKind.Upstream, "Anthropic API error")]
     [InlineData(AgentFailureKind.RateLimited, "rate limit")]
     [InlineData(AgentFailureKind.Timeout, "timed out")]
+    [InlineData(AgentFailureKind.Refused, "declined")]
     [InlineData(AgentFailureKind.Internal, "Pipeline failed")]
     public void Title_DescribesEachKind(AgentFailureKind kind, string expected) =>
         PipelineFailure.Title(kind).Should().Contain(expected);
@@ -39,6 +41,7 @@ public class PipelineFailureTests
     [InlineData(AgentFailureKind.Upstream, "transient")]
     [InlineData(AgentFailureKind.RateLimited, "rate limit")]
     [InlineData(AgentFailureKind.Timeout, "TimeoutSeconds")]
+    [InlineData(AgentFailureKind.Refused, "Rephrase")]
     [InlineData(AgentFailureKind.Internal, "service logs")]
     public void Describe_GivesActionableGuidance(AgentFailureKind kind, string expected) =>
         PipelineFailure.Describe(kind).Should().Contain(expected);

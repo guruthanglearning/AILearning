@@ -178,11 +178,38 @@ All configuration is via environment variables or `appsettings.json`.
 | Variable | Required | Description |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | **Yes** | Your Anthropic API key |
-| `AgentConfiguration__DefaultModel` | No | Claude model for agents (default: `claude-opus-4-6`) |
-| `AgentConfiguration__FastModel` | No | Fast model for light tasks (default: `claude-haiku-4-5-20251001`) |
 | `AgentConfiguration__MaxReviewLoops` | No | Max Developer→Reviewer cycles (default: `3`) |
-| `AgentConfiguration__MaxTokens` | No | Max tokens per agent response (default: `16384`). Note: not yet wired through — agents currently use the `BaseAgent` value |
-| `AgentConfiguration__TimeoutSeconds` | No | Timeout for each Anthropic API call, in seconds (default: `600`) |
+| `AgentConfiguration__TimeoutSeconds` | No | Timeout for each Anthropic API call, in seconds (default: `1800`; responses are streamed and can be long) |
+| `AgentConfiguration__MaxRetries` | No | SDK retries on 429 / 5xx, honouring `retry-after` (default: `4`) |
+| `AgentConfiguration__Agents__{Agent}__Model` | No | Override one agent's model, e.g. `AgentConfiguration__Agents__Docs__Model=claude-sonnet-5-5` |
+| `AgentConfiguration__Agents__{Agent}__Effort` | No | Override one agent's effort: `low`, `medium`, `high`, `xhigh` or `max` |
+| `AgentConfiguration__Agents__{Agent}__MaxTokens` | No | Override one agent's output budget (thinking included) |
+| `AgentConfiguration__Agents__{Agent}__CacheContext` | No | Mark the agent's context for prompt caching (`true`/`false`) |
+
+`{Agent}` is one of `PM`, `Architect`, `Developer`, `Reviewer`, `QA`, `Security`, `DevOps`, `Docs`.
+
+### Models per agent
+
+Each agent runs on the cheapest model that does its job well. Opus is kept for the steps whose mistakes cost a whole review loop.
+
+| Agent | Model | Effort | Max tokens | Why |
+|---|---|---|---|---|
+| PM | `claude-sonnet-5-5` | medium | 16,000 | Requirements extraction is structured analysis |
+| Architect | `claude-opus-5-5` | high | 32,000 | Design decisions shape every later agent |
+| Developer | `claude-opus-5-5` | high | 64,000 | Code quality decides how many review loops a run pays for; context is prompt-cached across loops |
+| Reviewer | `claude-opus-5-5` | high | 32,000 | The quality gate: a missed bug or a false rejection both cost a loop |
+| QA | `claude-sonnet-5-5` | medium | 64,000 | High-volume test writing against existing code |
+| Security | `claude-sonnet-5-5` | medium | 32,000 | Checklist-driven audit of reviewed code |
+| DevOps | `claude-sonnet-5-5` | low | 32,000 | Dockerfiles and CI workflows are well-trodden templates |
+| Docs | `claude-haiku-5-5` | medium | 32,000 | Summarising finished artifacts needs little reasoning |
+
+### Cost controls
+
+- **Usage and cost per run:** every agent call logs its input, output and cache tokens with an estimated cost; the run log ends with `💰 Estimated API cost: ...`, and the totals are saved with the session (`usage`, `estimatedCostUsd`). Prices live in `ModelPricing` and are list prices, so treat the figure as an estimate.
+- **Output sized to the request:** every agent is told to scale its output to the request, so a small app gets a few tests and one README instead of an enterprise-sized package.
+- **Prompt caching:** the Developer's context (requirements + architecture) is cached, so review-loop re-runs read it at a fraction of the input price. Other agents run once per pipeline, where a cache write (1.25× input) would cost more than it saves.
+- **Smaller context:** DevOps receives the list of test files rather than their full source.
+- **Refusals:** requests use server-side fallback, so a request one model declines for policy reasons can be completed by a fallback model. If no model completes it, the API returns `422` with title "Model declined the request".
 
 ---
 

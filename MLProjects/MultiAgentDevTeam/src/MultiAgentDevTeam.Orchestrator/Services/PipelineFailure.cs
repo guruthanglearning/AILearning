@@ -17,6 +17,8 @@ public static class PipelineFailure
         AgentFailureKind.Upstream       => StatusCodes.Status502BadGateway,
         AgentFailureKind.RateLimited    => StatusCodes.Status503ServiceUnavailable,
         AgentFailureKind.Timeout        => StatusCodes.Status504GatewayTimeout,
+        // The request itself was declined, so retrying it unchanged won't help
+        AgentFailureKind.Refused        => StatusCodes.Status422UnprocessableEntity,
         _                               => StatusCodes.Status500InternalServerError
     };
 
@@ -26,6 +28,7 @@ public static class PipelineFailure
         AgentFailureKind.Upstream       => "Anthropic API error",
         AgentFailureKind.RateLimited    => "Anthropic API rate limit reached",
         AgentFailureKind.Timeout        => "Anthropic API request timed out",
+        AgentFailureKind.Refused        => "Model declined the request",
         _                               => "Pipeline failed"
     };
 
@@ -40,6 +43,8 @@ public static class PipelineFailure
             "The Anthropic API rate limit was reached. Wait a moment and try again.",
         AgentFailureKind.Timeout =>
             "An agent did not get a response from the Anthropic API in time. Try again, or raise AgentConfiguration:TimeoutSeconds.",
+        AgentFailureKind.Refused =>
+            "The model declined the request for policy reasons, and no fallback model completed it. Rephrase the requirement and try again.",
         _ =>
             "An unexpected error occurred while running the pipeline. See the service logs for details."
     };

@@ -1,16 +1,27 @@
-using Anthropic.SDK;
+using Anthropic;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using MultiAgentDevTeam.Shared.Agents;
+using MultiAgentDevTeam.Shared.Configuration;
 using MultiAgentDevTeam.Shared.Models;
 
 namespace MultiAgentDevTeam.ReviewerAgent;
 
 public class ReviewerAgent : BaseAgent
 {
-    public ReviewerAgent(AnthropicClient client, ILogger<ReviewerAgent> logger) : base(client, logger) { }
+    public ReviewerAgent(AnthropicClient client, ILogger<ReviewerAgent> logger, IOptions<AgentConfiguration> options)
+        : base(client, logger, options) { }
 
     public override string Name => "Code Reviewer";
     public override ArtifactType OutputType => ArtifactType.ReviewNotes;
+
+    // The quality gate: a missed bug or a false rejection both cost a full loop
+    protected override AgentModelSettings DefaultSettings => new()
+    {
+        Model = "claude-opus-5-5",
+        Effort = "high",
+        MaxTokens = 32000
+    };
 
     protected override string SystemPrompt => """
         You are a principal engineer performing a thorough code review.

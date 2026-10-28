@@ -1,16 +1,27 @@
-using Anthropic.SDK;
+using Anthropic;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using MultiAgentDevTeam.Shared.Agents;
+using MultiAgentDevTeam.Shared.Configuration;
 using MultiAgentDevTeam.Shared.Models;
 
 namespace MultiAgentDevTeam.ArchitectAgent;
 
 public class ArchitectAgent : BaseAgent
 {
-    public ArchitectAgent(AnthropicClient client, ILogger<ArchitectAgent> logger) : base(client, logger) { }
+    public ArchitectAgent(AnthropicClient client, ILogger<ArchitectAgent> logger, IOptions<AgentConfiguration> options)
+        : base(client, logger, options) { }
 
     public override string Name => "Software Architect";
     public override ArtifactType OutputType => ArtifactType.Architecture;
+
+    // Design decisions shape every later agent, so this gets the strongest model
+    protected override AgentModelSettings DefaultSettings => new()
+    {
+        Model = "claude-opus-5-5",
+        Effort = "high",
+        MaxTokens = 32000
+    };
 
     protected override string SystemPrompt => """
         You are a principal software architect with 15+ years of experience.

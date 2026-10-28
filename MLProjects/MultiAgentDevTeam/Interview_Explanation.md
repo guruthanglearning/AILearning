@@ -5,7 +5,7 @@
 **Project**: AI-Powered Software Engineering Team (Multi-Agent Orchestration)
 **Core Idea**: Submit a plain-English requirement, get back a complete software package — requirements, architecture, source code, tests, security report, deployment config, and docs
 **Architecture**: 8 specialised Claude-backed agents, one per SDLC phase, coordinated by a central Orchestrator with a Developer↔Reviewer feedback loop
-**Tech Stack**: C# .NET 10, ASP.NET Core Minimal APIs, Anthropic Claude API (`Anthropic.SDK`), Blazor Server UI, Docker, Kubernetes
+**Tech Stack**: C# .NET 10, ASP.NET Core Minimal APIs, Anthropic Claude API (official `Anthropic` C# SDK), Blazor Server UI, Docker, Kubernetes
 **Scale**: 167 passing unit/integration tests (xUnit + Moq + FluentAssertions + bUnit) plus a Playwright E2E suite, across 4 test projects
 
 ---
@@ -138,8 +138,10 @@ Unlike a tool-schema approach, agents here communicate structure through **promp
                                  ▼
                     ┌─────────────────────────┐
                     │   Anthropic Claude API   │
-                    │   claude-opus-4-6 (def.) │
-                    │   claude-haiku-4-5 (fast)│
+                    │  Opus 5.5: Architect,    │
+                    │   Developer, Reviewer    │
+                    │  Sonnet 5.5 / Haiku 5.5: │
+                    │   the other five agents  │
                     └─────────────────────────┘
 ```
 
@@ -149,7 +151,7 @@ Unlike a tool-schema approach, agents here communicate structure through **promp
 |---|---|
 | Language / runtime | C# .NET 10 |
 | API framework | ASP.NET Core Minimal APIs, Swagger/OpenAPI |
-| LLM client | `Anthropic.SDK` (`AnthropicClient.Messages.GetClaudeMessageAsync`) |
+| LLM client | Official `Anthropic` SDK (`client.Beta.Messages.CreateStreaming(...).Aggregate()`), per-agent model + effort, server-side fallback, usage/cost tracking |
 | Frontend | Blazor Server (interactive, no separate JS SPA) |
 | Streaming | `IAsyncEnumerable<string>` over `System.Threading.Channels.Channel<string>` → SSE |
 | Session persistence | `ISessionRepository` → `FileSessionRepository` (JSON files, pluggable for a real DB later) |
@@ -343,7 +345,7 @@ MultiAgentDevTeam/
 
 If the interviewer wants to go deeper, be ready to discuss:
 
-- **Agent design**: why `BaseAgent` centralizes the Claude call and what each concrete agent actually varies (`SystemPrompt`, `Model`, `MaxTokens`)
+- **Agent design**: why `BaseAgent` centralizes the Claude call and what each concrete agent actually varies (`SystemPrompt` and `DefaultSettings`: model, effort, max tokens, prompt caching — overridable per agent via `AgentConfiguration:Agents`)
 - **Streaming**: how one `Channel<string>` backs both the blocking and SSE endpoints without duplicating pipeline logic
 - **The feedback loop**: exact gate condition (`StartsWith("APPROVED")`), why prompt convention was chosen over a tool-call schema here
 - **Testing strategy**: mocking at the HTTP boundary vs. the SDK boundary, and why that distinction matters for confidence in tests

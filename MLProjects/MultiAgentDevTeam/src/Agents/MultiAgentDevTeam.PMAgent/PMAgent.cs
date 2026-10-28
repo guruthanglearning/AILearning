@@ -1,16 +1,27 @@
-using Anthropic.SDK;
+using Anthropic;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using MultiAgentDevTeam.Shared.Agents;
+using MultiAgentDevTeam.Shared.Configuration;
 using MultiAgentDevTeam.Shared.Models;
 
 namespace MultiAgentDevTeam.PMAgent;
 
 public class PMAgent : BaseAgent
 {
-    public PMAgent(AnthropicClient client, ILogger<PMAgent> logger) : base(client, logger) { }
+    public PMAgent(AnthropicClient client, ILogger<PMAgent> logger, IOptions<AgentConfiguration> options)
+        : base(client, logger, options) { }
 
     public override string Name => "Product Manager";
     public override ArtifactType OutputType => ArtifactType.Requirements;
+
+    // Requirements extraction is structured analysis; Sonnet handles it at a fraction of Opus cost
+    protected override AgentModelSettings DefaultSettings => new()
+    {
+        Model = "claude-sonnet-5-5",
+        Effort = "medium",
+        MaxTokens = 16000
+    };
 
     protected override string SystemPrompt => """
         You are a senior product manager at a software company.

@@ -311,6 +311,8 @@ Access:
 - Swagger UI: http://localhost:5000
 - Logs: `docker logs -f orchestrator`
 
+Saved sessions live in the `docker_sessions` volume, so they survive rebuilds and `-Down`. To delete them: `docker volume rm docker_sessions`.
+
 ---
 
 ### Option 3 — Kubernetes (Docker Desktop)
@@ -325,6 +327,8 @@ Access:
 # Tear everything down
 .\scripts\deploy-k8s.ps1 -Down
 ```
+
+Saved sessions live in the `sessions` PersistentVolumeClaim (`k8s/pvc.yaml`), so they survive pod restarts and redeploys. `-Down` deletes the namespace and the sessions with it.
 
 Access:
 - Swagger UI: http://localhost:30080
@@ -590,6 +594,7 @@ MultiAgentDevTeam/
 │   ├── namespace.yaml
 │   ├── secret.example.yaml                # Example only; deploy-k8s.ps1 creates the real Secret
 │   ├── configmap.yaml
+│   ├── pvc.yaml                           # Volume for saved sessions
 │   ├── deployment.yaml                    # Orchestrator deployment
 │   └── service.yaml                       # NodePort (localhost:30080)
 │

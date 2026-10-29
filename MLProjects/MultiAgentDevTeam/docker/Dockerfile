@@ -32,8 +32,9 @@ WORKDIR /app
 # Install curl for healthcheck, then drop to non-root user
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
 
-# Run as non-root user for security (Debian-based image uses groupadd/useradd)
-RUN groupadd --system appgroup && useradd --system --gid appgroup --no-create-home appuser \
+# Run as non-root user for security (Debian-based image uses groupadd/useradd).
+# Fixed ids so k8s/deployment.yaml can run as this same user and write /app/sessions.
+RUN groupadd --system --gid 10001 appgroup && useradd --system --uid 10001 --gid appgroup --no-create-home appuser \
     && mkdir -p /app/sessions && chown appuser:appgroup /app/sessions
 USER appuser
 

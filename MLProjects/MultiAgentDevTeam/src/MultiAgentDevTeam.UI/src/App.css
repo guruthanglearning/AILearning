@@ -56,3 +56,5 @@ textarea.form-control { resize: vertical; }
 .badge-success { background: #d1e7dd; color: #0a3622; }
 .badge-danger { background: #f8d7da; color: #842029; }
 .error { color: #842029; }
+.agent-log { margin: 1rem 0; }
+.agent-log summary { cursor: pointer; font-weight: 600; }

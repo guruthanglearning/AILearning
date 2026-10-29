@@ -17,6 +17,7 @@ async function* failingStream(): AsyncGenerator<string> {
 describe('App', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    window.history.pushState(null, '', '/')
     vi.spyOn(sessionApi, 'listSessions').mockResolvedValue([])
   })
 
@@ -116,5 +117,44 @@ describe('App', () => {
     // AbortError → setState('idle') → form is shown, no error banner
     await waitFor(() => expect(screen.getByTestId('pipeline-form')).toBeInTheDocument())
     expect(screen.queryByTestId('error-message')).not.toBeInTheDocument()
+  })
+
+  it('opens a session from past sessions and goes back', async () => {
+    const sessionId = '68b58a96-3422-4ec9-a870-6a392930e392'
+    vi.spyOn(sessionApi, 'listSessions').mockResolvedValue([
+      { sessionId, requirement: 'Hello World', success: true, artifactCount: 9, totalDuration: '00:03:48', startedAt: '2026-10-28T22:53:25Z' }
+    ])
+    vi.spyOn(sessionApi, 'getSession').mockResolvedValue({
+      sessionId, requirement: 'Hello World', startedAt: '2026-10-28T22:53:25Z', success: true,
+      artifacts: {}, agentLog: [], totalDuration: '00:03:48',
+      requirements: [{ id: 'FR-1', text: 'Print it', kind: 'Code', status: 'Passed', coveredBy: [], source: 'Product Manager' }]
+    })
+    render(<App />)
+    fireEvent.click(screen.getByText('Past Sessions'))
+    await waitFor(() => expect(screen.getByTestId('session-link')).toBeInTheDocument())
+    fireEvent.click(screen.getByTestId('session-link'))
+    await waitFor(() => expect(screen.getByTestId('requirements-section')).toBeInTheDocument())
+    expect(window.location.pathname).toBe(`/sessions/${sessionId}`)
+    fireEvent.click(screen.getByTestId('back-btn'))
+    await waitFor(() => expect(screen.getByTestId('sessions-table')).toBeInTheDocument())
+    expect(window.location.pathname).toBe('/sessions')
+  })
+
+  it('opens the session named in the URL on load', async () => {
+    const sessionId = '68b58a96-3422-4ec9-a870-6a392930e392'
+    window.history.pushState(null, '', `/sessions/${sessionId}`)
+    const getSession = vi.spyOn(sessionApi, 'getSession').mockResolvedValue(null)
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('session-error')).toBeInTheDocument())
+    expect(getSession).toHaveBeenCalledWith(sessionId)
+  })
+
+  it('follows the browser back button', async () => {
+    render(<App />)
+    fireEvent.click(screen.getByText('Past Sessions'))
+    await waitFor(() => expect(screen.getByTestId('no-sessions')).toBeInTheDocument())
+    window.history.pushState(null, '', '/')
+    window.dispatchEvent(new PopStateEvent('popstate'))
+    await waitFor(() => expect(screen.getByTestId('pipeline-form')).toBeInTheDocument())
   })
 })

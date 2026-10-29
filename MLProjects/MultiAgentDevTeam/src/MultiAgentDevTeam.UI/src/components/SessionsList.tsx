@@ -2,7 +2,11 @@ import { useEffect, useState } from 'react'
 import type { SessionSummary } from '../types/api'
 import { listSessions } from '../services/sessionApi'
 
-export function SessionsList() {
+interface Props {
+  onSelect?: (sessionId: string) => void
+}
+
+export function SessionsList({ onSelect }: Props) {
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -33,7 +37,15 @@ export function SessionsList() {
       <tbody>
         {sessions.map(s => (
           <tr key={s.sessionId} data-testid="session-row">
-            <td><a href={`/sessions/${s.sessionId}`}>{s.sessionId.slice(0, 8)}…</a></td>
+            <td>
+              <a
+                href={`/sessions/${s.sessionId}`}
+                data-testid="session-link"
+                onClick={e => { if (onSelect) { e.preventDefault(); onSelect(s.sessionId) } }}
+              >
+                {s.sessionId.slice(0, 8)}…
+              </a>
+            </td>
             <td>{s.requirement}</td>
             <td>
               <span className={`badge ${s.success ? 'badge-success' : 'badge-danger'}`}>

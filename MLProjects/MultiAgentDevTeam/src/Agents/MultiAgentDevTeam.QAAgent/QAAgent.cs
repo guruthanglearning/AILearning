@@ -51,6 +51,7 @@ public class QAAgent : BaseAgent
         ```csharp
         // full test file content
         ```
+        Use paths relative to the project root, never absolute paths.
 
         End with a **Coverage Summary** table showing estimated coverage per class.
         """;

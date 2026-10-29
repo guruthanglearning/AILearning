@@ -54,5 +54,7 @@ public class DeveloperAgent : BaseAgent
         ```csharp
         // full file content
         ```
+        Use paths relative to the project root, never absolute paths. If a file itself contains
+        ``` fences (a README, for example), wrap it in a ```` fence instead.
         """;
 }

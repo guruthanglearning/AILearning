@@ -44,6 +44,7 @@ public class DevOpsAgent : BaseAgent
         ```yaml
         # or dockerfile content
         ```
+        Use paths relative to the project root, never absolute paths.
 
         Follow best practices: non-root user in containers, .dockerignore,
         image scanning, secrets via K8s Secrets (never in ConfigMaps),

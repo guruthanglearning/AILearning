@@ -225,6 +225,30 @@ public static class RequirementTracking
         return results;
     }
 
+    /// <summary>
+    /// Once the orchestrator has written the project to the folder the request named, an action
+    /// requirement about that folder ("create the project under D:\Temp\App") is proven, not manual.
+    /// </summary>
+    public static List<RequirementResult> MarkProjectWritten(
+        IEnumerable<RequirementResult> results, string requestedFolder, string writtenFolder, int fileCount,
+        string writer = "Orchestrator")
+    {
+        static string Normalize(string s) => s.Replace('/', '\\').TrimEnd('\\').ToLowerInvariant();
+        var folder = Normalize(requestedFolder);
+        // A bare drive ("d:") would match unrelated text such as "Add: ..."
+        var matchable = folder.Length > 2;
+
+        return results.Select(r =>
+            matchable && r.Kind == RequirementKind.Action && Normalize(r.Text).Contains(folder)
+                ? r with
+                {
+                    Status = RequirementStatus.Passed,
+                    Evidence = $"{fileCount} files written to {writtenFolder}",
+                    CoveredBy = r.CoveredBy.Append(writer).Distinct().ToList()
+                }
+                : r).ToList();
+    }
+
     /// <summary>A compact JSON copy of the checklist, for agents that don't receive the full Requirements.</summary>
     public static string ToJson(IEnumerable<RequirementItem> checklist) =>
         JsonSerializer.Serialize(checklist, new JsonSerializerOptions

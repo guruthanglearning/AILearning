@@ -38,7 +38,8 @@ public class VerifierAgent : BaseAgent
              (for example a different framework or version than required).
            - manual: it asks for something done outside the produced files, such as writing to a
              folder on the user's machine, opening or running the app, or deploying. Files can't
-             prove that happened.
+             prove that happened. Exception: when the context has ProjectOutput, the orchestrator
+             really wrote those files to that folder, so creating the project there is passed.
         3. Be strict. A coverage claim is not evidence on its own: check the artifact it points to.
 
         Output a short markdown table (id, status, evidence), then end with a fenced block in exactly

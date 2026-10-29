@@ -29,13 +29,15 @@ public class OrchestratorService : IOrchestratorService
     private readonly IAgent? _verifierAgent;
     private readonly AgentConfiguration _config;
     private readonly ISessionRepository _sessions;
+    private readonly IProjectWriter? _projectWriter;
     private readonly ILogger<OrchestratorService> _logger;
 
     public OrchestratorService(
         IEnumerable<IAgent> agents,
         IOptions<AgentConfiguration> config,
         ISessionRepository sessions,
-        ILogger<OrchestratorService> logger)
+        ILogger<OrchestratorService> logger,
+        IProjectWriter? projectWriter = null)
     {
         var agentList = agents.ToList();
         _pmAgent        = GetAgent(agentList, ArtifactType.Requirements);
@@ -50,6 +52,7 @@ public class OrchestratorService : IOrchestratorService
         _verifierAgent  = agentList.FirstOrDefault(a => a.OutputType == ArtifactType.VerificationReport);
         _config         = config.Value;
         _sessions       = sessions;
+        _projectWriter  = projectWriter;
         _logger         = logger;
     }
 
@@ -269,6 +272,15 @@ public class OrchestratorService : IOrchestratorService
                      })
                 claims.AddRange(RequirementTracking.ParseCoverage(store.GetContent(type), agent.Name));
 
+            // ── Write the project to disk ──────────────────────────────────────
+            ProjectWriteResult? output = null;
+            if (_projectWriter is not null)
+            {
+                output = await _projectWriter.WriteAsync(request.Requirement, store.SessionId,
+                    store.All.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Content), ct);
+                await Report(log, progress, output.Message, ct);
+            }
+
             // ── Phase 7: Acceptance check ──────────────────────────────────────
             List<VerificationEntry>? verification = null;
             if (_verifierAgent is not null && !ShouldSkip(request, "verifier"))
@@ -281,6 +293,9 @@ public class OrchestratorService : IOrchestratorService
                 if (claims.Count > 0)
                     context["CoverageClaims"] = string.Join("\n",
                         claims.Select(c => $"- {c.AgentName} / {c.RequirementId}: {c.Evidence}"));
+                if (output is { Written: true })
+                    context["ProjectOutput"] = $"The orchestrator wrote these files to {output.Folder}:\n" +
+                        string.Join("\n", output.Files.Select(f => $"- {f}"));
 
                 await RunAgent(usage, _verifierAgent, store, log, progress,
                     new AgentRequest
@@ -296,6 +311,9 @@ public class OrchestratorService : IOrchestratorService
 
             requirements = RequirementTracking.Evaluate(
                 checklist ?? [], claims, verification, _pmAgent.Name, _verifierAgent?.Name ?? "Verifier");
+            if (output is { Written: true, RequestedFolder: not null })
+                requirements = RequirementTracking.MarkProjectWritten(
+                    requirements, output.RequestedFolder, output.Folder!, output.Files.Count);
             await ReportRequirementsAsync(requirements, log, progress, ct);
 
             stopwatch.Stop();

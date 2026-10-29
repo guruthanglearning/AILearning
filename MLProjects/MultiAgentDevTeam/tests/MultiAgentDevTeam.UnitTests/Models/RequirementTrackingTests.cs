@@ -254,4 +254,34 @@ public class RequirementTrackingTests
         new OrchestratorResponse { Requirements = [new() { Status = RequirementStatus.Failed }] }
             .RequirementsMet.Should().BeFalse();
     }
+
+    [Fact]
+    public void MarkProjectWritten_PassesOnlyActionsAboutTheRequestedFolder()
+    {
+        List<RequirementResult> results =
+        [
+            new() { Id = "FR-1", Text = "Print it", Kind = RequirementKind.Code, Status = RequirementStatus.Passed },
+            new() { Id = "FR-3", Text = "Project created under d:/temp/app", Kind = RequirementKind.Action,
+                    Status = RequirementStatus.Manual, CoveredBy = ["Software Developer"] },
+            new() { Id = "FR-4", Text = "Run the app", Kind = RequirementKind.Action, Status = RequirementStatus.Manual },
+            new() { Id = "FR-5", Text = @"Code mentions D:\Temp\App", Kind = RequirementKind.Code, Status = RequirementStatus.Failed }
+        ];
+
+        var marked = RequirementTracking.MarkProjectWritten(results, @"D:\Temp\App\", @"D:\Temp\App", 7);
+
+        marked.Select(r => r.Status).Should().Equal(
+            RequirementStatus.Passed, RequirementStatus.Passed, RequirementStatus.Manual, RequirementStatus.Failed);
+        marked[1].Evidence.Should().Be(@"7 files written to D:\Temp\App");
+        marked[1].CoveredBy.Should().Equal("Software Developer", "Orchestrator");
+    }
+
+    [Fact]
+    public void MarkProjectWritten_BareDriveMatchesNothing()
+    {
+        List<RequirementResult> results =
+            [new() { Id = "FR-1", Text = "Add: a greeting", Kind = RequirementKind.Action, Status = RequirementStatus.Manual }];
+
+        RequirementTracking.MarkProjectWritten(results, @"D:\", @"D:\hello-1a2b3c4d", 3)
+            .Single().Status.Should().Be(RequirementStatus.Manual);
+    }
 }

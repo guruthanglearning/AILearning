@@ -58,6 +58,7 @@ builder.Services.AddTransient<IAgent, VerifierAgent>();
 
 // ── Orchestrator + Session Repository ─────────────────────────────────────────
 builder.Services.AddSingleton<ISessionRepository, FileSessionRepository>();
+builder.Services.AddSingleton<IProjectWriter, ProjectWriter>();
 builder.Services.AddTransient<IOrchestratorService, OrchestratorService>();
 
 // ── Rate Limiting ──────────────────────────────────────────────────────────────

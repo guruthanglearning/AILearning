@@ -55,7 +55,7 @@ Phase 6: Docs Agent         → Documentation
 Phase 7: Verifier Agent     → Per-requirement verdicts (passed / failed / manual)
 ```
 
-Requirement tracking (`Shared/Models/RequirementTracking.cs`): the PM ends its output with a `requirements-checklist` JSON block; Developer/QA/DevOps end theirs with a `## Requirement Coverage` section (`ReportsRequirementCoverage` in `BaseAgent`); the orchestrator sends unclaimed `code` requirements back to the Developer before review, then combines claims with the Verifier's `verification-results` block into `OrchestratorResponse.Requirements`.
+Requirement tracking (`Shared/Models/RequirementTracking.cs`): the PM ends its output with a `requirements-checklist` JSON block; Developer/QA/DevOps/Docs end theirs with a `## Requirement Coverage` section (`ReportsRequirementCoverage` in `BaseAgent`); the orchestrator sends unclaimed `code` requirements back to the Developer before review, then combines claims with the Verifier's `verification-results` block into `OrchestratorResponse.Requirements`.
 
 ### Key Directories
 

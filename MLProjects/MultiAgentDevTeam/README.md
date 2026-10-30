@@ -124,7 +124,7 @@ Every run checks that each instruction in the request was actually carried out, 
    - `test`: needs a test
    - `action`: done outside the generated files, such as writing to a folder, running the app or deploying
    If the request names no platform, the PM adds the team default (C# on .NET 10) as a requirement.
-2. **Coverage claims.** Developer, QA and DevOps end their output with a `## Requirement Coverage` section that maps each id to the file or test that satisfies it, or `N/A` with a reason.
+2. **Coverage claims.** Developer, QA, DevOps and Docs end their output with a `## Requirement Coverage` section that maps each id to the file or test that satisfies it, or `N/A` with a reason.
 3. **Coverage gate.** If the Developer leaves a `code` requirement unclaimed, the orchestrator sends it straight back with the missing items, before paying for a review. This uses the same retry budget as review rejections.
 4. **Verifier.** The Acceptance Verifier (Sonnet) reads the original request word for word, the checklist, the claims and the artifacts. It marks each requirement `passed`, `failed` or `manual`, and adds a `MISSED-n` entry for any instruction the checklist dropped.
 5. **Result.** The run log ends with one line per requirement, and the response and saved session carry `requirements` plus `requirementsMet`. Both UIs show the results as a table.

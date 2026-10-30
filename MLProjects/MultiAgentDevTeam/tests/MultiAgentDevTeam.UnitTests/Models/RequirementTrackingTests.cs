@@ -284,4 +284,36 @@ public class RequirementTrackingTests
         RequirementTracking.MarkProjectWritten(results, @"D:\", @"D:\hello-1a2b3c4d", 3)
             .Single().Status.Should().Be(RequirementStatus.Manual);
     }
+
+    [Theory]
+    [InlineData(@"Build and run the application in D:\Temp\App", RequirementStatus.Manual)]
+    [InlineData(@"Open D:\Temp\App in Visual Studio", RequirementStatus.Manual)]
+    [InlineData(@"Back it up to D:\Temp\AppBackup", RequirementStatus.Manual)]
+    [InlineData(@"Put the tests in D:\Temp\App\tests", RequirementStatus.Manual)]
+    [InlineData(@"Create the project in D:\Temp\App.", RequirementStatus.Passed)]
+    [InlineData(@"Save it to ""D:\Temp\App""", RequirementStatus.Passed)]
+    [InlineData(@"Place it under D:\Temp\App\", RequirementStatus.Passed)]
+    public void MarkProjectWritten_OnlyPassesPlacingFilesInExactlyThatFolder(string text, RequirementStatus expected)
+    {
+        List<RequirementResult> results =
+            [new() { Id = "FR-1", Text = text, Kind = RequirementKind.Action, Status = RequirementStatus.Manual }];
+
+        RequirementTracking.MarkProjectWritten(results, @"D:\Temp\App", @"D:\Temp\App", 3)
+            .Single().Status.Should().Be(expected);
+    }
+
+    [Fact]
+    public void MarkProjectWritten_KeepsTheVerifiersFailure()
+    {
+        List<RequirementResult> results =
+        [
+            new() { Id = "FR-1", Text = @"Create it in D:\Temp\App", Kind = RequirementKind.Action,
+                    Status = RequirementStatus.Failed, Evidence = "Wrong framework" }
+        ];
+
+        var marked = RequirementTracking.MarkProjectWritten(results, @"D:\Temp\App", @"D:\Temp\App", 3).Single();
+
+        marked.Status.Should().Be(RequirementStatus.Failed);
+        marked.Evidence.Should().Be("Wrong framework");
+    }
 }

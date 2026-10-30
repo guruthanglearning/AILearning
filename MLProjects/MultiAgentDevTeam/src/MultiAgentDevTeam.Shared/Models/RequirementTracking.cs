@@ -96,6 +96,11 @@ public static class RequirementTracking
         ReadCommentHandling = JsonCommentHandling.Skip
     };
 
+    // Writing the files proves where they went, not that the app was built, run or shipped
+    private static readonly Regex DoesMoreThanPlaceFiles = new(
+        @"\b(build|compile|run|execute|launch|start|test|open|deploy|install|publish|push|host)\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     private static readonly Regex CoverageHeadingLine = new(
         @"^#{1,4}\s*\**\s*Requirement Coverage\b.*$", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
@@ -228,6 +233,8 @@ public static class RequirementTracking
     /// <summary>
     /// Once the orchestrator has written the project to the folder the request named, an action
     /// requirement about that folder ("create the project under D:\Temp\App") is proven, not manual.
+    /// Only placing the files is proven: an action that also builds, runs or deploys stays as it was,
+    /// and so does one the Verifier failed.
     /// </summary>
     public static List<RequirementResult> MarkProjectWritten(
         IEnumerable<RequirementResult> results, string requestedFolder, string writtenFolder, int fileCount,
@@ -236,10 +243,14 @@ public static class RequirementTracking
         static string Normalize(string s) => s.Replace('/', '\\').TrimEnd('\\').ToLowerInvariant();
         var folder = Normalize(requestedFolder);
         // A bare drive ("d:") would match unrelated text such as "Add: ..."
-        var matchable = folder.Length > 2;
+        if (folder.Length <= 2) return results.ToList();
+
+        // The whole folder, so D:\Temp\App doesn't match D:\Temp\AppBackup or D:\Temp\App\src
+        var mentionsFolder = new Regex(Regex.Escape(folder) + @"\\?(?=$|[\s""'`),;:!?]|\.(?:\s|$))");
 
         return results.Select(r =>
-            matchable && r.Kind == RequirementKind.Action && Normalize(r.Text).Contains(folder)
+            r.Kind == RequirementKind.Action && r.Status != RequirementStatus.Failed
+            && mentionsFolder.IsMatch(Normalize(r.Text)) && !DoesMoreThanPlaceFiles.IsMatch(r.Text)
                 ? r with
                 {
                     Status = RequirementStatus.Passed,

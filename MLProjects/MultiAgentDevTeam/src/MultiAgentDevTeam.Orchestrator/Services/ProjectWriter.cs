@@ -81,6 +81,11 @@ public partial class ProjectWriter : IProjectWriter
             };
 
         var folder = requested ?? JoinHost(_options.DefaultRoot, FolderName(requirement, sessionId));
+        if (HasParentSegment(folder))
+            return Failed(requested, $"{folder} uses \"..\". Name the folder directly");
+
+        // One run at a time picks and fills its folder, so two runs can't both claim the same empty one
+        await WriteLock.WaitAsync(ct);
         try
         {
             var local = ToLocalPath(folder, _options.HostDrivesPath);
@@ -88,11 +93,14 @@ public partial class ProjectWriter : IProjectWriter
                 return Failed(requested, $"the service can't reach {folder}. Only drives shared with it can be written to");
 
             // Never mix generated files into a folder that already has content
-            if (Directory.Exists(local) && Directory.EnumerateFileSystemEntries(local).Any())
+            var name = FolderName(requirement, sessionId);
+            var baseFolder = folder;
+            var baseLocal = local;
+            for (var n = 1; HasContent(local); n++)
             {
-                var name = FolderName(requirement, sessionId);
-                folder = JoinHost(folder, name);
-                local = Path.Combine(local, name);
+                var candidate = n == 1 ? name : $"{name}-{n}";
+                folder = JoinHost(baseFolder, candidate);
+                local = Path.Combine(baseLocal, candidate);
             }
 
             var root = Path.GetFullPath(local);
@@ -102,7 +110,10 @@ public partial class ProjectWriter : IProjectWriter
                 if (!target.StartsWith(root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
                     continue;
                 Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                await File.WriteAllTextAsync(target, file.Content, new UTF8Encoding(false), ct);
+                // CreateNew: a file something else put there in the meantime is an error, never overwritten
+                await using var stream = new FileStream(target, FileMode.CreateNew, FileAccess.Write);
+                await using var writer = new StreamWriter(stream, new UTF8Encoding(false));
+                await writer.WriteAsync(file.Content.AsMemory(), ct);
             }
 
             _logger.LogInformation("Wrote {Count} project files for session {SessionId} to {Folder}", files.Count, sessionId, folder);
@@ -120,7 +131,19 @@ public partial class ProjectWriter : IProjectWriter
             _logger.LogWarning(ex, "Could not write the project for session {SessionId} to {Folder}", sessionId, folder);
             return Failed(requested, $"{ex.Message}");
         }
+        finally
+        {
+            WriteLock.Release();
+        }
     }
+
+    private static readonly SemaphoreSlim WriteLock = new(1, 1);
+
+    private static bool HasContent(string path) =>
+        File.Exists(path) || (Directory.Exists(path) && Directory.EnumerateFileSystemEntries(path).Any());
+
+    private static bool HasParentSegment(string path) =>
+        path.Split('\\', '/').Any(s => s == "..");
 
     private static ProjectWriteResult Failed(string? requested, string reason) => new()
     {
@@ -161,10 +184,21 @@ public partial class ProjectWriter : IProjectWriter
     public static List<ProjectFile> ParseFiles(string artifact) =>
         FileBlock().Matches(artifact)
             .Select(m => new ProjectFile(
-                m.Groups["path"].Value.Trim().Trim('`', '*', '"', '\'').Split([' ', '\t'], 2)[0],
+                HeaderPath(m.Groups["path"].Value),
                 m.Groups["body"].Value.ReplaceLineEndings("\n") + "\n"))
             .Where(f => f.Path.Length > 0)
             .ToList();
+
+    // `src/My App/Program.cs` (new) keeps its spaces; an unquoted path drops a trailing note such as
+    // "(updated)" or "- entry point"
+    [GeneratedRegex(@"^\**\s*(?:(?<q>[`""'])(?<path>[^`""'\r\n]+)\k<q>.*|(?<path>.+?)(?:\s+(?:\(|-\s|—|–|#).*)?\s*\**\s*)$")]
+    private static partial Regex HeaderPathPattern();
+
+    private static string HeaderPath(string header)
+    {
+        var match = HeaderPathPattern().Match(header.Trim());
+        return match.Success ? match.Groups["path"].Value.Trim().Trim('*') : string.Empty;
+    }
 
     /// <summary>
     /// A safe path inside the project folder, or null. An agent that repeats the requested folder
@@ -234,6 +268,8 @@ public partial class ProjectWriter : IProjectWriter
         if (!Directory.Exists(driveRoot)) return null;
 
         var rest = drive.Groups["rest"].Value.Replace('\\', '/').Trim('/');
+        // "/host/c/../../tmp" would leave the shared drives
+        if (rest.Split('/').Contains("..")) return null;
         return rest.Length == 0 ? driveRoot : $"{driveRoot}/{rest}";
     }
 

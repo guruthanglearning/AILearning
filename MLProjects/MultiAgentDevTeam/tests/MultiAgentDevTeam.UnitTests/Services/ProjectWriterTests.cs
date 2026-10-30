@@ -195,6 +195,51 @@ public sealed class ProjectWriterTests : IDisposable
         result.Message.Should().StartWith("⚠️ Could not write the project files:");
     }
 
+    [Theory]
+    [InlineData(@"Create it under C:\..\..\tmp\payload")]
+    [InlineData(@"Create it under D:\Temp\App\..\..\Windows")]
+    public async Task WriteAsync_RequestedFolderWithParentSegments_IsRefused(string requirement)
+    {
+        var drives = Path.Combine(_temp, "host");
+        Directory.CreateDirectory(Path.Combine(drives, "c"));
+        Directory.CreateDirectory(Path.Combine(drives, "d"));
+
+        var result = await Writer(o => o.HostDrivesPath = drives.Replace('\\', '/'))
+            .WriteAsync(requirement, SessionId, Artifacts());
+
+        result.Written.Should().BeFalse();
+        result.Message.Should().Contain("uses \"..\"");
+        Directory.EnumerateFiles(_temp, "*", SearchOption.AllDirectories).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task WriteAsync_SubfolderAlsoTaken_PicksTheNextFreeName()
+    {
+        var folder = Path.Combine(_temp, "Existing");
+        Directory.CreateDirectory(Path.Combine(folder, "hello-world-1a2b3c4d"));
+        File.WriteAllText(Path.Combine(folder, "hello-world-1a2b3c4d", "keep.txt"), "mine");
+
+        var result = await Writer().WriteAsync($"Hello World in {folder}", SessionId, Artifacts());
+
+        result.Folder.Should().Be(Path.Combine(folder, "hello-world-1a2b3c4d-2"));
+        File.ReadAllText(Path.Combine(folder, "hello-world-1a2b3c4d", "keep.txt")).Should().Be("mine");
+    }
+
+    [Fact]
+    public async Task WriteAsync_TwoRunsToTheSameEmptyFolder_GetSeparateFolders()
+    {
+        var folder = Path.Combine(_temp, "Shared");
+        var writer = Writer();
+
+        var results = await Task.WhenAll(
+            writer.WriteAsync($"Hello World in {folder}", SessionId, Artifacts()),
+            writer.WriteAsync($"Hello World in {folder}", Guid.Parse("9f8e7d6c-0000-0000-0000-000000000000"), Artifacts()));
+
+        results.Should().OnlyContain(r => r.Written);
+        results.Select(r => r.Folder).Should().OnlyHaveUniqueItems();
+        results.Should().OnlyContain(r => File.Exists(Path.Combine(r.Folder!, "src", "App", "Program.cs")));
+    }
+
     // ── Parsing ────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -219,6 +264,20 @@ public sealed class ProjectWriterTests : IDisposable
         var text = "## File: src/A.cs (updated)\r\n```csharp\r\nclass A {}\r\n```\r\n";
 
         ProjectWriter.ParseFiles(text).Should().Equal(new ProjectFile("src/A.cs", "class A {}\n"));
+    }
+
+    [Theory]
+    [InlineData("`src/My App/Program.cs`", "src/My App/Program.cs")]
+    [InlineData("\"src/My App/Program.cs\" (new)", "src/My App/Program.cs")]
+    [InlineData("**`src/A.cs`**", "src/A.cs")]
+    [InlineData("**src/A.cs**", "src/A.cs")]
+    [InlineData("src/My App/Program.cs", "src/My App/Program.cs")]
+    [InlineData("src/A.cs - entry point", "src/A.cs")]
+    [InlineData("src/A.cs — entry point", "src/A.cs")]
+    [InlineData("src/my-app/A.cs", "src/my-app/A.cs")]
+    public void ParseFiles_KeepsTheWholePathAndDropsNotes(string header, string expected)
+    {
+        ProjectWriter.ParseFiles($"### File: {header}\n```\nx\n```\n").Single().Path.Should().Be(expected);
     }
 
     [Fact]
@@ -298,5 +357,6 @@ public sealed class ProjectWriterTests : IDisposable
         ProjectWriter.ToLocalPath(@"c:\", drives).Should().Be($"{drives}/c");
         ProjectWriter.ToLocalPath(@"D:\Temp", drives).Should().BeNull();
         ProjectWriter.ToLocalPath("relative/path", drives).Should().BeNull();
+        ProjectWriter.ToLocalPath(@"C:\..\..\tmp", drives).Should().BeNull();
     }
 }

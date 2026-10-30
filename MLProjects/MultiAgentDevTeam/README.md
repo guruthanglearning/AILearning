@@ -592,7 +592,7 @@ MultiAgentDevTeam/
 │
 ├── k8s/
 │   ├── namespace.yaml
-│   ├── secret.example.yaml                # Example only; deploy-k8s.ps1 creates the real Secret
+│   ├── secret.yaml.example                # Example only; deploy-k8s.ps1 creates the real Secret
 │   ├── configmap.yaml
 │   ├── pvc.yaml                           # Volume for saved sessions
 │   ├── deployment.yaml                    # Orchestrator deployment

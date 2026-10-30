@@ -96,7 +96,12 @@ public static class RequirementTracking
         ReadCommentHandling = JsonCommentHandling.Skip
     };
 
-    // Writing the files proves where they went, not that the app was built, run or shipped
+    // Writing the files proves where they went, not that the app was built, run or shipped, so only
+    // an action that asks to put the project somewhere qualifies
+    private static readonly Regex PlacesFiles = new(
+        @"\b(creat\w*|put|puts|plac\w*|sav\w*|writ\w*|wrote|generat\w*|scaffold\w*|stor\w*|output|locat\w*)\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     private static readonly Regex DoesMoreThanPlaceFiles = new(
         @"\b(build|compile|run|execute|launch|start|test|open|deploy|install|publish|push|host)\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -250,7 +255,8 @@ public static class RequirementTracking
 
         return results.Select(r =>
             r.Kind == RequirementKind.Action && r.Status != RequirementStatus.Failed
-            && mentionsFolder.IsMatch(Normalize(r.Text)) && !DoesMoreThanPlaceFiles.IsMatch(r.Text)
+            && mentionsFolder.IsMatch(Normalize(r.Text))
+            && PlacesFiles.IsMatch(r.Text) && !DoesMoreThanPlaceFiles.IsMatch(r.Text)
                 ? r with
                 {
                     Status = RequirementStatus.Passed,

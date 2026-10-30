@@ -290,6 +290,8 @@ public class RequirementTrackingTests
     [InlineData(@"Open D:\Temp\App in Visual Studio", RequirementStatus.Manual)]
     [InlineData(@"Back it up to D:\Temp\AppBackup", RequirementStatus.Manual)]
     [InlineData(@"Put the tests in D:\Temp\App\tests", RequirementStatus.Manual)]
+    [InlineData(@"Delete temporary files in D:\Temp\App", RequirementStatus.Manual)]
+    [InlineData(@"D:\Temp\App must be backed up nightly", RequirementStatus.Manual)]
     [InlineData(@"Create the project in D:\Temp\App.", RequirementStatus.Passed)]
     [InlineData(@"Save it to ""D:\Temp\App""", RequirementStatus.Passed)]
     [InlineData(@"Place it under D:\Temp\App\", RequirementStatus.Passed)]

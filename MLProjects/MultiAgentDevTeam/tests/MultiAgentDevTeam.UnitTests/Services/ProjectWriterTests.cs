@@ -275,6 +275,9 @@ public sealed class ProjectWriterTests : IDisposable
     [InlineData("src/A.cs - entry point", "src/A.cs")]
     [InlineData("src/A.cs — entry point", "src/A.cs")]
     [InlineData("src/my-app/A.cs", "src/my-app/A.cs")]
+    [InlineData("`src/John's/Program.cs`", "src/John's/Program.cs")]
+    [InlineData("\"src/John's App/Program.cs\"", "src/John's App/Program.cs")]
+    [InlineData("'src/A.cs' (new)", "src/A.cs")]
     public void ParseFiles_KeepsTheWholePathAndDropsNotes(string header, string expected)
     {
         ProjectWriter.ParseFiles($"### File: {header}\n```\nx\n```\n").Single().Path.Should().Be(expected);

@@ -191,7 +191,7 @@ public partial class ProjectWriter : IProjectWriter
 
     // `src/My App/Program.cs` (new) keeps its spaces; an unquoted path drops a trailing note such as
     // "(updated)" or "- entry point"
-    [GeneratedRegex(@"^\**\s*(?:(?<q>[`""'])(?<path>[^`""'\r\n]+)\k<q>.*|(?<path>.+?)(?:\s+(?:\(|-\s|—|–|#).*)?\s*\**\s*)$")]
+    [GeneratedRegex(@"^\**\s*(?:`(?<path>[^`\r\n]+)`.*|""(?<path>[^""\r\n]+)"".*|'(?<path>[^'\r\n]+)'.*|(?<path>.+?)(?:\s+(?:\(|-\s|—|–|#).*)?\s*\**\s*)$")]
     private static partial Regex HeaderPathPattern();
 
     private static string HeaderPath(string header)

@@ -16,6 +16,7 @@
     <ProjectReference Include="..\..\src\Agents\MultiAgentDevTeam.SecurityAgent\MultiAgentDevTeam.SecurityAgent.csproj" />
     <ProjectReference Include="..\..\src\Agents\MultiAgentDevTeam.DevOpsAgent\MultiAgentDevTeam.DevOpsAgent.csproj" />
     <ProjectReference Include="..\..\src\Agents\MultiAgentDevTeam.DocsAgent\MultiAgentDevTeam.DocsAgent.csproj" />
+    <ProjectReference Include="..\..\src\Agents\MultiAgentDevTeam.VerifierAgent\MultiAgentDevTeam.VerifierAgent.csproj" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.0" />
     <PackageReference Include="Moq" Version="4.20.72" />

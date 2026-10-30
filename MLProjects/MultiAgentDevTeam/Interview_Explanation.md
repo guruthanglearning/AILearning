@@ -12,11 +12,11 @@
 
 ## 🎯 Opening Statement (30 seconds)
 
-*"I built a multi-agent AI system in C# .NET 10 that automates the software development lifecycle. You submit a plain-English requirement over HTTP, and 8 specialised Claude-backed agents — Product Manager, Architect, Developer, Reviewer, QA, Security, DevOps, and Technical Writer — run in sequence, with a Developer-Reviewer feedback loop that can send code back for revision up to 3 times, and QA/Security running in parallel once code is approved. Progress streams to a Blazor UI in real time over Server-Sent Events, every run is persisted so you can browse session history, and the whole thing deploys to Docker or Kubernetes."*
+*"I built a multi-agent AI system in C# .NET 10 that automates the software development lifecycle. You submit a plain-English requirement over HTTP, and 9 specialised Claude-backed agents — Product Manager, Architect, Developer, Reviewer, QA, Security, DevOps, Technical Writer, and an Acceptance Verifier — run in sequence, with a Developer-Reviewer feedback loop that can send code back for revision up to 3 times, QA/Security running in parallel once code is approved, and a final check that every requirement in the request was actually met. Progress streams to a Blazor UI in real time over Server-Sent Events, every run is persisted so you can browse session history, and the whole thing deploys to Docker or Kubernetes."*
 
 ---
 
-## 🤖 The Architecture: 8 Agents, 1 Orchestrator, 1 Rule
+## 🤖 The Architecture: 9 Agents, 1 Orchestrator, 1 Rule
 
 ### The One Rule: Agents Never Talk to Each Other
 
@@ -26,9 +26,9 @@ Agent A ──X──► Agent B            ← Does NOT happen
 Agent A ──► Orchestrator ──► Agent B   ← How it actually works
 ```
 
-Every agent is stateless and only ever sees what the Orchestrator hands it in an `AgentRequest`. All cross-agent communication goes through a shared **`ArtifactStore`** keyed by `ArtifactType` (Requirements, Architecture, SourceCode, ReviewNotes, TestResults, SecurityReport, DeploymentConfig, Documentation). This is a deliberate constraint, not an accident — it means every agent's input is fully reproducible and inspectable from the store, which is what makes the whole pipeline testable and debuggable.
+Every agent is stateless and only ever sees what the Orchestrator hands it in an `AgentRequest`. All cross-agent communication goes through a shared **`ArtifactStore`** keyed by `ArtifactType` (Requirements, Architecture, SourceCode, ReviewNotes, TestResults, SecurityReport, DeploymentConfig, Documentation, VerificationReport). This is a deliberate constraint, not an accident — it means every agent's input is fully reproducible and inspectable from the store, which is what makes the whole pipeline testable and debuggable.
 
-### The 8 Agents
+### The 9 Agents
 
 | Agent | Phase | Output | Real Behaviour |
 |---|---|---|---|
@@ -40,6 +40,9 @@ Every agent is stateless and only ever sees what the Orchestrator hands it in an
 | **Security Engineer** | 4 (parallel) | Security report | OWASP Top 10 audit, hardcoded-secret detection |
 | **DevOps Engineer** | 5 | Deployment config | Dockerfile, docker-compose, K8s manifests, CI/CD |
 | **Technical Writer** | 6 | Documentation | README, API reference, architecture doc |
+| **Acceptance Verifier** | 7 | Verification report | Marks every requirement passed / failed / manual against the original request; catches instructions the PM dropped |
+
+The PM also emits a machine-readable requirement checklist, and Developer, QA and DevOps must say which requirement ids their output covers. The orchestrator sends unclaimed `code` requirements back to the Developer before paying for a review, so a run can no longer report "completed" while silently skipping a requested step.
 
 Every agent inherits from a single **`BaseAgent`** abstract class (`MultiAgentDevTeam.Shared`) that owns all the Claude API plumbing — building the `MessageParameters`, calling `AnthropicClient.Messages.GetClaudeMessageAsync`, timing the call, and wrapping success/failure into a uniform `AgentResponse`. A concrete agent only supplies three things: its `Name`, its `OutputType`, and its `SystemPrompt`. This is the same discipline as the 7-agent design in my StockRecommendationPlatform project, applied to a compiled, strongly-typed language instead of Python.
 
@@ -130,7 +133,7 @@ Unlike a tool-schema approach, agents here communicate structure through **promp
 │  GET  /health              – liveness/readiness                   │
 │                                                                  │
 │  OrchestratorService: PM → Architect → [Developer ⇄ Reviewer]   │
-│                        → [QA ‖ Security] → DevOps → Docs         │
+│               → [QA ‖ Security] → DevOps → Docs → Verifier       │
 │  ArtifactStore (in-memory, per-run) · FileSessionRepository     │
 │  (JSON files under sessions/, survives restarts)                 │
 └────────────────────────────────┬─────────────────────────────────┘

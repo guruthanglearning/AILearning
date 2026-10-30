@@ -13,6 +13,7 @@
     <Project Path="src/Agents/MultiAgentDevTeam.QAAgent/MultiAgentDevTeam.QAAgent.csproj" />
     <Project Path="src/Agents/MultiAgentDevTeam.ReviewerAgent/MultiAgentDevTeam.ReviewerAgent.csproj" />
     <Project Path="src/Agents/MultiAgentDevTeam.SecurityAgent/MultiAgentDevTeam.SecurityAgent.csproj" />
+    <Project Path="src/Agents/MultiAgentDevTeam.VerifierAgent/MultiAgentDevTeam.VerifierAgent.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/MultiAgentDevTeam.IntegrationTests/MultiAgentDevTeam.IntegrationTests.csproj" />

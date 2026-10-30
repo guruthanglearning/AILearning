@@ -1,22 +1,50 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { PipelineForm } from './components/PipelineForm'
 import { ProgressLog } from './components/ProgressLog'
 import { ArtifactViewer } from './components/ArtifactViewer'
 import { SessionsList } from './components/SessionsList'
+import { RequirementsChecklist } from './components/RequirementsChecklist'
+import { SessionDetail } from './components/SessionDetail'
 import { streamPipeline } from './services/pipelineApi'
-import type { PipelineRequest } from './types/api'
+import { getSession } from './services/sessionApi'
+import type { PipelineRequest, RequirementResult } from './types/api'
 import './App.css'
 
-type Page = 'home' | 'sessions'
+type Page = 'home' | 'sessions' | 'session'
 type State = 'idle' | 'streaming' | 'completed' | 'error'
 
+// The orchestrator's first progress message names the session, so the saved results can be loaded
+const SESSION_MESSAGE = /^🆔 Session ([0-9a-f-]{36})$/i
+const SESSION_PATH = /^\/sessions\/([0-9a-f-]{36})\/?$/i
+
+// The URL picks the page so session links can be bookmarked and the back button works
+function routeFromPath(path: string): { page: Page; sessionId: string | null } {
+  const match = SESSION_PATH.exec(path)
+  if (match) return { page: 'session', sessionId: match[1] }
+  if (/^\/sessions\/?$/.test(path)) return { page: 'sessions', sessionId: null }
+  return { page: 'home', sessionId: null }
+}
+
 export function App() {
-  const [page, setPage] = useState<Page>('home')
+  const [route, setRoute] = useState(() => routeFromPath(window.location.pathname))
+  const { page, sessionId: viewedSessionId } = route
   const [state, setState] = useState<State>('idle')
   const [messages, setMessages] = useState<string[]>([])
   const [artifacts, setArtifacts] = useState<Record<string, string>>({})
+  const [requirements, setRequirements] = useState<RequirementResult[]>([])
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [abortController, setAbortController] = useState<AbortController | null>(null)
+
+  useEffect(() => {
+    const onPopState = () => setRoute(routeFromPath(window.location.pathname))
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
+
+  function navigate(path: string) {
+    if (window.location.pathname !== path) window.history.pushState(null, '', path)
+    setRoute(routeFromPath(path))
+  }
 
   async function handleSubmit(request: PipelineRequest) {
     const controller = new AbortController()
@@ -24,13 +52,18 @@ export function App() {
     setState('streaming')
     setMessages([])
     setArtifacts({})
+    setRequirements([])
     setErrorMessage(null)
 
     try {
+      let sessionId: string | null = null
       for await (const msg of streamPipeline(request, controller.signal)) {
+        const match = SESSION_MESSAGE.exec(msg)
+        if (match) sessionId = match[1]
         setMessages(prev => [...prev, msg])
       }
       setState('completed')
+      if (sessionId) await loadResults(sessionId)
     } catch (e) {
       if (e instanceof Error && e.name === 'AbortError') {
         setState('idle')
@@ -41,11 +74,23 @@ export function App() {
     }
   }
 
+  async function loadResults(sessionId: string) {
+    try {
+      const session = await getSession(sessionId)
+      if (!session) return
+      setArtifacts(session.artifacts ?? {})
+      setRequirements(session.requirements ?? [])
+    } catch {
+      // The progress log already shows the outcome; the results panel is a convenience
+    }
+  }
+
   function handleReset() {
     abortController?.abort()
     setState('idle')
     setMessages([])
     setArtifacts({})
+    setRequirements([])
     setErrorMessage(null)
     setAbortController(null)
   }
@@ -55,16 +100,21 @@ export function App() {
       <nav className="navbar">
         <span className="navbar-brand">🤖 MultiAgent Dev Team</span>
         <div className="nav-links">
-          <button className="nav-btn" onClick={() => { handleReset(); setPage('home') }}>New Pipeline</button>
-          <button className="nav-btn" onClick={() => setPage('sessions')}>Past Sessions</button>
+          <button className="nav-btn" onClick={() => { handleReset(); navigate('/') }}>New Pipeline</button>
+          <button className="nav-btn" onClick={() => navigate('/sessions')}>Past Sessions</button>
         </div>
       </nav>
 
       <main className="content">
-        {page === 'sessions' ? (
+        {page === 'session' && viewedSessionId ? (
+          <>
+            <h1>Session {viewedSessionId.slice(0, 8)}</h1>
+            <SessionDetail sessionId={viewedSessionId} onBack={() => navigate('/sessions')} />
+          </>
+        ) : page === 'sessions' ? (
           <>
             <h1>Past Sessions</h1>
-            <SessionsList />
+            <SessionsList onSelect={id => navigate(`/sessions/${id}`)} />
           </>
         ) : (
           <>
@@ -81,6 +131,7 @@ export function App() {
 
             {state === 'completed' && (
               <>
+                <RequirementsChecklist requirements={requirements} />
                 <ArtifactViewer artifacts={artifacts} />
                 <button className="btn btn-secondary" onClick={handleReset} data-testid="new-pipeline-btn">
                   Start New Pipeline

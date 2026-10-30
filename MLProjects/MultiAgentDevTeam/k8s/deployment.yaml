@@ -24,12 +24,20 @@ spec:
         runAsNonRoot: true
         runAsUser: 10001        # appuser in docker/Dockerfile, which owns /app/sessions
         runAsGroup: 10001
+        fsGroup: 10001          # lets appuser write to the sessions volume
+      volumes:
+        - name: sessions
+          persistentVolumeClaim:
+            claimName: sessions
       containers:
         - name: orchestrator
           image: multi-agent-dev-team:latest
           imagePullPolicy: Never        # Use local image (Docker Desktop K8s)
           ports:
             - containerPort: 5000
+          volumeMounts:
+            - name: sessions
+              mountPath: /app/sessions
           envFrom:
             - configMapRef:
                 name: agent-config

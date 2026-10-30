@@ -24,6 +24,8 @@ public class DeveloperAgent : BaseAgent
         CacheContext = true
     };
 
+    protected override bool ReportsRequirementCoverage => true;
+
     protected override string SystemPrompt => """
         You are a senior software engineer who writes clean, production-quality C# .NET 10 code.
         Given requirements and architecture, produce complete, working source code:

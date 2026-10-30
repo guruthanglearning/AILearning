@@ -106,6 +106,7 @@ if ($resolvedKey) {
 # Step 5: ConfigMap
 Write-Host "`n[5/8] Applying ConfigMap..." -ForegroundColor Yellow
 kubectl apply -f "$K8sDir\configmap.yaml"
+kubectl apply -f "$K8sDir\pvc.yaml"
 
 # Step 6: Orchestrator Deployment + Service
 Write-Host "`n[6/8] Applying Orchestrator Deployment and Service..." -ForegroundColor Yellow

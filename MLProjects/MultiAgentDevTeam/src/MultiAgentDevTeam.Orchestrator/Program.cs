@@ -11,6 +11,7 @@ using MultiAgentDevTeam.PMAgent;
 using MultiAgentDevTeam.QAAgent;
 using MultiAgentDevTeam.ReviewerAgent;
 using MultiAgentDevTeam.SecurityAgent;
+using MultiAgentDevTeam.VerifierAgent;
 using MultiAgentDevTeam.Shared.Configuration;
 using MultiAgentDevTeam.Shared.Interfaces;
 using MultiAgentDevTeam.Shared.Models;
@@ -54,6 +55,7 @@ builder.Services.AddTransient<IAgent, QAAgent>();
 builder.Services.AddTransient<IAgent, SecurityAgent>();
 builder.Services.AddTransient<IAgent, DevOpsAgent>();
 builder.Services.AddTransient<IAgent, DocsAgent>();
+builder.Services.AddTransient<IAgent, VerifierAgent>();
 
 // ── Orchestrator + Session Repository ─────────────────────────────────────────
 builder.Services.AddSingleton<ISessionRepository, FileSessionRepository>();
@@ -132,7 +134,7 @@ app.MapPost("/api/run", async (OrchestratorRequest request, IOrchestratorService
 })
 .WithName("RunPipeline")
 .WithSummary("Submit a software requirement — returns all artifacts when pipeline completes")
-.WithDescription("Runs the full pipeline: PM → Architect → Developer → Reviewer → QA + Security → DevOps → Docs")
+.WithDescription("Runs the full pipeline: PM → Architect → Developer → Reviewer → QA + Security → DevOps → Docs → Verifier")
 .Produces<OrchestratorResponse>(200)
 .ProducesProblem(400)
 .ProducesProblem(500)

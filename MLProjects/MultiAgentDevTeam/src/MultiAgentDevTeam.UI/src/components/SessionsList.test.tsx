@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { SessionsList } from './SessionsList'
 import * as sessionApi from '../services/sessionApi'
 
@@ -47,5 +47,17 @@ describe('SessionsList', () => {
     ])
     render(<SessionsList />)
     await waitFor(() => expect(screen.getByText(/Failed/)).toBeInTheDocument())
+  })
+
+  it('calls onSelect instead of navigating when a session is clicked', async () => {
+    vi.spyOn(sessionApi, 'listSessions').mockResolvedValue([
+      { sessionId: 'abc-123', requirement: 'Build API', success: true, artifactCount: 5, totalDuration: '00:01:00', startedAt: new Date().toISOString() }
+    ])
+    const onSelect = vi.fn()
+    render(<SessionsList onSelect={onSelect} />)
+    await waitFor(() => expect(screen.getByTestId('session-link')).toBeInTheDocument())
+    expect(screen.getByTestId('session-link')).toHaveAttribute('href', '/sessions/abc-123')
+    fireEvent.click(screen.getByTestId('session-link'))
+    expect(onSelect).toHaveBeenCalledWith('abc-123')
   })
 })

@@ -33,6 +33,15 @@ textarea.form-control { resize: vertical; }
 .spinner { color: #4ec9b0; margin-top: 0.5rem; }
 
 .artifacts { margin-top: 1.5rem; }
+.requirements { margin-top: 1.5rem; }
+.requirements h2 { margin-bottom: 0.5rem; }
+.requirements-summary { margin: 0 0 0.75rem; color: #555; }
+.requirements .sessions-table td { vertical-align: top; }
+.req-status, .req-id { font-weight: 600; white-space: nowrap; }
+.req-passed { color: #1e7b34; }
+.req-failed { color: #b02a37; }
+.req-manual { color: #9a6700; }
+.req-unverified { color: #555; }
 .artifacts h2 { margin-bottom: 1rem; }
 .artifacts details { border: 1px solid #ccc; border-radius: 6px; margin-bottom: 0.75rem; background: white; }
 .artifacts summary { padding: 0.75rem 1rem; cursor: pointer; font-weight: 600; background: #f0f0f0; border-radius: 6px; }
@@ -47,3 +56,5 @@ textarea.form-control { resize: vertical; }
 .badge-success { background: #d1e7dd; color: #0a3622; }
 .badge-danger { background: #f8d7da; color: #842029; }
 .error { color: #842029; }
+.agent-log { margin: 1rem 0; }
+.agent-log summary { cursor: pointer; font-weight: 600; }

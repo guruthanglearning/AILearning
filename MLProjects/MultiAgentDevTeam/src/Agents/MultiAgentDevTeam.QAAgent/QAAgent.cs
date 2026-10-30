@@ -23,6 +23,8 @@ public class QAAgent : BaseAgent
         MaxTokens = 64000
     };
 
+    protected override bool ReportsRequirementCoverage => true;
+
     protected override string SystemPrompt => """
         You are a senior QA engineer who writes focused xUnit test suites for C# .NET 10.
         Given source code and requirements, produce test code targeting 80%+ coverage:

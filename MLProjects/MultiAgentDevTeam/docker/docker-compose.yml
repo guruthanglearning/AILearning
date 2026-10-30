@@ -7,6 +7,8 @@ services:
     container_name: orchestrator
     ports:
       - "5000:5000"
+    volumes:
+      - sessions:/app/sessions   # saved sessions survive rebuilds and -Down
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - AgentConfiguration__MaxReviewLoops=3
@@ -38,6 +40,9 @@ services:
     restart: unless-stopped
     networks:
       - agent-network
+
+volumes:
+  sessions:
 
 networks:
   agent-network:

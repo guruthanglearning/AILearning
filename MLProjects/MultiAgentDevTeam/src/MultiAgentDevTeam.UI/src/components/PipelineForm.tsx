@@ -63,7 +63,7 @@ export function PipelineForm({ onSubmit, disabled = false }: Props) {
           onChange={e => setSkipAgents(e.target.value)}
           disabled={disabled}
         />
-        <small className="hint">Available: pm, architect, developer, reviewer, qa, security, devops, docs</small>
+        <small className="hint">Available: pm, architect, developer, reviewer, qa, security, devops, docs, verifier</small>
       </div>
 
       <div className="form-group">

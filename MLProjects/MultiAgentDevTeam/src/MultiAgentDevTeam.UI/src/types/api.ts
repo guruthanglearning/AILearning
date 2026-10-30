@@ -4,6 +4,19 @@ export interface PipelineRequest {
   maxReviewLoops: number
 }
 
+export type RequirementKind = 'Code' | 'Test' | 'Action'
+export type RequirementStatus = 'Passed' | 'Failed' | 'Manual' | 'Unverified'
+
+export interface RequirementResult {
+  id: string
+  text: string
+  kind: RequirementKind
+  status: RequirementStatus
+  coveredBy: string[]
+  evidence?: string
+  source: string
+}
+
 export interface PipelineResponse {
   success: boolean
   sessionId: string
@@ -11,6 +24,7 @@ export interface PipelineResponse {
   agentLog: string[]
   totalDuration: string
   errorMessage?: string
+  requirements?: RequirementResult[]
 }
 
 export interface SessionSummary {
@@ -33,4 +47,5 @@ export interface SessionRecord {
   agentLog: string[]
   totalDuration: string
   errorMessage?: string
+  requirements?: RequirementResult[]
 }

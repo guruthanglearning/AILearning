@@ -45,6 +45,51 @@ public class SessionDetailPageTests : TestContext
     }
 
     [Fact]
+    public async Task SessionDetail_WithRequirements_ShowsChecklist()
+    {
+        var id = Guid.NewGuid();
+        _sessionClient.Setup(c => c.GetAsync(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SessionRecord
+            {
+                SessionId = id,
+                Requirement = "Hello World",
+                Success = true,
+                Requirements =
+                [
+                    new() { Id = "FR-1", Text = "Print it", Kind = "Code", Status = "Passed", Evidence = "Program.cs" },
+                    new() { Id = "FR-2", Text = "Run it", Kind = "Action", Status = "Manual" }
+                ]
+            });
+
+        var cut = RenderComponent<SessionDetail>(p => p.Add(x => x.SessionId, id));
+        await cut.InvokeAsync(() => { });
+
+        cut.FindAll(".requirement-row").Should().HaveCount(2);
+        cut.Markup.Should().Contain("✅ Passed").And.Contain("🖐️ Manual").And.Contain("Program.cs");
+    }
+
+    [Fact]
+    public async Task SessionDetail_NoRequirements_HidesChecklist()
+    {
+        var id = Guid.NewGuid();
+        _sessionClient.Setup(c => c.GetAsync(id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SessionRecord { SessionId = id, Requirement = "Hello World", Success = true });
+
+        var cut = RenderComponent<SessionDetail>(p => p.Add(x => x.SessionId, id));
+        await cut.InvokeAsync(() => { });
+
+        cut.FindAll("#requirements-section").Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("Passed", "✅")]
+    [InlineData("Failed", "❌")]
+    [InlineData("Manual", "🖐️")]
+    [InlineData("Unverified", "❔")]
+    public void RequirementResult_StatusIcon_MapsStatus(string status, string icon) =>
+        new RequirementResult { Status = status }.StatusIcon.Should().Be(icon);
+
+    [Fact]
     public async Task SessionDetail_WithArtifacts_ShowsArtifactsSection()
     {
         var id = Guid.NewGuid();

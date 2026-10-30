@@ -544,7 +544,7 @@ MultiAgentDevTeam/
 │
 ├── k8s/
 │   ├── namespace.yaml
-│   ├── secret.example.yaml                # Example only; deploy-k8s.ps1 creates the real Secret
+│   ├── secret.yaml.example                # Example only; deploy-k8s.ps1 creates the real Secret
 │   ├── configmap.yaml
 │   ├── deployment.yaml                    # Orchestrator deployment
 │   └── service.yaml                       # NodePort (localhost:30080)

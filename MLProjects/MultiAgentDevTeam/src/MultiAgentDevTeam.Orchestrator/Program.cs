@@ -27,10 +27,11 @@ builder.Services.Configure<AgentConfiguration>(
     builder.Configuration.GetSection(AgentConfiguration.SectionName));
 
 // ── Anthropic Client ───────────────────────────────────────────────────────────
-// appsettings.json ships an empty AnthropicApiKey, so treat blank as unset and fall back to the env var
-var configApiKey = builder.Configuration["AgentConfiguration:AnthropicApiKey"];
-var apiKey = (string.IsNullOrWhiteSpace(configApiKey) ? null : configApiKey)
-    ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY")
+// The env var wins so a key chosen by the deploy scripts (-ApiKey or $env:ANTHROPIC_API_KEY) isn't
+// shadowed by a stale secrets file; blank values count as unset (appsettings.json ships an empty key)
+static string? NonBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
+var apiKey = NonBlank(Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY"))
+    ?? NonBlank(builder.Configuration["AgentConfiguration:AnthropicApiKey"])
     ?? throw new InvalidOperationException("ANTHROPIC_API_KEY is required.");
 
 // Streamed agent responses with large output budgets can run well past the SDK's 10-minute default.

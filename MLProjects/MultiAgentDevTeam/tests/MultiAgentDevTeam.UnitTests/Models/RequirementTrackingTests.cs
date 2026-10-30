@@ -267,7 +267,7 @@ public class RequirementTrackingTests
             new() { Id = "FR-5", Text = @"Code mentions D:\Temp\App", Kind = RequirementKind.Code, Status = RequirementStatus.Failed }
         ];
 
-        var marked = RequirementTracking.MarkProjectWritten(results, @"D:\Temp\App\", @"D:\Temp\App", 7);
+        var marked = RequirementTracking.MarkProjectWritten(results, ["FR-3", "FR-4"], @"D:\Temp\App\", @"D:\Temp\App", 7);
 
         marked.Select(r => r.Status).Should().Equal(
             RequirementStatus.Passed, RequirementStatus.Passed, RequirementStatus.Manual, RequirementStatus.Failed);
@@ -276,12 +276,22 @@ public class RequirementTrackingTests
     }
 
     [Fact]
+    public void MarkProjectWritten_ActionTheVerifierDidNotPass_StaysManual()
+    {
+        List<RequirementResult> results =
+            [new() { Id = "FR-1", Text = @"Create it in D:\Temp\App", Kind = RequirementKind.Action, Status = RequirementStatus.Manual }];
+
+        RequirementTracking.MarkProjectWritten(results, [], @"D:\Temp\App", @"D:\Temp\App", 3)
+            .Single().Status.Should().Be(RequirementStatus.Manual);
+    }
+
+    [Fact]
     public void MarkProjectWritten_BareDriveMatchesNothing()
     {
         List<RequirementResult> results =
             [new() { Id = "FR-1", Text = "Add: a greeting", Kind = RequirementKind.Action, Status = RequirementStatus.Manual }];
 
-        RequirementTracking.MarkProjectWritten(results, @"D:\", @"D:\hello-1a2b3c4d", 3)
+        RequirementTracking.MarkProjectWritten(results, ["FR-1"], @"D:\", @"D:\hello-1a2b3c4d", 3)
             .Single().Status.Should().Be(RequirementStatus.Manual);
     }
 
@@ -292,6 +302,7 @@ public class RequirementTrackingTests
     [InlineData(@"Put the tests in D:\Temp\App\tests", RequirementStatus.Manual)]
     [InlineData(@"Delete temporary files in D:\Temp\App", RequirementStatus.Manual)]
     [InlineData(@"D:\Temp\App must be backed up nightly", RequirementStatus.Manual)]
+    [InlineData(@"Delete files created in D:\Temp\App", RequirementStatus.Manual)]
     [InlineData(@"Create the project in D:\Temp\App.", RequirementStatus.Passed)]
     [InlineData(@"Save it to ""D:\Temp\App""", RequirementStatus.Passed)]
     [InlineData(@"Place it under D:\Temp\App\", RequirementStatus.Passed)]
@@ -300,7 +311,8 @@ public class RequirementTrackingTests
         List<RequirementResult> results =
             [new() { Id = "FR-1", Text = text, Kind = RequirementKind.Action, Status = RequirementStatus.Manual }];
 
-        RequirementTracking.MarkProjectWritten(results, @"D:\Temp\App", @"D:\Temp\App", 3)
+        // Even when the Verifier wrongly passes it, an action that does more than place the files stays manual
+        RequirementTracking.MarkProjectWritten(results, ["FR-1"], @"D:\Temp\App", @"D:\Temp\App", 3)
             .Single().Status.Should().Be(expected);
     }
 
@@ -313,7 +325,7 @@ public class RequirementTrackingTests
                     Status = RequirementStatus.Failed, Evidence = "Wrong framework" }
         ];
 
-        var marked = RequirementTracking.MarkProjectWritten(results, @"D:\Temp\App", @"D:\Temp\App", 3).Single();
+        var marked = RequirementTracking.MarkProjectWritten(results, ["FR-1"], @"D:\Temp\App", @"D:\Temp\App", 3).Single();
 
         marked.Status.Should().Be(RequirementStatus.Failed);
         marked.Evidence.Should().Be("Wrong framework");

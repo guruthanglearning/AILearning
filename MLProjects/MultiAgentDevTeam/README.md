@@ -149,7 +149,7 @@ After the Docs phase the orchestrator writes the generated project to disk, so y
 - **Where:** the first Windows folder path in the request, such as `D:\Temp\MyApp` (quote it if it contains spaces). If the request names none, a new folder under `ProjectOutput:DefaultRoot` (`C:\Temp` by default), named after the request plus the session id, such as `C:\Temp\todo-rest-api-authentication-1a2b3c4d`.
 - **What:** every `### File: path` block from the Developer, QA and DevOps output, at its relative path (a later agent wins if two write the same file), plus `docs/` with the requirements, architecture, documentation, review notes and security report.
 - **Never overwrites:** if the folder already has files, the project goes into a new subfolder inside it, and every file is created new, so an existing one is never replaced. File paths that are absolute or use `..` are skipped, and a requested folder that uses `..` is refused.
-- **Result:** the run log shows `📁 Wrote N files to <folder>`, and a requirement to create the project in the requested folder passes with that as evidence. Building and running the project stay manual steps.
+- **Result:** the run log shows `📁 Wrote N files to <folder>`, and a requirement to create the project in the requested folder passes with that as evidence, provided the Verifier (which is told what was written) passed it and it asks for nothing more. Building, running, opening or deleting stay manual steps.
 
 | Setting | Default | Purpose |
 |---|---|---|

@@ -96,14 +96,9 @@ public static class RequirementTracking
         ReadCommentHandling = JsonCommentHandling.Skip
     };
 
-    // Writing the files proves where they went, not that the app was built, run or shipped, so only
-    // an action that asks to put the project somewhere qualifies
-    private static readonly Regex PlacesFiles = new(
-        @"\b(creat\w*|put|puts|plac\w*|sav\w*|writ\w*|wrote|generat\w*|scaffold\w*|stor\w*|output|locat\w*)\b",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
+    // Writing the files proves where they went, not that the app was built, run, shipped or changed later
     private static readonly Regex DoesMoreThanPlaceFiles = new(
-        @"\b(build|compile|run|execute|launch|start|test|open|deploy|install|publish|push|host)\b",
+        @"\b(build|compile|run|execute|launch|start|test|open|deploy|install|publish|push|host|delete|remove|clean|move|copy|rename|back\w*)\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex CoverageHeadingLine = new(
@@ -238,13 +233,15 @@ public static class RequirementTracking
     /// <summary>
     /// Once the orchestrator has written the project to the folder the request named, an action
     /// requirement about that folder ("create the project under D:\Temp\App") is proven, not manual.
-    /// Only placing the files is proven: an action that also builds, runs or deploys stays as it was,
-    /// and so does one the Verifier failed.
+    /// The Verifier, which is told what was written, decides which action is about placing the project:
+    /// only an id in <paramref name="verifierPassed"/> qualifies. It must also name exactly that folder
+    /// and not ask for more, such as building, running or deleting.
     /// </summary>
     public static List<RequirementResult> MarkProjectWritten(
-        IEnumerable<RequirementResult> results, string requestedFolder, string writtenFolder, int fileCount,
-        string writer = "Orchestrator")
+        IEnumerable<RequirementResult> results, IReadOnlyCollection<string> verifierPassed,
+        string requestedFolder, string writtenFolder, int fileCount, string writer = "Orchestrator")
     {
+        var passed = verifierPassed.ToHashSet(StringComparer.OrdinalIgnoreCase);
         static string Normalize(string s) => s.Replace('/', '\\').TrimEnd('\\').ToLowerInvariant();
         var folder = Normalize(requestedFolder);
         // A bare drive ("d:") would match unrelated text such as "Add: ..."
@@ -254,9 +251,8 @@ public static class RequirementTracking
         var mentionsFolder = new Regex(Regex.Escape(folder) + @"\\?(?=$|[\s""'`),;:!?]|\.(?:\s|$))");
 
         return results.Select(r =>
-            r.Kind == RequirementKind.Action && r.Status != RequirementStatus.Failed
-            && mentionsFolder.IsMatch(Normalize(r.Text))
-            && PlacesFiles.IsMatch(r.Text) && !DoesMoreThanPlaceFiles.IsMatch(r.Text)
+            r.Kind == RequirementKind.Action && r.Status != RequirementStatus.Failed && passed.Contains(r.Id)
+            && mentionsFolder.IsMatch(Normalize(r.Text)) && !DoesMoreThanPlaceFiles.IsMatch(r.Text)
                 ? r with
                 {
                     Status = RequirementStatus.Passed,

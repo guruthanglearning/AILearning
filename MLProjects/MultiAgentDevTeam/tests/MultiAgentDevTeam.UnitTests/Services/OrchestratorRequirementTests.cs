@@ -252,19 +252,22 @@ public class OrchestratorRequirementTests
         saved!.Requirements.Should().HaveCount(4);
     }
 
+    private static Mock<IProjectWriter> WrittenToApp() => Writer(new ProjectWriteResult
+    {
+        Written = true,
+        Folder = @"D:\Temp\App",
+        RequestedFolder = @"D:\Temp\App",
+        Files = ["Program.cs", "tests/GreetingTests.cs"],
+        Message = @"📁 Wrote 2 files to D:\Temp\App"
+    });
+
     [Fact]
     public async Task RunAsync_ProjectWrittenToRequestedFolder_PassesTheFolderRequirement()
     {
-        var writer = Writer(new ProjectWriteResult
-        {
-            Written = true,
-            Folder = @"D:\Temp\App",
-            RequestedFolder = @"D:\Temp\App",
-            Files = ["Program.cs", "tests/GreetingTests.cs"],
-            Message = @"📁 Wrote 2 files to D:\Temp\App"
-        });
+        var writer = WrittenToApp();
+        var verifier = VerifierOutput.Replace("""{"id": "FR-3", "status": "manual"}""", """{"id": "FR-3", "status": "passed"}""");
 
-        var result = await Build(Agents(), writer.Object).RunAsync(Request());
+        var result = await Build(Agents(verifier: verifier), writer.Object).RunAsync(Request());
 
         var folderRequirement = result.Requirements.Single(r => r.Id == "FR-3");
         folderRequirement.Status.Should().Be(RequirementStatus.Passed);
@@ -276,6 +279,14 @@ public class OrchestratorRequirementTests
         writer.Verify(w => w.WriteAsync(Request().Requirement, result.SessionId,
             It.Is<IReadOnlyDictionary<ArtifactType, string>>(a => a[ArtifactType.SourceCode] == CoveredCode),
             It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    public async Task RunAsync_ProjectWrittenButVerifierSaysManual_StaysManual()
+    {
+        var result = await Build(Agents(), WrittenToApp().Object).RunAsync(Request());
+
+        result.Requirements.Single(r => r.Id == "FR-3").Status.Should().Be(RequirementStatus.Manual);
     }
 
     [Fact]

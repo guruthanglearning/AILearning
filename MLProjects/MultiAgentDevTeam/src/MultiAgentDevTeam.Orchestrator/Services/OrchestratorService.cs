@@ -316,7 +316,9 @@ public class OrchestratorService : IOrchestratorService
                 checklist ?? [], claims, verification, _pmAgent.Name, _verifierAgent?.Name ?? "Verifier");
             if (output is { Written: true, RequestedFolder: not null })
                 requirements = RequirementTracking.MarkProjectWritten(
-                    requirements, output.RequestedFolder, output.Folder!, output.Files.Count);
+                    requirements,
+                    (verification ?? []).Where(v => v.Status == RequirementStatus.Passed).Select(v => v.Id).ToList(),
+                    output.RequestedFolder, output.Folder!, output.Files.Count);
             await ReportRequirementsAsync(requirements, log, progress, ct);
 
             stopwatch.Stop();

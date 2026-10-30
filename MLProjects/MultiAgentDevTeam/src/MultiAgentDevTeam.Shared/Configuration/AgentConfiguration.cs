@@ -11,6 +11,7 @@ public class AgentConfiguration
     public int MaxRetries { get; set; } = 4;
     public string SessionStoragePath { get; set; } = "sessions";
     public int RateLimitRequestsPerMinute { get; set; } = 10;
+    public ProjectOutputOptions ProjectOutput { get; set; } = new();
 
     /// <summary>Per-agent overrides keyed by agent key (PM, Architect, Developer, Reviewer, QA, Security, DevOps, Docs).</summary>
     public Dictionary<string, AgentModelOverride> Agents { get; set; } = new(StringComparer.OrdinalIgnoreCase);

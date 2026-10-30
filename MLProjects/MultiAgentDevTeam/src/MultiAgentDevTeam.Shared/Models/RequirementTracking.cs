@@ -96,6 +96,11 @@ public static class RequirementTracking
         ReadCommentHandling = JsonCommentHandling.Skip
     };
 
+    // Writing the files proves where they went, not that the app was built, run, shipped or changed later
+    private static readonly Regex DoesMoreThanPlaceFiles = new(
+        @"\b(build|compile|run|execute|launch|start|test|open|deploy|install|publish|push|host|delete|remove|clean|move|copy|rename|back\w*)\b",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     private static readonly Regex CoverageHeadingLine = new(
         @"^#{1,4}\s*\**\s*Requirement Coverage\b.*$", RegexOptions.Multiline | RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
@@ -223,6 +228,38 @@ public static class RequirementTracking
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// Once the orchestrator has written the project to the folder the request named, an action
+    /// requirement about that folder ("create the project under D:\Temp\App") is proven, not manual.
+    /// The Verifier, which is told what was written, decides which action is about placing the project:
+    /// only an id in <paramref name="verifierPassed"/> qualifies. It must also name exactly that folder
+    /// and not ask for more, such as building, running or deleting.
+    /// </summary>
+    public static List<RequirementResult> MarkProjectWritten(
+        IEnumerable<RequirementResult> results, IReadOnlyCollection<string> verifierPassed,
+        string requestedFolder, string writtenFolder, int fileCount, string writer = "Orchestrator")
+    {
+        var passed = verifierPassed.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        static string Normalize(string s) => s.Replace('/', '\\').TrimEnd('\\').ToLowerInvariant();
+        var folder = Normalize(requestedFolder);
+        // A bare drive ("d:") would match unrelated text such as "Add: ..."
+        if (folder.Length <= 2) return results.ToList();
+
+        // The whole folder, so D:\Temp\App doesn't match D:\Temp\AppBackup or D:\Temp\App\src
+        var mentionsFolder = new Regex(Regex.Escape(folder) + @"\\?(?=$|[\s""'`),;:!?]|\.(?:\s|$))");
+
+        return results.Select(r =>
+            r.Kind == RequirementKind.Action && r.Status != RequirementStatus.Failed && passed.Contains(r.Id)
+            && mentionsFolder.IsMatch(Normalize(r.Text)) && !DoesMoreThanPlaceFiles.IsMatch(r.Text)
+                ? r with
+                {
+                    Status = RequirementStatus.Passed,
+                    Evidence = $"{fileCount} files written to {writtenFolder}",
+                    CoveredBy = r.CoveredBy.Append(writer).Distinct().ToList()
+                }
+                : r).ToList();
     }
 
     /// <summary>A compact JSON copy of the checklist, for agents that don't receive the full Requirements.</summary>

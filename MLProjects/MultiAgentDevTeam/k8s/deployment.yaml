@@ -29,6 +29,11 @@ spec:
         - name: sessions
           persistentVolumeClaim:
             claimName: sessions
+        # Docker Desktop exposes each Windows drive here (c, d, ...); generated projects are written through it
+        - name: host-drives
+          hostPath:
+            path: /run/desktop/mnt/host
+            type: Directory
       containers:
         - name: orchestrator
           image: multi-agent-dev-team:latest
@@ -38,6 +43,8 @@ spec:
           volumeMounts:
             - name: sessions
               mountPath: /app/sessions
+            - name: host-drives
+              mountPath: /host
           envFrom:
             - configMapRef:
                 name: agent-config

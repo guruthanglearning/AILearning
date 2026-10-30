@@ -9,6 +9,8 @@ An AI-powered software engineering team built in **C# .NET 10**, orchestrated vi
 - [Purpose](#purpose)
 - [Architecture](#architecture)
 - [Agent Roles](#agent-roles)
+- [Requirement Tracking](#requirement-tracking)
+- [Project Output](#project-output)
 - [Orchestration Patterns](#orchestration-patterns)
 - [Prerequisites](#prerequisites)
 - [Configuration](#configuration)
@@ -133,10 +135,29 @@ Every run checks that each instruction in the request was actually carried out, 
 |---|---|
 | ✅ Passed | Claimed by an agent and confirmed by the Verifier |
 | ❌ Failed | No agent claimed it, or the Verifier found it missing or wrong |
-| 🖐️ Manual | An `action`: generated files can't prove it happened, so you perform and confirm it |
+| 🖐️ Manual | An `action`: generated files can't prove it happened, so you perform and confirm it. Creating the project in the requested folder is the exception: it passes once the files are written (see [Project Output](#project-output)) |
 | ❔ Unverified | Claimed, but the Verifier was skipped |
 
 A run with failed requirements still returns `success: true`, because the artifacts were produced; check `requirementsMet` (`false` if any requirement failed, `null` if none were tracked).
+
+---
+
+## Project Output
+
+After the Docs phase the orchestrator writes the generated project to disk, so you get a codebase you can open, build and run, not just text.
+
+- **Where:** the first Windows folder path in the request, such as `D:\Temp\MyApp` (quote it if it contains spaces). If the request names none, a new folder under `ProjectOutput:DefaultRoot` (`C:\Temp` by default), named after the request plus the session id, such as `C:\Temp\todo-rest-api-authentication-1a2b3c4d`.
+- **What:** every `### File: path` block from the Developer, QA and DevOps output, at its relative path (a later agent wins if two write the same file), plus `docs/` with the requirements, architecture, documentation, review notes and security report.
+- **Never overwrites:** if the folder already has files, the project goes into a new subfolder inside it, and every file is created new, so an existing one is never replaced. File paths that are absolute or use `..` are skipped, and a requested folder that uses `..` is refused.
+- **Result:** the run log shows `📁 Wrote N files to <folder>`, and a requirement to create the project in the requested folder passes with that as evidence, provided the Verifier (which is told what was written) passed it and it asks for nothing more. Building, running, opening or deleting stay manual steps.
+
+| Setting | Default | Purpose |
+|---|---|---|
+| `ProjectOutput:Enabled` | `true` | Turn writing off entirely |
+| `ProjectOutput:DefaultRoot` | `C:\Temp` | Parent folder when the request names no location |
+| `ProjectOutput:HostDrivesPath` | empty | Set in containers to where the host's drives are mounted |
+
+Docker and Kubernetes reach your Windows drives through Docker Desktop's `/run/desktop/mnt/host`, mounted at `/host` (`HostDrivesPath=/host`), so `D:\Temp\MyApp` is written to `/host/d/Temp/MyApp`. This needs Docker Desktop on Windows.
 
 ---
 
@@ -622,7 +643,7 @@ MultiAgentDevTeam/
 
 | Limitation | Mitigation |
 |------------|------------|
-| Agents can hallucinate file paths | Validate paths before writing |
+| Agents can hallucinate file paths | `ProjectWriter` skips absolute and `..` paths and never writes into a folder that already has files |
 | Generated code may not execute without a real runtime | Run in a sandbox (Docker container) |
 | Context grows large in long sessions | Summarise artifacts before passing to next agent |
 | Circular loops if reviewer always rejects | `MaxReviewLoops` cap enforced by Orchestrator |

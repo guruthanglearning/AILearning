@@ -9,7 +9,10 @@ services:
       - "5000:5000"
     volumes:
       - sessions:/app/sessions   # saved sessions survive rebuilds and -Down
+      # Docker Desktop exposes each Windows drive here (c, d, ...); generated projects are written through it
+      - /run/desktop/mnt/host:/host
     environment:
+      - AgentConfiguration__ProjectOutput__HostDrivesPath=/host
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - AgentConfiguration__MaxReviewLoops=3
       - ASPNETCORE_ENVIRONMENT=Development

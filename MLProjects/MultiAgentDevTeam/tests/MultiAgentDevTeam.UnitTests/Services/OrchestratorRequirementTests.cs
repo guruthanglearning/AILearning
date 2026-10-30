@@ -82,9 +82,18 @@ public class OrchestratorRequirementTests
         return agents;
     }
 
-    private OrchestratorService Build(List<IAgent> agents) =>
+    private OrchestratorService Build(List<IAgent> agents, IProjectWriter? writer = null) =>
         new(agents, Options.Create(new AgentConfiguration { MaxReviewLoops = 3 }), _sessions.Object,
-            NullLogger<OrchestratorService>.Instance);
+            NullLogger<OrchestratorService>.Instance, writer);
+
+    private static Mock<IProjectWriter> Writer(ProjectWriteResult result)
+    {
+        var writer = new Mock<IProjectWriter>();
+        writer.Setup(w => w.WriteAsync(It.IsAny<string>(), It.IsAny<Guid>(),
+                It.IsAny<IReadOnlyDictionary<ArtifactType, string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(result);
+        return writer;
+    }
 
     private static OrchestratorRequest Request(params string[] skip) =>
         new() { Requirement = "1.) Hello World in C#\n2.) Put it in D:\\Temp\\App\n3.) Open it", SkipAgents = [.. skip] };
@@ -241,6 +250,59 @@ public class OrchestratorRequirementTests
         await Build(Agents()).RunAsync(Request());
 
         saved!.Requirements.Should().HaveCount(4);
+    }
+
+    private static Mock<IProjectWriter> WrittenToApp() => Writer(new ProjectWriteResult
+    {
+        Written = true,
+        Folder = @"D:\Temp\App",
+        RequestedFolder = @"D:\Temp\App",
+        Files = ["Program.cs", "tests/GreetingTests.cs"],
+        Message = @"📁 Wrote 2 files to D:\Temp\App"
+    });
+
+    [Fact]
+    public async Task RunAsync_ProjectWrittenToRequestedFolder_PassesTheFolderRequirement()
+    {
+        var writer = WrittenToApp();
+        var verifier = VerifierOutput.Replace("""{"id": "FR-3", "status": "manual"}""", """{"id": "FR-3", "status": "passed"}""");
+
+        var result = await Build(Agents(verifier: verifier), writer.Object).RunAsync(Request());
+
+        var folderRequirement = result.Requirements.Single(r => r.Id == "FR-3");
+        folderRequirement.Status.Should().Be(RequirementStatus.Passed);
+        folderRequirement.Evidence.Should().Be(@"2 files written to D:\Temp\App");
+        folderRequirement.CoveredBy.Should().Contain("Orchestrator");
+        result.Requirements.Single(r => r.Id == "MISSED-1").Status.Should().Be(RequirementStatus.Manual);
+        result.AgentLog.Should().Contain(@"📁 Wrote 2 files to D:\Temp\App");
+        _verifierRequest!.Context["ProjectOutput"].Should().Contain("- tests/GreetingTests.cs");
+        writer.Verify(w => w.WriteAsync(Request().Requirement, result.SessionId,
+            It.Is<IReadOnlyDictionary<ArtifactType, string>>(a => a[ArtifactType.SourceCode] == CoveredCode),
+            It.IsAny<CancellationToken>()));
+    }
+
+    [Fact]
+    public async Task RunAsync_ProjectWrittenButVerifierSaysManual_StaysManual()
+    {
+        var result = await Build(Agents(), WrittenToApp().Object).RunAsync(Request());
+
+        result.Requirements.Single(r => r.Id == "FR-3").Status.Should().Be(RequirementStatus.Manual);
+    }
+
+    [Fact]
+    public async Task RunAsync_ProjectNotWritten_FolderRequirementStaysManual()
+    {
+        var writer = Writer(new ProjectWriteResult
+        {
+            RequestedFolder = @"D:\Temp\App",
+            Message = "⚠️ Could not write the project files: access denied"
+        });
+
+        var result = await Build(Agents(), writer.Object).RunAsync(Request());
+
+        result.Requirements.Single(r => r.Id == "FR-3").Status.Should().Be(RequirementStatus.Manual);
+        result.AgentLog.Should().Contain("⚠️ Could not write the project files: access denied");
+        _verifierRequest!.Context.Should().NotContainKey("ProjectOutput");
     }
 
     [Fact]

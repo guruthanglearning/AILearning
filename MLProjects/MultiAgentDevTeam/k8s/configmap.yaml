@@ -7,5 +7,7 @@ data:
   AgentConfiguration__MaxReviewLoops: "3"
   AgentConfiguration__TimeoutSeconds: "1800"
   AgentConfiguration__MaxRetries: "4"
+  # The host's drives are mounted here (see deployment.yaml), so projects land on the Windows disk
+  AgentConfiguration__ProjectOutput__HostDrivesPath: "/host"
   ASPNETCORE_ENVIRONMENT: "Production"
   ASPNETCORE_URLS: "http://+:5000"

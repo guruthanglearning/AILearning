@@ -55,7 +55,7 @@ Phase 6: Docs Agent         → Documentation
 Phase 7: Verifier Agent     → Per-requirement verdicts (passed / failed / manual)
 ```
 
-Requirement tracking (`Shared/Models/RequirementTracking.cs`): the PM ends its output with a `requirements-checklist` JSON block; Developer/QA/DevOps end theirs with a `## Requirement Coverage` section (`ReportsRequirementCoverage` in `BaseAgent`); the orchestrator sends unclaimed `code` requirements back to the Developer before review, then combines claims with the Verifier's `verification-results` block into `OrchestratorResponse.Requirements`.
+Requirement tracking (`Shared/Models/RequirementTracking.cs`): the PM ends its output with a `requirements-checklist` JSON block; Developer/QA/DevOps/Docs end theirs with a `## Requirement Coverage` section (`ReportsRequirementCoverage` in `BaseAgent`); the orchestrator sends unclaimed `code` requirements back to the Developer before review, then combines claims with the Verifier's `verification-results` block into `OrchestratorResponse.Requirements`.
 
 Project output (`Orchestrator/Services/ProjectWriter.cs`): after the Docs phase the orchestrator writes every `### File:` block from SourceCode/TestResults/DeploymentConfig (plus `docs/*.md`) to the first Windows path in the request, or a new folder under `ProjectOutput:DefaultRoot` (`C:\Temp`). It never writes into a non-empty folder (uses a subfolder instead) and skips absolute/`..` paths. In Docker/K8s, `ProjectOutput:HostDrivesPath=/host` maps `D:\x` to `/host/d/x` via Docker Desktop's `/run/desktop/mnt/host` mount. An action requirement naming the requested folder is then marked passed (`RequirementTracking.MarkProjectWritten`).
 

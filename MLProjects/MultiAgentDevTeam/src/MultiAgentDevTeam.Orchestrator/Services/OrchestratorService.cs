@@ -257,9 +257,9 @@ public class OrchestratorService : IOrchestratorService
                     new AgentRequest
                     {
                         Task = "Generate the developer documentation this project needs.",
-                        Context = BuildContext(store,
+                        Context = WithChecklist(checklist, BuildContext(store,
                             ArtifactType.Requirements, ArtifactType.Architecture,
-                            ArtifactType.SourceCode, ArtifactType.DeploymentConfig)
+                            ArtifactType.SourceCode, ArtifactType.DeploymentConfig))
                     }, ct);
             }
 
@@ -268,7 +268,8 @@ public class OrchestratorService : IOrchestratorService
                      {
                          (ArtifactType.SourceCode, _developerAgent),
                          (ArtifactType.TestResults, _qaAgent),
-                         (ArtifactType.DeploymentConfig, _devOpsAgent)
+                         (ArtifactType.DeploymentConfig, _devOpsAgent),
+                         (ArtifactType.Documentation, _docsAgent)
                      })
                 claims.AddRange(RequirementTracking.ParseCoverage(store.GetContent(type), agent.Name));
 
@@ -285,9 +286,11 @@ public class OrchestratorService : IOrchestratorService
             List<VerificationEntry>? verification = null;
             if (_verifierAgent is not null && !ShouldSkip(request, "verifier"))
             {
+                // Every deliverable, so a requirement met by the docs or the design isn't reported missing
                 var context = BuildContext(store,
-                    ArtifactType.Requirements, ArtifactType.SourceCode,
-                    ArtifactType.TestResults, ArtifactType.DeploymentConfig);
+                    ArtifactType.Requirements, ArtifactType.Architecture, ArtifactType.SourceCode,
+                    ArtifactType.TestResults, ArtifactType.SecurityReport,
+                    ArtifactType.DeploymentConfig, ArtifactType.Documentation);
                 // The original wording, so a requirement the PM dropped can still be caught
                 context["OriginalRequest"] = request.Requirement;
                 if (claims.Count > 0)

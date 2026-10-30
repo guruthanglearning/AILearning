@@ -73,4 +73,20 @@ describe('SessionDetail', () => {
     fireEvent.click(screen.getByTestId('back-btn'))
     expect(onBack).toHaveBeenCalled()
   })
+
+  it('ignores a late response for a session the user already left', async () => {
+    let resolveFirst: (s: SessionRecord) => void = () => {}
+    vi.spyOn(sessionApi, 'getSession')
+      .mockReturnValueOnce(new Promise(r => { resolveFirst = r }))
+      .mockResolvedValueOnce(record({ sessionId: 'second', requirement: 'Second session' }))
+    const { rerender } = render(<SessionDetail sessionId="first" onBack={() => {}} />)
+    rerender(<SessionDetail sessionId="second" onBack={() => {}} />)
+    await waitFor(() => expect(screen.getByText('Second session')).toBeInTheDocument())
+
+    resolveFirst(record({ sessionId: 'first', requirement: 'First session' }))
+    await new Promise(r => setTimeout(r, 0))
+
+    expect(screen.getByText('Second session')).toBeInTheDocument()
+    expect(screen.queryByText('First session')).not.toBeInTheDocument()
+  })
 })

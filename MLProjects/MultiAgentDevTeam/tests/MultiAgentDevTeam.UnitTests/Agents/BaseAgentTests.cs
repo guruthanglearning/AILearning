@@ -309,6 +309,7 @@ public class BaseAgentTests
     [InlineData(typeof(MultiAgentDevTeam.DeveloperAgent.DeveloperAgent), true)]
     [InlineData(typeof(MultiAgentDevTeam.QAAgent.QAAgent), true)]
     [InlineData(typeof(MultiAgentDevTeam.DevOpsAgent.DevOpsAgent), true)]
+    [InlineData(typeof(MultiAgentDevTeam.DocsAgent.DocsAgent), true)]
     [InlineData(typeof(MultiAgentDevTeam.PMAgent.PMAgent), false)]
     [InlineData(typeof(MultiAgentDevTeam.ReviewerAgent.ReviewerAgent), false)]
     [InlineData(typeof(MultiAgentDevTeam.VerifierAgent.VerifierAgent), false)]

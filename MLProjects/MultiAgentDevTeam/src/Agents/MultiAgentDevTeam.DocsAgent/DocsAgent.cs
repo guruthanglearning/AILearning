@@ -23,6 +23,9 @@ public class DocsAgent : BaseAgent
         MaxTokens = 32000
     };
 
+    // A requested README or guide is delivered here, so Docs claims it like the code agents do
+    protected override bool ReportsRequirementCoverage => true;
+
     protected override string SystemPrompt => """
         You are a technical writer who produces clear, accurate developer documentation.
         Given all project artifacts, produce documentation in markdown. For a small project a single

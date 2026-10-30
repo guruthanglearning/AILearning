@@ -16,12 +16,16 @@ export function SessionDetail({ sessionId, onBack }: Props) {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    // Ignore a response that arrives after the user moved to another session
+    let current = true
+    setSession(null)
     setLoading(true)
     setError(null)
     getSession(sessionId)
-      .then(s => s ? setSession(s) : setError(`Session ${sessionId} was not found.`))
-      .catch(e => setError(e.message))
-      .finally(() => setLoading(false))
+      .then(s => { if (current) s ? setSession(s) : setError(`Session ${sessionId} was not found.`) })
+      .catch(e => { if (current) setError(e.message) })
+      .finally(() => { if (current) setLoading(false) })
+    return () => { current = false }
   }, [sessionId])
 
   const back = <button className="btn btn-secondary" onClick={onBack} data-testid="back-btn">← Back to sessions</button>

@@ -40,6 +40,7 @@ public class OrchestratorRequirementTests
     private readonly List<AgentRequest> _developerRequests = [];
     private AgentRequest? _verifierRequest;
     private AgentRequest? _devOpsRequest;
+    private AgentRequest? _docsRequest;
     private int _reviewerCalls;
 
     private static Mock<IAgent> Agent(ArtifactType type, string name, Func<string> content, Action<AgentRequest>? onRun = null)
@@ -59,7 +60,8 @@ public class OrchestratorRequirementTests
     private List<IAgent> Agents(
         string pm = PmOutput,
         Func<int, string>? developer = null,
-        string? verifier = VerifierOutput)
+        string? verifier = VerifierOutput,
+        string docs = "readme")
     {
         developer ??= _ => CoveredCode;
         var agents = new List<IAgent>
@@ -72,7 +74,7 @@ public class OrchestratorRequirementTests
             Agent(ArtifactType.TestResults, "QA", () => QaOutput).Object,
             Agent(ArtifactType.SecurityReport, "Security", () => "no issues").Object,
             Agent(ArtifactType.DeploymentConfig, "DevOps", () => "config", r => _devOpsRequest = r).Object,
-            Agent(ArtifactType.Documentation, "Docs", () => "readme").Object,
+            Agent(ArtifactType.Documentation, "Docs", () => docs, r => _docsRequest = r).Object,
         };
         if (verifier is not null)
             agents.Add(Agent(ArtifactType.VerificationReport, "Acceptance Verifier", () => verifier,
@@ -169,7 +171,21 @@ public class OrchestratorRequirementTests
 
         _verifierRequest!.Context["OriginalRequest"].Should().Contain("D:\\Temp\\App");
         _verifierRequest.Context["CoverageClaims"].Should().Contain("- QA / FR-2: tests/GreetingTests.cs");
-        _verifierRequest.Context.Should().ContainKeys("Requirements", "SourceCode", "TestResults", "DeploymentConfig");
+        _verifierRequest.Context.Should().ContainKeys(
+            "Requirements", "Architecture", "SourceCode", "TestResults",
+            "SecurityReport", "DeploymentConfig", "Documentation");
+    }
+
+    [Fact]
+    public async Task RunAsync_DocsGetsTheChecklistAndItsClaimsCount()
+    {
+        var docs = "# README\n\n## Requirement Coverage\n- FR-1: README.md usage section";
+
+        var result = await Build(Agents(docs: docs)).RunAsync(Request());
+
+        _docsRequest!.Context["RequirementChecklist"].Should().Contain("\"id\":\"FR-1\"");
+        result.Requirements[0].CoveredBy.Should().Equal("Developer", "Docs");
+        _verifierRequest!.Context["CoverageClaims"].Should().Contain("- Docs / FR-1: README.md usage section");
     }
 
     [Fact]

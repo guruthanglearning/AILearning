@@ -1,4 +1,4 @@
-using Anthropic.SDK;
+using Anthropic;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi.Models;
@@ -27,11 +27,23 @@ builder.Services.Configure<AgentConfiguration>(
     builder.Configuration.GetSection(AgentConfiguration.SectionName));
 
 // ── Anthropic Client ───────────────────────────────────────────────────────────
-var apiKey = builder.Configuration["AgentConfiguration:AnthropicApiKey"]
-    ?? Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY")
+// The env var wins so a key chosen by the deploy scripts (-ApiKey or $env:ANTHROPIC_API_KEY) isn't
+// shadowed by a stale secrets file; blank values count as unset (appsettings.json ships an empty key)
+static string? NonBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
+var apiKey = NonBlank(Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY"))
+    ?? NonBlank(builder.Configuration["AgentConfiguration:AnthropicApiKey"])
     ?? throw new InvalidOperationException("ANTHROPIC_API_KEY is required.");
 
-builder.Services.AddSingleton(new AnthropicClient(apiKey));
+// Streamed agent responses with large output budgets can run well past the SDK's 10-minute default.
+// The SDK retries 429/5xx itself, honouring retry-after, so rate limits rarely fail a run.
+var timeoutSeconds = builder.Configuration.GetValue("AgentConfiguration:TimeoutSeconds", 1800);
+var maxRetries = builder.Configuration.GetValue("AgentConfiguration:MaxRetries", 4);
+builder.Services.AddSingleton(new AnthropicClient
+{
+    ApiKey = apiKey,
+    Timeout = TimeSpan.FromSeconds(timeoutSeconds),
+    MaxRetries = maxRetries
+});
 
 // ── Register all agents as IAgent ─────────────────────────────────────────────
 builder.Services.AddTransient<IAgent, PMAgent>();
@@ -116,7 +128,7 @@ app.MapPost("/api/run", async (OrchestratorRequest request, IOrchestratorService
         return Results.BadRequest(new { error = "Requirement cannot be empty." });
 
     var result = await orchestrator.RunAsync(request, ct);
-    return result.Success ? Results.Ok(result) : Results.Problem(result.ErrorMessage);
+    return result.Success ? Results.Ok(result) : PipelineFailure.ToProblem(result);
 })
 .WithName("RunPipeline")
 .WithSummary("Submit a software requirement — returns all artifacts when pipeline completes")
@@ -124,6 +136,9 @@ app.MapPost("/api/run", async (OrchestratorRequest request, IOrchestratorService
 .Produces<OrchestratorResponse>(200)
 .ProducesProblem(400)
 .ProducesProblem(500)
+.ProducesProblem(502)
+.ProducesProblem(503)
+.ProducesProblem(504)
 .RequireRateLimiting("pipeline");
 
 // Submit a requirement — real-time streaming via Server-Sent Events
@@ -159,7 +174,7 @@ app.MapPost("/api/run/partial", async (OrchestratorRequest request, IOrchestrato
         return Results.BadRequest(new { error = "Requirement cannot be empty." });
 
     var result = await orchestrator.RunAsync(request, ct);
-    return result.Success ? Results.Ok(result) : Results.Problem(result.ErrorMessage);
+    return result.Success ? Results.Ok(result) : PipelineFailure.ToProblem(result);
 })
 .WithName("RunPartialPipeline")
 .WithSummary("Run pipeline with specific agents skipped")

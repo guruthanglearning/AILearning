@@ -178,24 +178,81 @@ All configuration is via environment variables or `appsettings.json`.
 | Variable | Required | Description |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | **Yes** | Your Anthropic API key |
-| `AgentConfiguration__DefaultModel` | No | Claude model for agents (default: `claude-opus-4-6`) |
-| `AgentConfiguration__FastModel` | No | Fast model for light tasks (default: `claude-haiku-4-5-20251001`) |
 | `AgentConfiguration__MaxReviewLoops` | No | Max Developer→Reviewer cycles (default: `3`) |
-| `AgentConfiguration__MaxTokens` | No | Max tokens per agent response (default: `8192`) |
-| `AgentConfiguration__TimeoutSeconds` | No | Agent timeout in seconds (default: `300`) |
+| `AgentConfiguration__TimeoutSeconds` | No | Timeout for each Anthropic API call, in seconds (default: `1800`; responses are streamed and can be long) |
+| `AgentConfiguration__MaxRetries` | No | SDK retries on 429 / 5xx, honouring `retry-after` (default: `4`) |
+| `AgentConfiguration__Agents__{Agent}__Model` | No | Override one agent's model, e.g. `AgentConfiguration__Agents__Docs__Model=claude-sonnet-5-5` |
+| `AgentConfiguration__Agents__{Agent}__Effort` | No | Override one agent's effort: `low`, `medium`, `high`, `xhigh` or `max` |
+| `AgentConfiguration__Agents__{Agent}__MaxTokens` | No | Override one agent's output budget (thinking included) |
+| `AgentConfiguration__Agents__{Agent}__CacheContext` | No | Mark the agent's context for prompt caching (`true`/`false`) |
+
+`{Agent}` is one of `PM`, `Architect`, `Developer`, `Reviewer`, `QA`, `Security`, `DevOps`, `Docs`.
+
+### Models per agent
+
+Each agent runs on the cheapest model that does its job well. Opus is kept for the steps whose mistakes cost a whole review loop.
+
+| Agent | Model | Effort | Max tokens | Why |
+|---|---|---|---|---|
+| PM | `claude-sonnet-5-5` | medium | 16,000 | Requirements extraction is structured analysis |
+| Architect | `claude-opus-5-5` | high | 32,000 | Design decisions shape every later agent |
+| Developer | `claude-opus-5-5` | high | 64,000 | Code quality decides how many review loops a run pays for; context is prompt-cached across loops |
+| Reviewer | `claude-opus-5-5` | high | 32,000 | The quality gate: a missed bug or a false rejection both cost a loop |
+| QA | `claude-sonnet-5-5` | medium | 64,000 | High-volume test writing against existing code |
+| Security | `claude-sonnet-5-5` | medium | 32,000 | Checklist-driven audit of reviewed code |
+| DevOps | `claude-sonnet-5-5` | low | 32,000 | Dockerfiles and CI workflows are well-trodden templates |
+| Docs | `claude-haiku-5-5` | medium | 32,000 | Summarising finished artifacts needs little reasoning |
+
+### Cost controls
+
+- **Usage and cost per run:** every agent call logs its input, output and cache tokens with an estimated cost; the run log ends with `💰 Estimated API cost: ...`, and the totals are saved with the session (`usage`, `estimatedCostUsd`). Prices live in `ModelPricing` and are list prices, so treat the figure as an estimate.
+- **Output sized to the request:** every agent is told to scale its output to the request, so a small app gets a few tests and one README instead of an enterprise-sized package.
+- **Prompt caching:** the Developer's context (requirements + architecture) is cached, so review-loop re-runs read it at a fraction of the input price. Other agents run once per pipeline, where a cache write (1.25× input) would cost more than it saves.
+- **Smaller context:** DevOps receives the list of test files rather than their full source.
+- **Refusals:** requests use server-side fallback, so a request one model declines for policy reasons can be completed by a fallback model. If no model completes it, the API returns `422` with title "Model declined the request".
 
 ---
 
 ## How to Run
 
+### API key setup
+
+The Anthropic API key is never committed. Each person uses their own key, and runs are billed to their own Anthropic account. The deploy scripts find it automatically, in this order:
+
+| # | Source | Typical use |
+|---|---|---|
+| 1 | `-ApiKey` parameter | One-off override (the script warns that it ends up in your shell history) |
+| 2 | `$env:ANTHROPIC_API_KEY` | CI pipelines, or a key set for the current shell |
+| 3 | `src/MultiAgentDevTeam.Orchestrator/appsettings.secrets.json` | Your local key, set up once (gitignored) |
+| 4 | A masked prompt | Interactive terminals when nothing above is set; offers to save the key to the file in step 3 |
+
+The key is never printed: the script only reports where it came from, e.g. `API key: from appsettings.secrets.json (sk-ant-... (108 chars))`.
+
+**First time after cloning**, pick one:
+```powershell
+# Option A: a local secrets file (recommended; the scripts then find it every time)
+Copy-Item src/MultiAgentDevTeam.Orchestrator/appsettings.secrets.example.json `
+          src/MultiAgentDevTeam.Orchestrator/appsettings.secrets.json
+# ...then replace REPLACE_WITH_YOUR_ANTHROPIC_API_KEY in the copy with your key
+
+# Option B: just run a deploy script and paste the key when prompted
+.\scripts\deploy-docker.ps1
+```
+
+**GitHub Actions / CI:** store the key as a repository secret and expose it as `ANTHROPIC_API_KEY` in the job's `env`. The scripts never prompt in a non-interactive run; they fail with a message listing the options above.
+
+**Kubernetes:** `deploy-k8s.ps1` creates the `agent-secrets` Secret from your key (piped to `kubectl` on stdin, so the key never appears on a command line) and restarts the pods so a changed key takes effect. If no key is found but the Secret already exists in the cluster, it is reused.
+
+**React UI packages:** `node_modules` isn't committed. `deploy-local.ps1` runs `npm ci` on first use, and the UI Docker image installs its own packages.
+
 ### Option 1 — Local (dotnet run)
 
 ```powershell
 # From the project root
-.\scripts\deploy-local.ps1 -ApiKey "sk-ant-xxxx"
+.\scripts\deploy-local.ps1
 
 # Skip tests for faster startup
-.\scripts\deploy-local.ps1 -ApiKey "sk-ant-xxxx" -SkipTests
+.\scripts\deploy-local.ps1 -SkipTests
 ```
 
 Access:
@@ -208,15 +265,14 @@ Access:
 
 ```powershell
 # Build images and start containers
-.\scripts\deploy-docker.ps1 -ApiKey "sk-ant-xxxx"
+.\scripts\deploy-docker.ps1
 
 # Stop and remove containers
 .\scripts\deploy-docker.ps1 -Down
 ```
 
-Or using docker compose directly:
+Or using docker compose directly: copy `docker/.env.example` to `docker/.env` (gitignored), add your key, then:
 ```powershell
-$env:ANTHROPIC_API_KEY = "sk-ant-xxxx"
 docker compose -f docker/docker-compose.yml up -d
 ```
 
@@ -231,10 +287,10 @@ Access:
 
 ```powershell
 # Full deploy (builds image + deploys to K8s)
-.\scripts\deploy-k8s.ps1 -ApiKey "sk-ant-xxxx"
+.\scripts\deploy-k8s.ps1
 
 # Skip image rebuild (use existing image)
-.\scripts\deploy-k8s.ps1 -ApiKey "sk-ant-xxxx" -SkipBuild
+.\scripts\deploy-k8s.ps1 -SkipBuild
 
 # Tear everything down
 .\scripts\deploy-k8s.ps1 -Down
@@ -270,7 +326,7 @@ The application must be running (via Docker or locally) before attaching a debug
 
 1. Start the application in Docker:
    ```powershell
-   .\scripts\deploy-docker.ps1 -ApiKey "sk-ant-xxxx"
+   .\scripts\deploy-docker.ps1
    ```
 
 2. In Visual Studio, open the solution (`MultiAgentDevTeam.slnx`).
@@ -299,7 +355,7 @@ Visual Studio automatically installs `vsdbg` (the .NET debugger) into the contai
 
 1. Start the application in Docker:
    ```powershell
-   .\scripts\deploy-docker.ps1 -ApiKey "sk-ant-xxxx"
+   .\scripts\deploy-docker.ps1
    ```
 
 2. Open the **Docker** panel in the VS Code sidebar (whale icon).
@@ -349,9 +405,8 @@ services:
       - "4024:4024"   # vsdbg remote debugger port
 ```
 
-Start with the override:
+Start with the override (the key comes from `docker/.env` or `$env:ANTHROPIC_API_KEY`):
 ```powershell
-$env:ANTHROPIC_API_KEY = "sk-ant-xxxx"
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.debug.yml up -d
 ```
 
@@ -489,7 +544,7 @@ MultiAgentDevTeam/
 │
 ├── k8s/
 │   ├── namespace.yaml
-│   ├── secret.yaml                        # K8s secret template
+│   ├── secret.yaml.example                # Example only; deploy-k8s.ps1 creates the real Secret
 │   ├── configmap.yaml
 │   ├── deployment.yaml                    # Orchestrator deployment
 │   └── service.yaml                       # NodePort (localhost:30080)
@@ -502,7 +557,8 @@ MultiAgentDevTeam/
 ├── scripts/
 │   ├── deploy-local.ps1                   # dotnet run locally
 │   ├── deploy-docker.ps1                  # Docker Compose
-│   └── deploy-k8s.ps1                     # Kubernetes (Docker Desktop)
+│   ├── deploy-k8s.ps1                     # Kubernetes (Docker Desktop)
+│   └── Resolve-AnthropicApiKey.ps1        # Finds the API key for all three scripts
 │
 ├── NuGet.Config                           # Packages stored in shared_Environment
 ├── MultiAgentDevTeam.slnx

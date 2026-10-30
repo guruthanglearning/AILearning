@@ -94,9 +94,8 @@ The Orchestrator also exposes two endpoints that support these UIs but aren't in
 ## Technology Stack
 
 - **Language/Framework:** C# .NET 10 (ASP.NET Core minimal APIs)
-- **LLM Provider:** Anthropic Claude API via `Anthropic.SDK`
-- **Default Model:** `claude-opus-4-6`
-- **Fast Model:** `claude-haiku-4-5-20251001`
+- **LLM Provider:** Anthropic Claude API via the official `Anthropic` C# SDK (streaming, beta Messages endpoint for server-side fallback)
+- **Models:** set per agent in each agent's `DefaultSettings` (Opus 5.5 for Architect/Developer/Reviewer, Sonnet 5.5 for PM/QA/Security/DevOps, Haiku 5.5 for Docs); override with `AgentConfiguration:Agents:{Agent}:Model|Effort|MaxTokens|CacheContext`
 - **Test Framework:** xUnit + Moq + FluentAssertions (.NET); Vitest + Playwright (React UI)
 - **Frontends:** Blazor Server (`MultiAgentDevTeam.BlazorUI`, in the `.slnx`) and React 18 + Vite + TypeScript (`MultiAgentDevTeam.UI`, separate npm project) — see "Frontends" above
 - **Containerization:** Docker + Docker Compose
@@ -299,5 +298,5 @@ Verified against current code (2026-09) — several items below were already don
 - [x] ~~Add rate limiting middleware~~ — done: `AddRateLimiter`/`UseRateLimiter` in `Program.cs`, applied to the pipeline endpoints via `.RequireRateLimiting("pipeline")`
 - [x] ~~Add persistent artifact storage~~ — partially done: sessions are now persisted via `FileSessionRepository` (JSON files, not in-memory-only), retrievable via `GET /api/sessions`/`GET /api/sessions/{id}`; this is file-based, not a database, if that distinction still matters
 - [ ] NU1510 is gone, but a full `dotnet build` now emits different warnings on `tests/MultiAgentDevTeam.BlazorUI.UnitTests/`: NU1603 (bunit 1.36.5 requested, 1.37.7 resolved) and NU1902 (AngleSharp 1.1.2 has a known moderate-severity advisory) — don't assume the old NU1510 note still applies
-- [ ] Support custom model selection per agent
+- [x] ~~Support custom model selection per agent~~ — done: `AgentModelSettings` defaults per agent, `AgentConfiguration:Agents` overrides
 - [ ] Support multi-language code generation (currently C# .NET 10 only)

@@ -77,4 +77,54 @@ public class AgentRequestResponseTests
         // Assert
         response.SessionId.Should().NotBe(Guid.Empty);
     }
+
+    [Fact]
+    public void AgentResponse_Fail_DefaultsToInternalFailureKind()
+    {
+        var response = AgentResponse.Fail("boom", "TestAgent");
+
+        response.FailureKind.Should().Be(AgentFailureKind.Internal);
+    }
+
+    [Fact]
+    public void AgentResponse_Fail_WithKind_SetsFailureKind()
+    {
+        var response = AgentResponse.Fail("invalid x-api-key", "TestAgent", AgentFailureKind.Authentication);
+
+        response.FailureKind.Should().Be(AgentFailureKind.Authentication);
+    }
+
+    [Fact]
+    public void AgentResponse_Ok_HasNoFailureKind()
+    {
+        var response = AgentResponse.Ok("content", "TestAgent", TimeSpan.FromSeconds(1));
+
+        response.FailureKind.Should().Be(AgentFailureKind.None);
+    }
+
+    [Fact]
+    public void AgentFailedException_CarriesAgentNameKindAndMessage()
+    {
+        var ex = new AgentFailedException("Product Manager", "invalid x-api-key", AgentFailureKind.Authentication);
+
+        ex.AgentName.Should().Be("Product Manager");
+        ex.Kind.Should().Be(AgentFailureKind.Authentication);
+        ex.Message.Should().Be("Agent 'Product Manager' failed: invalid x-api-key");
+    }
+
+    [Fact]
+    public void AgentFailureKind_SerializesAsString()
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(new OrchestratorResponse { FailureKind = AgentFailureKind.RateLimited });
+
+        json.Should().Contain("\"FailureKind\":\"RateLimited\"");
+    }
+
+    [Fact]
+    public void AgentResponse_Ok_DefaultsToNotTruncated() =>
+        AgentResponse.Ok("content", "TestAgent", TimeSpan.FromSeconds(1)).Truncated.Should().BeFalse();
+
+    [Fact]
+    public void AgentResponse_Ok_WithTruncated_SetsFlag() =>
+        AgentResponse.Ok("content", "TestAgent", TimeSpan.FromSeconds(1), truncated: true).Truncated.Should().BeTrue();
 }

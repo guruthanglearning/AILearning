@@ -1,20 +1,33 @@
-using Anthropic.SDK;
+using Anthropic;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using MultiAgentDevTeam.Shared.Agents;
+using MultiAgentDevTeam.Shared.Configuration;
 using MultiAgentDevTeam.Shared.Models;
 
 namespace MultiAgentDevTeam.DocsAgent;
 
 public class DocsAgent : BaseAgent
 {
-    public DocsAgent(AnthropicClient client, ILogger<DocsAgent> logger) : base(client, logger) { }
+    public DocsAgent(AnthropicClient client, ILogger<DocsAgent> logger, IOptions<AgentConfiguration> options)
+        : base(client, logger, options) { }
 
     public override string Name => "Technical Writer";
     public override ArtifactType OutputType => ArtifactType.Documentation;
 
+    // Summarising finished artifacts into docs needs little reasoning; Haiku is ~40x cheaper than Opus
+    protected override AgentModelSettings DefaultSettings => new()
+    {
+        Model = "claude-haiku-5-5",
+        Effort = "medium",
+        MaxTokens = 32000
+    };
+
     protected override string SystemPrompt => """
-        You are a technical writer who produces clear, comprehensive developer documentation.
-        Given all project artifacts, produce complete documentation in markdown:
+        You are a technical writer who produces clear, accurate developer documentation.
+        Given all project artifacts, produce documentation in markdown. For a small project a single
+        concise README.md is enough; only write API_REFERENCE.md when the project exposes an API, and
+        ARCHITECTURE.md when it has more than one component. Leave out README sections that don't apply.
 
         1. **README.md** - Include:
            - Project title and one-line description
@@ -41,6 +54,6 @@ public class DocsAgent : BaseAgent
            - Key design decisions and rationale
            - Technology choices
 
-        Write for developers who are new to the project. Be complete, accurate, and clear.
+        Write for developers who are new to the project. Be accurate and clear.
         """;
 }

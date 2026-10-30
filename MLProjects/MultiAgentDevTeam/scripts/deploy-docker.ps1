@@ -3,23 +3,27 @@
     Build and run the Multi-Agent Dev Team (API + UI) using Docker Compose.
 
 .PARAMETER ApiKey
-    Anthropic API key. Falls back to ANTHROPIC_API_KEY environment variable.
+    Anthropic API key. Optional: if omitted, the key comes from the ANTHROPIC_API_KEY
+    environment variable, then src/MultiAgentDevTeam.Orchestrator/appsettings.secrets.json,
+    then a masked prompt (see scripts/Resolve-AnthropicApiKey.ps1). Passing it here saves
+    it in your shell history, so prefer the other sources.
 
 .PARAMETER Down
     Stop and remove running containers instead of starting them.
 
 .EXAMPLE
-    .\deploy-docker.ps1 -ApiKey "sk-ant-xxxx"
+    .\deploy-docker.ps1
     .\deploy-docker.ps1 -Down
 #>
 
 param(
-    [string]$ApiKey = $env:ANTHROPIC_API_KEY,
+    [string]$ApiKey,
     [switch]$Down
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "Resolve-AnthropicApiKey.ps1")
 
 $Root      = Split-Path -Parent $PSScriptRoot
 $DockerDir = Join-Path $Root "docker"
@@ -37,13 +41,8 @@ if ($Down) {
     exit 0
 }
 
-# Validate API key
-if ([string]::IsNullOrWhiteSpace($ApiKey)) {
-    Write-Error "ANTHROPIC_API_KEY is required. Set the environment variable or pass -ApiKey."
-    exit 1
-}
-
-$env:ANTHROPIC_API_KEY = $ApiKey
+# Resolve the API key; docker compose reads it from this process's environment
+$null = Resolve-AnthropicApiKey -ApiKey $ApiKey
 
 # Step 1: Build Orchestrator image
 Write-Host "`n[1/4] Building Orchestrator image..." -ForegroundColor Yellow

@@ -20,6 +20,8 @@ public class SessionRecord
     public List<string> AgentLog { get; init; } = new();
     public string TotalDuration { get; init; } = string.Empty;
     public string? ErrorMessage { get; init; }
+    public List<TokenUsage> Usage { get; init; } = new();
+    public decimal EstimatedCostUsd { get; init; }
 }
 
 public class SessionSummary

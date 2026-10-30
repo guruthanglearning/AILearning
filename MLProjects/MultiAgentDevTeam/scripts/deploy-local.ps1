@@ -11,21 +11,24 @@
     Skip running tests before starting the app.
 
 .PARAMETER ApiKey
-    Anthropic API key. Falls back to ANTHROPIC_API_KEY environment variable.
+    Anthropic API key. Optional: if omitted, the key comes from the ANTHROPIC_API_KEY
+    environment variable, then src/MultiAgentDevTeam.Orchestrator/appsettings.secrets.json,
+    then a masked prompt (see scripts/Resolve-AnthropicApiKey.ps1). Passing it here saves
+    it in your shell history, so prefer the other sources.
 
 .EXAMPLE
     .\deploy-local.ps1
     .\deploy-local.ps1 -SkipTests
-    .\deploy-local.ps1 -ApiKey "sk-ant-xxxx"
 #>
 
 param(
     [switch]$SkipTests,
-    [string]$ApiKey = $env:ANTHROPIC_API_KEY
+    [string]$ApiKey
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "Resolve-AnthropicApiKey.ps1")
 
 $Root                = Split-Path -Parent $PSScriptRoot
 $OrchestratorProject = Join-Path $Root "src\MultiAgentDevTeam.Orchestrator\MultiAgentDevTeam.Orchestrator.csproj"
@@ -35,13 +38,8 @@ Write-Host "================================================" -ForegroundColor C
 Write-Host "  Multi-Agent Dev Team - Local Deployment" -ForegroundColor Cyan
 Write-Host "================================================" -ForegroundColor Cyan
 
-# Validate API key
-if ([string]::IsNullOrWhiteSpace($ApiKey)) {
-    Write-Error "ANTHROPIC_API_KEY is required. Set the environment variable or pass -ApiKey."
-    exit 1
-}
-
-$env:ANTHROPIC_API_KEY = $ApiKey
+# Resolve the API key; the Orchestrator reads it from this process's environment
+$null = Resolve-AnthropicApiKey -ApiKey $ApiKey
 
 # Step 1: Restore
 Write-Host "`n[1/5] Restoring NuGet packages..." -ForegroundColor Yellow
@@ -97,6 +95,12 @@ Write-Host ""
 
 try {
     Push-Location $UIDir
+    # node_modules isn't committed, so a fresh clone needs the packages installed first
+    if (-not (Test-Path "node_modules")) {
+        Write-Host "Installing UI packages (npm ci)..." -ForegroundColor Yellow
+        npm ci
+        if ($LASTEXITCODE -ne 0) { throw "npm ci failed." }
+    }
     npm run dev
 } finally {
     Pop-Location

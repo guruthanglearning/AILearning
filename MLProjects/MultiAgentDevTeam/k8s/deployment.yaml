@@ -22,7 +22,8 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000
+        runAsUser: 10001        # appuser in docker/Dockerfile, which owns /app/sessions
+        runAsGroup: 10001
       containers:
         - name: orchestrator
           image: multi-agent-dev-team:latest

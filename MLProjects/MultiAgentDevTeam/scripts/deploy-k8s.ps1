@@ -3,7 +3,11 @@
     Deploy the Multi-Agent Dev Team (API + UI) to a local Kubernetes cluster (Docker Desktop).
 
 .PARAMETER ApiKey
-    Anthropic API key. Falls back to ANTHROPIC_API_KEY environment variable.
+    Anthropic API key. Optional: if omitted, the key comes from the ANTHROPIC_API_KEY
+    environment variable, then src/MultiAgentDevTeam.Orchestrator/appsettings.secrets.json,
+    then a masked prompt (see scripts/Resolve-AnthropicApiKey.ps1). Passing it here saves
+    it in your shell history, so prefer the other sources.
+    If no key is found but the cluster already has the agent-secrets Secret, it is reused.
 
 .PARAMETER Down
     Remove all Kubernetes resources (delete the namespace).
@@ -12,19 +16,20 @@
     Skip rebuilding Docker images (use existing images).
 
 .EXAMPLE
-    .\deploy-k8s.ps1 -ApiKey "sk-ant-xxxx"
+    .\deploy-k8s.ps1
     .\deploy-k8s.ps1 -SkipBuild
     .\deploy-k8s.ps1 -Down
 #>
 
 param(
-    [string]$ApiKey = $env:ANTHROPIC_API_KEY,
+    [string]$ApiKey,
     [switch]$Down,
     [switch]$SkipBuild
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "Resolve-AnthropicApiKey.ps1")
 
 $Root      = Split-Path -Parent $PSScriptRoot
 $K8sDir    = Join-Path $Root "k8s"
@@ -53,9 +58,16 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "Kubernetes cluster reachable." -ForegroundColor Green
 
-if ([string]::IsNullOrWhiteSpace($ApiKey)) {
-    Write-Error "ANTHROPIC_API_KEY is required. Set the environment variable or pass -ApiKey."
-    exit 1
+# Resolve the API key before building anything, so a missing key fails fast
+$resolvedKey = Resolve-AnthropicApiKey -ApiKey $ApiKey -AllowMissing
+if (-not $resolvedKey) {
+    # Stderr from a native command is a terminating error under "Stop" in Windows PowerShell
+    $secretExists = & { $ErrorActionPreference = 'Continue'; kubectl get secret agent-secrets -n $Namespace -o name 2>$null; $LASTEXITCODE -eq 0 }
+    if (-not ($secretExists | Select-Object -Last 1)) {
+        # Nothing to reuse either; let the resolver raise its full "how to provide a key" error
+        $null = Resolve-AnthropicApiKey -NonInteractive
+    }
+    Write-Warning "No API key found; reusing the existing 'agent-secrets' Secret in the cluster."
 }
 
 # Step 1: Build Orchestrator image
@@ -83,12 +95,13 @@ Write-Host "`n[3/8] Creating namespace..." -ForegroundColor Yellow
 kubectl apply -f "$K8sDir\namespace.yaml"
 
 # Step 4: Secret
-Write-Host "`n[4/8] Creating secret..." -ForegroundColor Yellow
-kubectl create secret generic agent-secrets `
-    --from-literal=ANTHROPIC_API_KEY=$ApiKey `
-    -n $Namespace `
-    --dry-run=client -o yaml | kubectl apply -f -
-Write-Host "Secret applied." -ForegroundColor Green
+if ($resolvedKey) {
+    Write-Host "`n[4/8] Applying secret..." -ForegroundColor Yellow
+    Set-KubernetesApiKeySecret -Key $resolvedKey -Namespace $Namespace
+    Write-Host "Secret applied." -ForegroundColor Green
+} else {
+    Write-Host "`n[4/8] Keeping existing secret" -ForegroundColor DarkYellow
+}
 
 # Step 5: ConfigMap
 Write-Host "`n[5/8] Applying ConfigMap..." -ForegroundColor Yellow
@@ -104,8 +117,10 @@ Write-Host "`n[7/8] Applying UI Deployment and Service..." -ForegroundColor Yell
 kubectl apply -f "$K8sDir\deployment-ui.yaml"
 kubectl apply -f "$K8sDir\service-ui.yaml"
 
-# Step 8: Wait for pod readiness
-Write-Host "`n[8/8] Waiting for pods to be ready..." -ForegroundColor Yellow
+# Step 8: Restart pods and wait for readiness. Pods read the Secret and the :latest image
+# only at startup, so without a restart a rotated key or rebuilt image is never picked up.
+Write-Host "`n[8/8] Restarting pods and waiting for them to be ready..." -ForegroundColor Yellow
+kubectl rollout restart deployment/orchestrator deployment/ui -n $Namespace
 kubectl rollout status deployment/orchestrator -n $Namespace --timeout=120s
 if ($LASTEXITCODE -ne 0) {
     Write-Warning "Orchestrator rollout timed out. Check: kubectl get pods -n $Namespace"

@@ -8,6 +8,7 @@
 **/node_modules/
 **/bin/
 **/obj/
+src/MultiAgentDevTeam.UI/dist/
 
 # Visual Studio / Rider
 .vs/

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { Spinner } from "@/components/ui/Spinner";
 import { useUserSettings } from "@/hooks/useUserSettings";
-import { getClaudeUsage } from "@/lib/api";
+import { getClaudeModels, getClaudeUsage } from "@/lib/api";
 import type { AnalysisRunRequest, ClaudeUsage } from "@/types/api";
 
 interface AnalysisFormProps {
@@ -38,7 +38,7 @@ const MODEL_OPTIONS = [
     id: "claude-sonnet-5-5",
     label: "Sonnet 5.5",
     tier: "Balanced · Latest",
-    cost: "~$0.013",
+    cost: "~$0.02",
     color: "text-cyan-300",
     border: "border-cyan-700/50",
     activeBg: "bg-cyan-900/40",
@@ -58,7 +58,7 @@ const MODEL_OPTIONS = [
     id: "claude-opus-5-5",
     label: "Opus 5.5",
     tier: "Professional · Latest",
-    cost: "~$0.04",
+    cost: "~$0.07",
     color: "text-fuchsia-300",
     border: "border-fuchsia-700/50",
     activeBg: "bg-fuchsia-900/40",
@@ -99,6 +99,11 @@ const MODEL_OPTIONS = [
 const DEFAULT_MODEL = "claude-sonnet-5-5";
 const STORAGE_KEY = "claude_selected_model";
 
+// Matches the precision of the fallback labels above: ~$0.004, ~$0.02, ~$0.10.
+function formatEstCost(usd: number): string {
+  return usd < 0.01 ? `~$${usd.toFixed(3)}` : `~$${usd.toFixed(2)}`;
+}
+
 export function AnalysisForm({ onSubmit, isLoading, defaultSymbol = "" }: AnalysisFormProps) {
   const { settings } = useUserSettings();
 
@@ -110,6 +115,22 @@ export function AnalysisForm({ onSubmit, isLoading, defaultSymbol = "" }: Analys
     return DEFAULT_MODEL;
   });
   const [usage, setUsage] = useState<ClaudeUsage | null>(null);
+  // Per-analysis cost estimates from the backend's model registry (the single
+  // source of truth); each option's hardcoded `cost` is only the fallback if
+  // the request fails or a model is missing from the response.
+  const [estCosts, setEstCosts] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    getClaudeModels()
+      .then((models) => {
+        const costs: Record<string, number> = {};
+        for (const [id, info] of Object.entries(models)) {
+          if (typeof info.est_cost_per_analysis === "number") costs[id] = info.est_cost_per_analysis;
+        }
+        setEstCosts(costs);
+      })
+      .catch(() => {});
+  }, []);
 
   // Apply server-side preferred model when settings load (takes precedence over localStorage)
   useEffect(() => {
@@ -215,7 +236,7 @@ export function AnalysisForm({ onSubmit, isLoading, defaultSymbol = "" }: Analys
                   {m.label}
                 </span>
                 <span className={`text-[10px] ${active ? "text-gray-400" : "text-gray-600"}`}>
-                  {m.tier} · {m.cost}
+                  {m.tier} · {m.id in estCosts ? formatEstCost(estCosts[m.id]) : m.cost}
                 </span>
               </button>
             );

@@ -51,7 +51,8 @@ CLAUDE_MODELS: dict[str, dict] = {
         "input_price_per_m": 2.0,
         "output_price_per_m": 10.0,
         "supports_thinking": True,
-        "est_cost_per_analysis": 0.013,
+        # Measured: mean of 4 live K8s analyses (2026-11-22), $0.018-$0.020.
+        "est_cost_per_analysis": 0.019,
         "provider": "anthropic",
         # Server-side refusal fallback, "default" form: Anthropic routes a
         # declined request by refusal category (to Sonnet 5 for this model).
@@ -64,7 +65,10 @@ CLAUDE_MODELS: dict[str, dict] = {
         "input_price_per_m": 4.0,
         "output_price_per_m": 20.0,
         "supports_thinking": True,
-        "est_cost_per_analysis": 0.04,
+        # Measured: mean of 4 live K8s analyses (2026-11-22), $0.052-$0.086.
+        # Effort "high" makes it write ~2-4k output tokens, so it costs more
+        # per analysis than its per-token price alone suggests.
+        "est_cost_per_analysis": 0.066,
         "provider": "anthropic",
         "refusal_fallback": "default",
         # Opus 5.5 defaults to effort "medium" (one level below earlier Opus

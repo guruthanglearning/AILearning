@@ -55,6 +55,22 @@ def test_claude_models_endpoint_lists_5_5_models(model_id, input_price, output_p
     assert cfg["provider"] == "anthropic"
 
 
+@pytest.mark.parametrize(
+    ("model_id", "measured_est"),
+    # Means of 4 live K8s analyses each (2026-11-22).
+    [("claude-sonnet-5-5", 0.019), ("claude-opus-5-5", 0.066)],
+)
+def test_5_5_cost_estimates_match_measured_runs(model_id, measured_est):
+    assert CLAUDE_MODELS[model_id]["est_cost_per_analysis"] == measured_est
+
+
+def test_every_model_has_a_numeric_cost_estimate_for_the_picker():
+    # The Analysis tab picker reads est_cost_per_analysis from /v1/claude/models.
+    for model_id, cfg in CLAUDE_MODELS.items():
+        est = cfg["est_cost_per_analysis"]
+        assert isinstance(est, (int, float)) and est > 0, model_id
+
+
 def test_opus_5_5_cache_read_is_priced_at_5_percent():
     cfg = CLAUDE_MODELS["claude-opus-5-5"]
     input_cost, _ = _price_usage(cfg, "claude-opus-5-5", 0, 0, 0, 1_000_000)

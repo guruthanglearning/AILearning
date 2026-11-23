@@ -44,6 +44,33 @@ CLAUDE_MODELS: dict[str, dict] = {
         "est_cost_per_analysis": 0.02,
         "provider": "anthropic",
     },
+    "claude-sonnet-5-5": {
+        "label": "Sonnet 5.5",
+        "tier": "Balanced",
+        "description": "Latest Sonnet — best value for everyday analysis",
+        "input_price_per_m": 2.0,
+        "output_price_per_m": 10.0,
+        "supports_thinking": True,
+        "est_cost_per_analysis": 0.013,
+        "provider": "anthropic",
+        # Server-side refusal fallback, "default" form: Anthropic routes a
+        # declined request by refusal category (to Sonnet 5 for this model).
+        "refusal_fallback": "default",
+    },
+    "claude-opus-5-5": {
+        "label": "Opus 5.5",
+        "tier": "Professional",
+        "description": "Latest Opus — deepest reasoning short of Fable, below Opus 4.8's price",
+        "input_price_per_m": 4.0,
+        "output_price_per_m": 20.0,
+        "supports_thinking": True,
+        "est_cost_per_analysis": 0.04,
+        "provider": "anthropic",
+        "refusal_fallback": "default",
+        # Opus 5.5 defaults to effort "medium" (one level below earlier Opus
+        # models); a trading verdict is intelligence-sensitive, so ask for "high".
+        "effort": "high",
+    },
     "claude-haiku-4-5-20251001": {
         "label": "Haiku 4.5",
         "tier": "Dev/Fast",
@@ -63,6 +90,7 @@ CLAUDE_MODELS: dict[str, dict] = {
         "supports_thinking": True,
         "est_cost_per_analysis": 0.10,
         "provider": "anthropic",
+        "refusal_fallback": "claude-opus-4-8",
     },
     "claude-fable-5-1": {
         "label": "Fable 5.1",
@@ -73,6 +101,7 @@ CLAUDE_MODELS: dict[str, dict] = {
         "supports_thinking": True,
         "est_cost_per_analysis": 0.10,
         "provider": "anthropic",
+        "refusal_fallback": "claude-opus-4-8",
     },
     "gpt-4o-mini": {
         "label": "GPT-4o mini",
@@ -86,7 +115,31 @@ CLAUDE_MODELS: dict[str, dict] = {
         "provider": "openai",
     },
 }
-DEFAULT_MODEL = "claude-opus-4-8"
+DEFAULT_MODEL = "claude-sonnet-5-5"
+
+# Models that are never offered in the picker but can still serve (and bill) a
+# request when a "default"-form refusal fallback reroutes it — Opus 5.5 can fall
+# back to Opus 5, Sonnet 5.5 to Sonnet 5. Priced here so a fallback is billed at
+# the model that actually served it, not the one originally requested.
+_FALLBACK_ONLY_MODELS: dict[str, dict] = {
+    "claude-opus-5": {
+        "label": "Opus 5 (fallback)",
+        "input_price_per_m": 5.0,
+        "output_price_per_m": 25.0,
+        "provider": "anthropic",
+    },
+    "claude-sonnet-5": {
+        "label": "Sonnet 5 (fallback)",
+        "input_price_per_m": 2.0,
+        "output_price_per_m": 10.0,
+        "provider": "anthropic",
+    },
+}
+
+
+def _pricing_for(model_id: str) -> dict | None:
+    """Pricing config for a selectable model or a fallback-only model."""
+    return CLAUDE_MODELS.get(model_id) or _FALLBACK_ONLY_MODELS.get(model_id)
 
 # ── Session usage tracker (resets on server restart) ─────────────────────────
 _session_usage: dict[str, dict] = {}
@@ -264,6 +317,7 @@ _CACHE_WRITE_MULTIPLIER = 1.25
 _CACHE_READ_MULTIPLIER: dict[str, float] = {
     "claude-fable-5": 0.025,
     "claude-fable-5-1": 0.025,
+    "claude-opus-5-5": 0.05,  # $0.20/MTok cache read on a $4/MTok base
 }
 _DEFAULT_CACHE_READ_MULTIPLIER = 0.10
 
@@ -327,6 +381,30 @@ def _compute_cost_breakdown(
         }
         for model_id, cfg in CLAUDE_MODELS.items()
     ]
+    # A refusal fallback can be served by a model that isn't in the picker
+    # (e.g. Opus 5); add its row so the comparison still marks what was billed.
+    fallback_cfg = _FALLBACK_ONLY_MODELS.get(billed_model)
+    if fallback_cfg is not None:
+        estimates.append(
+            {
+                "model": billed_model,
+                "label": fallback_cfg["label"],
+                "cost_usd": round(
+                    sum(
+                        _price_usage(
+                            fallback_cfg,
+                            billed_model,
+                            input_tokens,
+                            output_tokens,
+                            cache_creation_tokens,
+                            cache_read_tokens,
+                        )
+                    ),
+                    4,
+                ),
+                "is_selected": True,
+            }
+        )
     estimates.sort(key=lambda e: e["cost_usd"])
     return {
         "selected_model": billed_model,
@@ -521,7 +599,10 @@ async def _call_anthropic_verdict(
 
         create_kwargs: dict = {
             "model": chosen_model,
-            "max_tokens": 4096,
+            # Thinking tokens count toward max_tokens; Opus 5.5 / Sonnet 5.5 /
+            # Fable always think, so leave room for thinking plus the verdict
+            # tool call. Only tokens actually generated are billed.
+            "max_tokens": 16000,
             "system": [
                 {
                     "type": "text",
@@ -535,17 +616,26 @@ async def _call_anthropic_verdict(
         }
         if model_cfg["supports_thinking"]:
             create_kwargs["thinking"] = {"type": "adaptive"}
+        if model_cfg.get("effort"):
+            create_kwargs["output_config"] = {"effort": model_cfg["effort"]}
 
-        if chosen_model in ("claude-fable-5", "claude-fable-5-1"):
-            # Fable-tier models run safety classifiers that can decline a request
-            # (stop_reason="refusal") more readily than Opus-tier models.
-            # Opt into the server-side fallback so a policy decline is
-            # re-served by Opus 4.8 in the same call instead of surfacing
-            # as a hard failure to the user. `fallbacks` isn't a typed param
-            # on this SDK version (0.107.1) yet — pass it via extra_body
-            # rather than upgrading the SDK just for this one field.
-            create_kwargs["betas"] = ["server-side-fallback-2026-06-01"]
-            create_kwargs["extra_body"] = {"fallbacks": [{"model": "claude-opus-4-8"}]}
+        refusal_fallback = model_cfg.get("refusal_fallback")
+        if refusal_fallback:
+            # Fable-tier and the 5.5 models run safety classifiers that can
+            # decline a request (stop_reason="refusal"). Opt into the
+            # server-side fallback so a policy decline is re-served by another
+            # model in the same call instead of surfacing as a hard failure.
+            # `fallbacks` isn't a typed param on this SDK version (0.107.1)
+            # yet — pass it via extra_body rather than upgrading the SDK.
+            if refusal_fallback == "default":
+                # "default" form: Anthropic picks the fallback per refusal
+                # category. It has its own beta header — pairing it with the
+                # array form's header (or vice versa) is a 400.
+                create_kwargs["betas"] = ["server-side-fallback-2026-07-01"]
+                create_kwargs["extra_body"] = {"fallbacks": "default"}
+            else:
+                create_kwargs["betas"] = ["server-side-fallback-2026-06-01"]
+                create_kwargs["extra_body"] = {"fallbacks": [{"model": refusal_fallback}]}
             response = await client.beta.messages.create(**create_kwargs)
         else:
             response = await client.messages.create(**create_kwargs)
@@ -743,12 +833,17 @@ async def get_claude_verdict(
         )
 
     # served_model is the model that actually served the response — differs from
-    # chosen_model when a Fable-tier refusal fell back to Opus 4.8 (see fallbacks above).
+    # chosen_model when a refusal fell back to another model (see fallbacks above).
     # Attribute usage and price by the model that was actually billed, not the
     # one originally requested — otherwise a fallback would show up under the
     # requested model's bucket at the served model's (different) rate.
-    billed_model = served_model if served_model in CLAUDE_MODELS else chosen_model
-    pricing_cfg = CLAUDE_MODELS[billed_model]
+    if _pricing_for(served_model) is not None:
+        billed_model = served_model
+    else:
+        if served_model != chosen_model:
+            log.warning("claude_served_model_unpriced", requested=chosen_model, served=served_model)
+        billed_model = chosen_model
+    pricing_cfg = _pricing_for(billed_model)
 
     # Track session usage
     entry = _session_usage.setdefault(

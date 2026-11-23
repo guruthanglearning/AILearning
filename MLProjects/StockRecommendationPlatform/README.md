@@ -199,7 +199,7 @@ The Analysis page also opens a **WebSocket** connection (`/v1/ws/quote/{symbol}`
                                    │
                     ┌──────────────▼──────────────┐
                     │  Claude LLM Decision Engine  │
-                    │  (claude-opus-4-8 default)   │
+                    │  (claude-sonnet-5-5 default) │
                     │                              │
                     │  All 7 agent outputs fed as  │
                     │  structured prompt context   │
@@ -907,7 +907,7 @@ A degraded agent does **not** stop the analysis — the Supervisor proceeds with
 | Database | PostgreSQL 16 (asyncpg driver) |
 | Cache | Redis 7 (optional) |
 | Market data | yfinance (default), Polygon.io REST + WebSocket (optional) |
-| LLM decision engine | Multi-provider, selectable per-analysis from UI — Anthropic Claude (Opus 4.8 default, Sonnet 4.6, Haiku 4.5, Fable 5.1, Fable 5 legacy) or OpenAI (GPT-4o mini) |
+| LLM decision engine | Multi-provider, selectable per-analysis from UI — Anthropic Claude (Sonnet 5.5 default, Opus 5.5, Opus 4.8, Sonnet 4.6, Haiku 4.5, Fable 5.1, Fable 5 legacy) or OpenAI (GPT-4o mini) |
 | ML sentiment | FinBERT via HuggingFace Transformers / external StockPrediction API |
 | Rate limiting | SlowAPI (redis-backed in prod) |
 | Observability | structlog · OpenTelemetry · Prometheus |

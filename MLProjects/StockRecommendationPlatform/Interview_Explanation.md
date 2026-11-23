@@ -40,7 +40,7 @@ All 7 run **concurrently** via `asyncio.gather` / `asyncio.wait(FIRST_COMPLETED)
 
 Once agent outputs are in, a **Decision Support** layer (`build_decision_aids`) pre-computes deterministic quantitative aids — a stock-vs-options score (-1 to +1), a pass/warn/fail checklist, volatility regime, position-sizing hints, and an options metrics table. Only *then* does the Supervisor hand all of this — structured, already-computed — to Claude via a `submit_analysis_verdict` tool call, so the LLM is reasoning over verified numbers instead of hallucinating them, and its structured-output contract is enforced by the tool schema rather than free-text parsing.
 
-**Model selection is user-facing and cost-tracked**: the Analysis tab lets you pick Haiku 4.5 / Sonnet 4.6 / Opus 4.8 / Fable 5 / Fable 5.1 (Anthropic) or GPT-4o mini (OpenAI) per analysis, and a **Model Cost Comparison** card shows the actual billed cost for the model you picked alongside what every other model would have cost for the same token usage — including correctly attributing cost to whichever model *actually* served the response when Fable-tier's server-side refusal fallback kicks in, and correctly pricing Anthropic prompt-cache write/read tokens at their distinct rates.
+**Model selection is user-facing and cost-tracked**: the Analysis tab lets you pick Haiku 4.5 / Sonnet 4.6 / Sonnet 5.5 (default) / Opus 4.8 / Opus 5.5 / Fable 5 / Fable 5.1 (Anthropic) or GPT-4o mini (OpenAI) per analysis, and a **Model Cost Comparison** card shows the actual billed cost for the model you picked alongside what every other model would have cost for the same token usage — including correctly attributing cost to whichever model *actually* served the response when a server-side refusal fallback kicks in (Fable-tier and the 5.5 models), and correctly pricing Anthropic prompt-cache write/read tokens at their distinct rates.
 
 ---
 
@@ -139,7 +139,7 @@ Once agent outputs are in, a **Decision Support** layer (`build_decision_aids`) 
 | ORM / DB | SQLAlchemy 2.0 (async) + Alembic migrations → PostgreSQL 16 |
 | Cache | Redis 7 (optional; TTL-cached market quotes) |
 | Market data | yfinance (default), Polygon.io REST + WebSocket (optional, live price relay) |
-| LLM decision engine | Anthropic Claude — Opus 4.8 (default), Sonnet 4.6, Haiku 4.5, Fable 5 / Fable 5.1 — or OpenAI GPT-4o mini, selectable per-analysis |
+| LLM decision engine | Anthropic Claude — Sonnet 5.5 (default), Opus 5.5, Opus 4.8, Sonnet 4.6, Haiku 4.5, Fable 5 / Fable 5.1 — or OpenAI GPT-4o mini, selectable per-analysis |
 | ML sentiment | FinBERT (HuggingFace Transformers) over Finnhub news |
 | Rate limiting | SlowAPI |
 | Observability | structlog · OpenTelemetry · Prometheus · Grafana |
@@ -174,8 +174,8 @@ Once agent outputs are in, a **Decision Support** layer (`build_decision_aids`) 
 │ 🔄 RESILIENCE                                                │
 │    → Each agent reports complete/degraded/failed and the    │
 │      Supervisor merges around failures instead of crashing; │
-│      Claude Fable-tier requests opt into server-side         │
-│      refusal fallback to Opus 4.8 automatically              │
+│      Fable-tier and 5.5-model requests opt into              │
+│      server-side refusal fallback automatically              │
 │                                                               │
 │ 📈 PARITY ACROSS ENVIRONMENTS                                │
 │    → Identical feature set validated on both Docker Compose │

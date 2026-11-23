@@ -35,6 +35,16 @@ const MODEL_OPTIONS = [
     activeBorder: "border-sky-500",
   },
   {
+    id: "claude-sonnet-5-5",
+    label: "Sonnet 5.5",
+    tier: "Balanced · Latest",
+    cost: "~$0.013",
+    color: "text-cyan-300",
+    border: "border-cyan-700/50",
+    activeBg: "bg-cyan-900/40",
+    activeBorder: "border-cyan-400",
+  },
+  {
     id: "claude-opus-4-8",
     label: "Opus 4.8",
     tier: "Professional",
@@ -43,6 +53,16 @@ const MODEL_OPTIONS = [
     border: "border-violet-700/50",
     activeBg: "bg-violet-900/40",
     activeBorder: "border-violet-500",
+  },
+  {
+    id: "claude-opus-5-5",
+    label: "Opus 5.5",
+    tier: "Professional · Latest",
+    cost: "~$0.04",
+    color: "text-fuchsia-300",
+    border: "border-fuchsia-700/50",
+    activeBg: "bg-fuchsia-900/40",
+    activeBorder: "border-fuchsia-400",
   },
   {
     id: "claude-fable-5-1",
@@ -76,7 +96,7 @@ const MODEL_OPTIONS = [
   },
 ] as const;
 
-const DEFAULT_MODEL = "claude-opus-4-8";
+const DEFAULT_MODEL = "claude-sonnet-5-5";
 const STORAGE_KEY = "claude_selected_model";
 
 export function AnalysisForm({ onSubmit, isLoading, defaultSymbol = "" }: AnalysisFormProps) {

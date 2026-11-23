@@ -9,7 +9,9 @@ import { useApiKey } from "@/contexts/ApiKeyContext";
 const MODEL_OPTIONS = [
   { id: "claude-haiku-4-5-20251001", label: "Haiku 4.5 — Dev / Fast" },
   { id: "claude-sonnet-4-6",         label: "Sonnet 4.6 — Balanced" },
+  { id: "claude-sonnet-5-5",         label: "Sonnet 5.5 — Balanced (latest, default)" },
   { id: "claude-opus-4-8",           label: "Opus 4.8 — Professional" },
+  { id: "claude-opus-5-5",           label: "Opus 5.5 — Professional (latest)" },
   { id: "claude-fable-5-1",          label: "Fable 5.1 — Frontier" },
   { id: "claude-fable-5",            label: "Fable 5 (legacy) — Frontier" },
   { id: "gpt-4o-mini",               label: "GPT-4o mini — OpenAI" },
@@ -43,7 +45,7 @@ export default function SettingsPage() {
     setSymbol(settings.default_symbol ?? "");
     setPortVal(settings.default_portfolio_value != null ? String(settings.default_portfolio_value) : "");
     setMaxRisk(settings.default_max_risk_pct != null ? String(settings.default_max_risk_pct) : "");
-    setModel(settings.preferred_claude_model ?? "claude-opus-4-8");
+    setModel(settings.preferred_claude_model ?? "claude-sonnet-5-5");
     setRefresh(settings.market_grid_refresh_secs != null ? String(settings.market_grid_refresh_secs) : "");
     setGridSyms(settings.market_grid_symbols?.join(", ") ?? "");
   }, [loading, settings]);

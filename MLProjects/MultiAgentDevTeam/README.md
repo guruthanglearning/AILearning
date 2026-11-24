@@ -19,6 +19,7 @@ An AI-powered software engineering team built in **C# .NET 10**, orchestrated vi
   - [Docker](#option-2--docker)
   - [Kubernetes](#option-3--kubernetes-docker-desktop)
 - [Debugging](#debugging)
+  - [Local debugging (F5, no Docker)](#local-debugging-f5-no-docker)
   - [Visual Studio 2022](#visual-studio-2022)
   - [VS Code](#vs-code)
 - [API Reference](#api-reference)
@@ -371,7 +372,44 @@ kubectl scale deployment/orchestrator --replicas=2 -n multi-agent-dev-team
 
 ## Debugging
 
-The application must be running (via Docker or locally) before attaching a debugger.
+### Local debugging (F5, no Docker)
+
+The quickest way to debug is to run the code straight from Visual Studio. The local debug ports differ from Docker's, so the Docker stack (3000/5000) can keep running alongside:
+
+| What | Local debug | Docker / `deploy-local.ps1` |
+|---|---|---|
+| Orchestrator API + Swagger | http://localhost:5002 | http://localhost:5000 |
+| Blazor UI | https://localhost:59257 | — |
+| React UI (`npm run dev:debug`) | http://localhost:3001 | http://localhost:3000 |
+
+1. Set up your API key once (see [API key setup](#api-key-setup)). Every pipeline run calls the real Claude API.
+2. Open `MultiAgentDevTeam.slnx` in Visual Studio and pick **Local debug (Orchestrator + Blazor UI)** in the startup-project dropdown (stored in `MultiAgentDevTeam.slnLaunch`).
+3. Press **F5**. The Orchestrator starts on 5002 (`Properties/launchSettings.json`), and the Blazor UI calls it through `OrchestratorApi:BaseUrl` in `appsettings.Development.json`.
+4. To debug the React UI against the same API instead:
+   ```powershell
+   cd src/MultiAgentDevTeam.UI
+   npm run dev:debug        # http://localhost:3001, proxies /api to http://localhost:5002
+   ```
+   Set `API_PROXY_TARGET` to point the proxy anywhere else. Debug the React code in Edge DevTools (F12 → Sources); Vite serves source maps.
+
+Useful breakpoints, following one request from the UI down to the agents:
+
+| File | What happens there |
+|---|---|
+| `BlazorUI/Pages/Home.razor.cs` → `HandleSubmitAsync` | UI submits the requirement and reads the stream |
+| `BlazorUI/Services/PipelineClient.cs` → `StreamAsync` | HTTP call to `POST /api/run/stream` |
+| `Orchestrator/Program.cs` → `MapPost("/api/run/stream")` | API endpoint |
+| `Orchestrator/Services/OrchestratorService.cs` → `StreamAsync` | Pipeline phases, review loop, Verifier |
+| `Shared/Agents/BaseAgent.cs` → the `Messages.CreateStreaming` call | Every agent's Claude request and response |
+| `Orchestrator/Services/ProjectWriter.cs` → `WriteAsync` | Generated files written to disk |
+
+If the Blazor UI can't reach the API, its error names the URL it tried, e.g. *Cannot connect to the Orchestrator API at http://localhost:5002. Start MultiAgentDevTeam.Orchestrator and check that http://localhost:5002/health responds.*
+
+Pausing at a breakpoint doesn't pause the clocks around it: a Claude request in flight still times out after `AgentConfiguration:TimeoutSeconds` (1800 s), so resume promptly or raise that value in the Orchestrator's config: `src/MultiAgentDevTeam.Orchestrator/appsettings.secrets.json` keeps it local (gitignored), `appsettings.json` changes it for everyone.
+
+### Attaching to Docker
+
+The application must be running in Docker before attaching a debugger.
 
 > **Note on symbols:** The production `Dockerfile` builds in **Release** mode, which strips debug symbols (PDB files). You will be able to attach and pause execution, but breakpoints on your source lines will not bind. For full source-level debugging, see the [Debug build note](#debug-build-note) below.
 
@@ -632,6 +670,7 @@ MultiAgentDevTeam/
 │
 ├── NuGet.Config                           # Packages stored in shared_Environment
 ├── MultiAgentDevTeam.slnx
+├── MultiAgentDevTeam.slnLaunch            # Visual Studio "Local debug" profile (Orchestrator + Blazor UI)
 └── README.md
 ```
 

@@ -4,13 +4,14 @@ using MultiAgentDevTeam.BlazorUI.Models;
 using MultiAgentDevTeam.BlazorUI.Services;
 using MultiAgentDevTeam.BlazorUI.UnitTests.Helpers;
 using System.Net;
+using System.Net.Sockets;
 using Xunit;
 
 namespace MultiAgentDevTeam.BlazorUI.UnitTests.Services;
 
 public class PipelineClientTests
 {
-    private static PipelineClient CreateClient(SseMessageHandler handler)
+    private static PipelineClient CreateClient(HttpMessageHandler handler)
     {
         var http = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5000") };
         return new PipelineClient(http, NullLogger<PipelineClient>.Instance);
@@ -80,8 +81,70 @@ public class PipelineClientTests
             await foreach (var _ in client.StreamAsync(request)) { }
         };
 
+        // Assert — still an HttpRequestException, with a message that names the API and status
+        var thrown = await act.Should().ThrowAsync<HttpRequestException>();
+        thrown.Which.StatusCode.Should().Be(HttpStatusCode.InternalServerError);
+        thrown.Which.Message.Should().Contain("http://localhost:5000").And.Contain("500");
+    }
+
+    [Fact]
+    public async Task StreamAsync_ApiNotRunning_ThrowsMessageNamingUrlAndHealthCheck()
+    {
+        // Arrange — the Orchestrator isn't listening on the configured port
+        var refused = new HttpRequestException(
+            "No connection could be made", new SocketException((int)SocketError.ConnectionRefused));
+        var client = CreateClient(new ThrowingHandler(refused));
+
+        // Act
+        var act = async () =>
+        {
+            await foreach (var _ in client.StreamAsync(new PipelineRequest { Requirement = "x" })) { }
+        };
+
         // Assert
-        await act.Should().ThrowAsync<HttpRequestException>();
+        var thrown = await act.Should().ThrowAsync<HttpRequestException>();
+        thrown.Which.Message.Should().Contain("Cannot connect to the Orchestrator API at http://localhost:5000")
+            .And.Contain("http://localhost:5000/health");
+        thrown.Which.InnerException.Should().BeSameAs(refused);
+    }
+
+    [Fact]
+    public async Task StreamAsync_OtherNetworkError_ThrowsMessageWithOriginalReason()
+    {
+        // Arrange
+        var client = CreateClient(new ThrowingHandler(new HttpRequestException("DNS lookup failed")));
+
+        // Act
+        var act = async () =>
+        {
+            await foreach (var _ in client.StreamAsync(new PipelineRequest { Requirement = "x" })) { }
+        };
+
+        // Assert
+        (await act.Should().ThrowAsync<HttpRequestException>())
+            .Which.Message.Should().Be("Unable to reach the Orchestrator API at http://localhost:5000: DNS lookup failed");
+    }
+
+    [Fact]
+    public async Task StreamAsync_CancelledBeforeResponse_ThrowsOperationCanceled()
+    {
+        // Arrange — cancelling while connecting must not be reported as a connection error
+        var client = CreateClient(new ThrowingHandler(new TaskCanceledException()));
+
+        // Act
+        var act = async () =>
+        {
+            await foreach (var _ in client.StreamAsync(new PipelineRequest { Requirement = "x" })) { }
+        };
+
+        // Assert
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    private sealed class ThrowingHandler(Exception exception) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => Task.FromException<HttpResponseMessage>(exception);
     }
 
     [Fact]

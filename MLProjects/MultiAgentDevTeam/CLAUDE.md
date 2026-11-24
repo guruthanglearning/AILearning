@@ -210,12 +210,14 @@ dotnet test tests/MultiAgentDevTeam.IntegrationTests/
 dotnet test tests/MultiAgentDevTeam.BlazorUI.UnitTests/
 dotnet test tests/MultiAgentDevTeam.BlazorUI.E2ETests/
 
-# Run the API locally
+# Run the API locally (launch profile: http://localhost:5002, so it can run beside Docker on 5000)
 dotnet run --project src/MultiAgentDevTeam.Orchestrator/
 
-# Run the Blazor UI locally
+# Run the Blazor UI locally (appsettings.Development.json points it at the API on 5002)
 dotnet run --project src/MultiAgentDevTeam.BlazorUI/
 ```
+
+Local debugging: Visual Studio's shared startup profile **Local debug (Orchestrator + Blazor UI)** lives in `MultiAgentDevTeam.slnLaunch`; the React UI's `npm run dev:debug` serves on 3001 and proxies `/api` to 5002 (`API_PROXY_TARGET` overrides). Docker, K8s and `scripts/deploy-local.ps1` keep 5000 — they set the URL explicitly. See README → Debugging.
 
 The React UI (`src/MultiAgentDevTeam.UI/`) is a separate npm project, not part of `dotnet build`/`dotnet test` at all — see "Frontends" above for its own commands.
 

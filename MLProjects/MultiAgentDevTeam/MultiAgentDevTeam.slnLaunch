@@ -1,0 +1,15 @@
+[
+  {
+    "Name": "Local debug (Orchestrator + Blazor UI)",
+    "Projects": [
+      {
+        "Path": "src\\MultiAgentDevTeam.Orchestrator\\MultiAgentDevTeam.Orchestrator.csproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "src\\MultiAgentDevTeam.BlazorUI\\MultiAgentDevTeam.BlazorUI.csproj",
+        "Action": "Start"
+      }
+    ]
+  }
+]

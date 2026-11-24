@@ -405,7 +405,7 @@ Useful breakpoints, following one request from the UI down to the agents:
 
 If the Blazor UI can't reach the API, its error names the URL it tried, e.g. *Cannot connect to the Orchestrator API at http://localhost:5002. Start MultiAgentDevTeam.Orchestrator and check that http://localhost:5002/health responds.*
 
-Pausing at a breakpoint doesn't pause the clocks around it: a Claude request in flight still times out after `AgentConfiguration:TimeoutSeconds` (1800 s), so resume promptly or raise that value in `appsettings.Development.json`.
+Pausing at a breakpoint doesn't pause the clocks around it: a Claude request in flight still times out after `AgentConfiguration:TimeoutSeconds` (1800 s), so resume promptly or raise that value in the Orchestrator's config: `src/MultiAgentDevTeam.Orchestrator/appsettings.secrets.json` keeps it local (gitignored), `appsettings.json` changes it for everyone.
 
 ### Attaching to Docker
 

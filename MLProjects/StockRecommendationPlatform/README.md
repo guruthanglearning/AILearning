@@ -411,7 +411,8 @@ src/
 │   ├── sector-heat/page.tsx
 │   ├── settings/page.tsx
 │   ├── keys/page.tsx
-│   └── logs/page.tsx
+│   ├── logs/page.tsx
+│   └── docs/page.tsx             ← Live README viewer
 ├── components/
 │   ├── analysis/
 │   │   ├── AgentStatusGrid.tsx   ← 7-card live agent status (pending → done)
@@ -429,6 +430,14 @@ src/
 │   │   └── LivePriceBar.tsx      ← Real-time quote strip
 │   ├── market/
 │   │   └── MarketGrid.tsx        ← 14-column scrollable table
+│   ├── momentum/
+│   │   └── MomentumGrid.tsx
+│   ├── value/
+│   │   └── ValueGrid.tsx         ← Value screener table
+│   ├── portfolio/
+│   │   └── PortfolioTracker.tsx
+│   ├── docs/
+│   │   └── ReadmeViewer.tsx      ← Renders this README in-app
 │   ├── watchlists/
 │   ├── alerts/
 │   ├── keys/
@@ -443,7 +452,8 @@ src/
 │       └── ErrorMessage.tsx
 ├── contexts/
 │   ├── AnalysisContext.tsx       ← SSE state: partialContributions, verdict
-│   └── ApiKeyContext.tsx
+│   ├── ApiKeyContext.tsx
+│   └── NotificationContext.tsx
 ├── lib/
 │   └── api.ts                   ← All fetch + streamAnalysis() helpers
 └── types/
@@ -772,6 +782,8 @@ A degraded agent does **not** stop the analysis — the Supervisor proceeds with
 | `GET`  | `/v1/analysis/stream/{symbol}` | **SSE stream** — agent_done events + verdict |
 | `GET`  | `/v1/analysis/history/{symbol}?limit=20` | Past completed runs for a specific symbol |
 | `GET`  | `/v1/analysis/history?limit=50` | All past runs across all symbols |
+| `GET`  | `/v1/analysis/history/latest?symbols=AAPL,MSFT,...` | Most recent completed run for each symbol in one request (max 100 symbols); `null` for symbols with no saved report — used by Watchlists |
+| `GET`  | `/v1/analysis/history/detail/{run_id}` | Full saved report for one past run, shown without re-running (or re-billing) the analysis |
 
 **SSE event types:**
 
@@ -911,7 +923,7 @@ A degraded agent does **not** stop the analysis — the Supervisor proceeds with
 | ML sentiment | FinBERT via HuggingFace Transformers / external StockPrediction API |
 | Rate limiting | SlowAPI (redis-backed in prod) |
 | Observability | structlog · OpenTelemetry · Prometheus |
-| Testing | pytest + pytest-asyncio · 396 tests · ≥ 80% coverage |
+| Testing | pytest + pytest-asyncio · 478 tests · ≥ 80% coverage |
 | Linting | Ruff |
 
 ### Frontend
@@ -1081,7 +1093,7 @@ pytest -q --cov=app --cov-report=term-missing
 pytest tests/test_agents.py -v
 ```
 
-**Test suite:** 396 tests across 22 test files covering agents, supervisor, providers (yfinance, Polygon, Redis cache), watchlists router, alerts trigger, batch jobs, API hardening, observability, options metrics, options robustness (concurrent safety + semaphore), Polygon WebSocket relay, decision support extras, per-model LLM cost accounting, and main cache/endpoints.
+**Test suite:** 478 tests across 24 test files covering agents, supervisor, providers (yfinance, Polygon, Redis cache), watchlists router, alerts trigger, batch jobs, API hardening, observability, options metrics, options robustness (concurrent safety + semaphore), Polygon WebSocket relay, decision support extras, per-model LLM cost accounting and cost comparison, the OpenAI provider adapter, the Claude Sonnet 5.5 / Opus 5.5 model settings (fallback, effort, pricing), the value screener, and main cache/endpoints.
 
 ---
 
@@ -1336,6 +1348,8 @@ StockRecommendationPlatform/
 │   │   ├── alerts.py            ← Alert CRUD + _evaluate_alert()
 │   │   ├── portfolio.py         ← Portfolio position CRUD
 │   │   └── settings.py          ← User settings GET/PUT/DELETE
+│   ├── services/
+│   │   └── claude_service.py    ← LLM model registry, pricing, refusal fallback, cost accounting
 │   ├── db/
 │   │   ├── models.py            ← SQLAlchemy ORM models
 │   │   └── session.py           ← Async engine + get_session()
@@ -1353,6 +1367,8 @@ StockRecommendationPlatform/
 │   ├── middleware.py            ← CorrelationId + SecurityHeaders middleware
 │   ├── observability.py         ← structlog + OTEL + Prometheus setup
 │   ├── universe.py              ← TOP_10, TOP_100, get_sp500()
+│   ├── error_log.py             ← In-memory agent error log (GET/DELETE /v1/logs/errors)
+│   ├── polygon_ws.py            ← Polygon WebSocket relay for /v1/ws/* live prices
 │   └── main.py                  ← FastAPI app, all routes
 ├── alembic/
 │   └── versions/
@@ -1367,6 +1383,7 @@ StockRecommendationPlatform/
 │       │   ├── page.tsx                ← Analysis (SSE streaming)
 │       │   ├── market-grid/page.tsx
 │       │   ├── momentum/page.tsx
+│       │   ├── value/page.tsx
 │       │   ├── compare/page.tsx
 │       │   ├── correlation/page.tsx
 │       │   ├── history/page.tsx
@@ -1380,9 +1397,12 @@ StockRecommendationPlatform/
 │       │   ├── logs/page.tsx
 │       │   └── docs/page.tsx           ← Live README viewer
 │       ├── components/analysis/        ← Agent grid, verdict, options panels
-│       ├── components/market/          ← Market grid table
+│       ├── components/market/          ← Market grid, earnings calendar, sector heatmap
+│       ├── components/momentum/        ← Momentum grid
+│       ├── components/value/           ← Value screener grid
+│       ├── components/portfolio/       ← Portfolio tracker
 │       ├── components/docs/ReadmeViewer.tsx  ← Fetches + renders README.md as markdown
-│       ├── contexts/                   ← AnalysisContext, ApiKeyContext
+│       ├── contexts/                   ← AnalysisContext, ApiKeyContext, NotificationContext
 │       ├── lib/api.ts                  ← fetch + streamAnalysis() helpers
 │       └── types/api.ts                ← TypeScript mirrors of Pydantic schemas
 ├── k8s/
@@ -1394,8 +1414,11 @@ StockRecommendationPlatform/
 │   ├── kind-cluster.yaml               ← kind cluster with NodePort host mappings
 │   ├── postgres/                       ← StatefulSet + ClusterIP service
 │   ├── redis/                          ← Deployment + ClusterIP service
+│   ├── ingress.yaml                    ← Host routing: app. / api. / grafana. / prometheus.stockresearch.local
 │   ├── backend/                        ← 2-replica Deployment + NodePort 30810
-│   └── frontend/                       ← 2-replica Deployment + NodePort 30300
+│   ├── frontend/                       ← 2-replica Deployment + NodePort 30300
+│   ├── prometheus/                     ← Deployment + NodePort 30909
+│   └── grafana/                        ← Deployment + NodePort 30330 + dashboards
 ├── tests/
 │   ├── conftest.py
 │   ├── test_agents.py
@@ -1404,6 +1427,9 @@ StockRecommendationPlatform/
 │   ├── test_auth_watchlists_alerts.py
 │   ├── test_batch.py
 │   ├── test_batch_run.py
+│   ├── test_claude_5_5_models.py       ← Sonnet 5.5 / Opus 5.5 settings, fallback, pricing
+│   ├── test_claude_service_openai.py   ← OpenAI provider adapter
+│   ├── test_cost_breakdown.py          ← Per-model cost comparison
 │   ├── test_decision_support_extras.py
 │   ├── test_ingest.py
 │   ├── test_main_cache_and_endpoints.py
@@ -1417,6 +1443,7 @@ StockRecommendationPlatform/
 │   ├── test_supervisor_and_decision.py
 │   ├── test_supervisor_integration.py
 │   ├── test_supervisor_resilience.py
+│   ├── test_value_screener.py          ← Value scoring, Graham Number, /v1/value/sectors
 │   └── test_watchlists_router.py
 ├── docs/
 │   └── MASTER_PLAN.md
